@@ -11,5 +11,5 @@ func main() {
 	executor := executor.NewDefaultExecutor(executorConfig)
 
 	fmt.Print(executor.ExecuteCommand("ls", ""))
-
+	
 }
