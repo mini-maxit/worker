@@ -1,15 +1,9 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/HermanPlay/maxit-worker/executor"
+	"github.com/mini-maxit/worker"
 )
 
 func main() {
-	executorConfig := executor.NewDefaultExecutorConfig()
-	executor := executor.NewDefaultExecutor(executorConfig)
-
-	fmt.Print(executor.ExecuteCommand("ls", ""))
-	
+	work()
 }

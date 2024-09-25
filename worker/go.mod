@@ -1,4 +1,4 @@
-module github.com/mini-maxit/worker.git/worker
+module github.com/mini-maxit/worker
 
 go 1.23.1
 
