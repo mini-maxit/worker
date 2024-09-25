@@ -1,9 +1,7 @@
 package main
 
-import (
-	"github.com/mini-maxit/worker"
-)
+import "github.com/mini-maxit/worker/worker"
 
 func main() {
-	work()
+	worker.Work()
 }
