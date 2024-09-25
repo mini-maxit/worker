@@ -9,7 +9,7 @@ import (
 )
 
 // Work starts the worker process
-func work() {
+func Work() {
 	db := connectToDatabase()
 
 	conn, ch := connectToRabbitMQ()
