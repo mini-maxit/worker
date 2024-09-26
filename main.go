@@ -1,7 +1,17 @@
 package main
 
-import "github.com/mini-maxit/worker/worker"
+import (
+	"log"
+
+	"github.com/joho/godotenv"
+	"github.com/mini-maxit/worker/worker"
+)
 
 func main() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	worker.Work()
 }

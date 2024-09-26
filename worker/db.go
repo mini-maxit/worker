@@ -2,11 +2,11 @@ package worker
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"github.com/mini-maxit/worker/utils"
 )
 
 // Connect to the database using GORM
@@ -20,15 +20,11 @@ func connectToDatabase() *gorm.DB {
 		DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME, DATABASE_SSL_MODE)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
-	}
+	utils.FailOnError(err, "failed to connect to database")
 
 	// Migrate the schema if needed
 	err = db.AutoMigrate(&Solution{}, &SolutionResult{})
-	if err != nil {
-		log.Fatalf("failed to migrate database schema: %v", err)
-	}
+	utils.FailOnError(err, "failed to migrate database")
 
 	return db
 }
@@ -43,7 +39,7 @@ func createSolution(db *gorm.DB, solution *Solution) error {
 // Mark the solution as complete
 func markSolutionComplete(db *gorm.DB, solution_id int) error {
 	return db.Model(&Solution{}).Where("id = ?", solution_id).
-		Update("status", "complete").Error
+		Update("status", "complete").Update("checked_at", gorm.Expr("NOW()")).Error
 }
 
 // Store the result of the solution in the database
