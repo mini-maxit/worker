@@ -2,11 +2,12 @@ package worker
 
 import (
 	"fmt"
+	"log"
 	"os"
 
+	"github.com/mini-maxit/worker/utils"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"github.com/mini-maxit/worker/utils"
 )
 
 // Connect to the database using GORM
@@ -16,10 +17,13 @@ func connectToDatabase() *gorm.DB {
 	DATABASE_NAME := os.Getenv("DATABASE_NAME")
 	DATABASE_SSL_MODE := os.Getenv("DATABASE_SSL_MODE")
 
-	dsn := fmt.Sprintf("host=localhost user=%s password=%s dbname=%s sslmode=%s",
+	dsn := fmt.Sprintf("host=postgres user=%s password=%s dbname=%s sslmode=%s",
 		DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME, DATABASE_SSL_MODE)
 
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	//log the dsn to see if it is correct
+	log.Println(dsn)
 	utils.FailOnError(err, "failed to connect to database")
 
 	// Migrate the schema if needed

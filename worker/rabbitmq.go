@@ -7,7 +7,7 @@ import (
 
 // ConnectToRabbitMQ establishes a connection to RabbitMQ and returns the connection and channel
 func connectToRabbitMQ() (*amqp.Connection, *amqp.Channel) {
-	rabbitMQURL := "amqp://guest:guest@localhost:5672/"
+	rabbitMQURL := "amqp://guest:guest@rabbitmq:5672/"
 
 	// Establish connection
 	conn, err := amqp.Dial(rabbitMQURL)
