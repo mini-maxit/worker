@@ -1,15 +1,17 @@
 package main
 
 import (
-	"fmt"
+	"log"
 
-	"github.com/HermanPlay/maxit-worker/executor"
+	"github.com/joho/godotenv"
+	"github.com/mini-maxit/worker/worker"
 )
 
 func main() {
-	executorConfig := executor.NewDefaultExecutorConfig()
-	executor := executor.NewDefaultExecutor(executorConfig)
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	fmt.Print(executor.ExecuteCommand("ls", ""))
-
+	worker.Work()
 }

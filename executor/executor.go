@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/HermanPlay/maxit-worker/utils"
+	"github.com/mini-maxit/worker/utils"
 )
 
 type Executor interface {
