@@ -8,11 +8,19 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/HermanPlay/maxit-worker/utils"
+	"github.com/mini-maxit/worker/utils"
 )
 
+type CommandConfig struct {
+	StdinSource string // Path to the file to be used as stdin
+	StdoutPath  string // Path to the file to be used as stdout
+	StderrPath  string // Path to the file to be used as stderr
+}
+
 type Executor interface {
-	ExecuteCommand(command string) *ExecutionResult
+	ExecuteCommand(command string, commandConfig CommandConfig) *ExecutionResult
+	IsCompiled() bool // Indicate whether the program should be compiled before execution
+	Compile(filePath string, dir string) (string, error)
 	String() string
 }
 
@@ -21,9 +29,8 @@ type DefaultExecutor struct {
 }
 
 type ExecutionResult struct {
-	Stdout     string
-	Stderr     string
 	StatusCode int
+	Message    string
 }
 
 func (er *ExecutionResult) String() string {
@@ -31,14 +38,12 @@ func (er *ExecutionResult) String() string {
 
 	out.WriteString("ExecutionResult{")
 	out.WriteString(fmt.Sprintf("StatusCode: %d, ", er.StatusCode))
-	out.WriteString(fmt.Sprintf("Stdout: %s, ", er.Stdout))
-	out.WriteString(fmt.Sprintf("Stderr: %s, ", er.Stderr))
 	out.WriteString("}")
 
 	return out.String()
 }
 
-func (de *DefaultExecutor) ExecuteCommand(command string, stdinSource string) *ExecutionResult {
+func (de *DefaultExecutor) ExecuteCommand(command string, commandConfig CommandConfig) *ExecutionResult {
 	// Prepare command for execution
 	cmd := exec.Command(command)
 	dir, err := os.MkdirTemp(os.TempDir(), command)
@@ -62,8 +67,8 @@ func (de *DefaultExecutor) ExecuteCommand(command string, stdinSource string) *E
 	defer utils.CloseFile(stderr)
 
 	// Provide stdin if supplied
-	if len(stdinSource) > 0 {
-		stdin, err := os.Open(stdinSource)
+	if len(commandConfig.StdinSource) > 0 {
+		stdin, err := os.Open(commandConfig.StdinSource)
 		if err != nil {
 			log.Fatalf("could not open stdin file. %s", err.Error())
 		}
@@ -96,8 +101,6 @@ func (de *DefaultExecutor) ExecuteCommand(command string, stdinSource string) *E
 
 	executionResult := &ExecutionResult{
 		StatusCode: cmd.ProcessState.ExitCode(),
-		Stdout:     stdout.Name(),
-		Stderr:     stderr.Name(),
 	}
 	return executionResult
 
