@@ -1,19 +1,17 @@
-version: '3.8'  
+version: '3.8'
 
 services:
-  postgres: 
-    image: postgres:16 
+  postgres:
+    image: postgres:16
     container_name: postgres_db
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres      
-      POSTGRES_PASSWORD: password  
-      POSTGRES_DB: maxitdb          
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: maxitdb
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - app_network
 
   rabbitmq:
     image: rabbitmq:3.13-management
@@ -23,33 +21,23 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-    - app_network
 
-  go_app:
+  worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: go_app
     depends_on:
       - postgres
       - rabbitmq
-    command: ["./wait-for-it.sh", "postgres:5432", "--", "./wait-for-it.sh", "rabbitmq:5672", "--", "/worker-service"]
     volumes:
       - file_storage:/var/lib/file_storage
     environment:
-      DATABASE_USER: postgres       
+      DATABASE_USER: postgres
       DATABASE_PASSWORD: password
       DATABASE_NAME: maxitdb
       DATABASE_SSL_MODE: disable
-    networks:
-      - app_network
 
 volumes:
-  postgres_data: 
+  postgres_data:
   rabbitmq_data:
   file_storage:
-
-networks:
-  app_network:
-    driver: bridge
