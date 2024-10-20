@@ -15,8 +15,8 @@ func CloseFile(file *os.File) {
 }
 
 // Helper function to log errors
-func FailOnError(err error, msg string) {
+func CheckError(err error, msg string) {
 	if err != nil {
-		log.Fatalf("%s: %s", msg, err)
+		log.Printf("%s: %s", msg, err)
 	}
 }

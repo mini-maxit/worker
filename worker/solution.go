@@ -1,42 +1,23 @@
 package worker
 
 import (
-	"errors"
 	"fmt"
 	"os"
-
+	"errors"
 	"gorm.io/gorm"
+	"github.com/mini-maxit/worker/models"
 )
 
-// Solution struct (GORM Model)
-type Solution struct {
-	Id              int    `json:"id" gorm:"primaryKey"`
-	TaskId          int    `json:"task_id"`
-	UserId          int    `json:"user_id"`
-	UserSolutionId  int    `json:"user_solution_id"`
-	InputOutputId   int    `json:"input_output_id"`
-	Status          string `json:"status"`
-}
 
-type Task struct {
-	FileToExecute  string
-	CompilerType   string
-	TimeLimit      int
-	MemoryLimit    int
-	Stdin          string
-	ExpectedStdout string
-}
+// ErrInvalidFileCount is returned when the solution directory contains more than one solution file
+var ErrInvalidFileCount = errors.New("expected exactly one file in the solution directory")
 
-type SolutionResult struct {
-	ID             int    `json:"id" gorm:"primaryKey"`
-	UserSolutionId int    `json:"user_solution_id"`
-	StatusCode     int    `json:"status_code"`
-	Message        string `json:"message"`
-}
+// ErrFileNotFound is returned when a file is not found
+var ErrFileNotFound = errors.New("file not found")
 
 // GetDataForSolutionRunner retrieves the data needed to run the solution
-func getDataForSolutionRunner(db *gorm.DB, task_id, user_id, user_solution_id, input_output_id int) (Task, error) {
-	var task Task
+func getDataForSolutionRunner(db *gorm.DB, task_id, user_id, user_solution_id, input_output_id int) (models.Task, error) {
+	var task models.Task
 	var dirPath string
 
 	// Fetch data with GORM
@@ -46,7 +27,7 @@ func getDataForSolutionRunner(db *gorm.DB, task_id, user_id, user_solution_id, i
 		WHERE id = ?
 	`, task_id).Scan(&dirPath).Error
 	if err != nil {
-		return Task{}, err
+		return models.Task{}, err
 	}
 
 	err = db.Raw(`
@@ -55,15 +36,10 @@ func getDataForSolutionRunner(db *gorm.DB, task_id, user_id, user_solution_id, i
 		WHERE id = ?
 	`, user_solution_id).Scan(&task.CompilerType).Error
 	if err != nil {
-		return Task{}, err
+		return models.Task{}, err
 	}
 
-	var ioData struct {
-		TimeLimit      int
-		MemoryLimit    int
-		InputFilePath  string
-		OutputFilePath string
-	}
+	var ioData models.InputOutputData
 
 	err = db.Raw(`
 		SELECT time_limit, memory_limit, input_file_path, output_file_path
@@ -71,7 +47,7 @@ func getDataForSolutionRunner(db *gorm.DB, task_id, user_id, user_solution_id, i
 		WHERE id = ?
 	`, input_output_id).Scan(&ioData).Error
 	if err != nil {
-		return Task{}, err
+		return models.Task{}, err
 	}
 
 	task.TimeLimit = ioData.TimeLimit
@@ -79,19 +55,19 @@ func getDataForSolutionRunner(db *gorm.DB, task_id, user_id, user_solution_id, i
 	task.Stdin = ioData.InputFilePath
 	task.ExpectedStdout = ioData.OutputFilePath
 	if err != nil {
-		return Task{}, err
+		return models.Task{}, err
 	}
 
 	err = getFiles(dirPath, user_id, user_solution_id, task.Stdin, task.ExpectedStdout, &task)
 	if err != nil {
-		return Task{}, err
+		return models.Task{}, err
 	}
 
 	return task, nil
 }
 
 // GetFiles retrieves the solution, input, and output files from the file system
-func getFiles(dir_path string, user_id, user_solution_id int, input_path, output_path string, task *Task) error {
+func getFiles(dir_path string, user_id, user_solution_id int, input_path, output_path string, task *models.Task) error {
 	path := fmt.Sprintf("%s/submissions/user%d/submition%d", dir_path, user_id, user_solution_id)
 
 	entries, err := os.ReadDir(path)
@@ -106,8 +82,10 @@ func getFiles(dir_path string, user_id, user_solution_id int, input_path, output
 		}
 	}
 
-	if len(files) != 1 {
-		return errors.New("expected exactly one file in the solution directory")
+	if len(files) == 0 {
+		return ErrFileNotFound
+	} else if len(files) > 1 {
+		return ErrInvalidFileCount
 	}
 
 	solutionPath := fmt.Sprintf("%s/submissions/user%d/submition%d/%s", dir_path, user_id, user_solution_id, files[0].Name())
@@ -137,10 +115,10 @@ func getFiles(dir_path string, user_id, user_solution_id int, input_path, output
 }
 
 // Run the solution and return the result
-func runSolution(task Task, user_solution_id int) (SolutionResult, error) {
+func runSolution(task models.Task, user_solution_id int) (models.SolutionResult, error) {
 	//TODO: Implement this function
 	//For now, return a dummy result
-	exampleSolutionResult := SolutionResult{
+	exampleSolutionResult := models.SolutionResult{
 		UserSolutionId: user_solution_id,
 		StatusCode:     0,
 		Message:        "Success",

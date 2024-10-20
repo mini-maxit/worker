@@ -7,13 +7,14 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"gorm.io/gorm"
 	"github.com/mini-maxit/worker/utils"
+	"github.com/mini-maxit/worker/models"
+	"github.com/mini-maxit/worker/repositories"
 )
 
 // Work starts the worker process
 func Work() {
-	
-	
-	db := connectToDatabase()
+	postgresDataBase := NewPostgresDatabase()
+	db := Connect(postgresDataBase)
 
 	conn, ch := connectToRabbitMQ()
 	defer conn.Close()
@@ -28,7 +29,7 @@ func Work() {
 		false,          // no-wait
 		nil,            // arguments
 	)
-	utils.FailOnError(err, "Failed to declare a queue")
+	utils.CheckError(err, "Failed to declare a queue")
 
 	// Consume messages from the queue
 	msgs, err := ch.Consume(
@@ -40,7 +41,7 @@ func Work() {
 		false,  // no-wait
 		nil,    // args
 	)
-	utils.FailOnError(err, "Failed to register a consumer")
+	utils.CheckError(err, "Failed to register a consumer")
 
 	var forever = make(chan struct{})
 
@@ -57,28 +58,29 @@ func Work() {
 }
 
 func processMessage(msg amqp.Delivery, db *gorm.DB) {
-	var solution Solution
+	var solution models.Solution
 	err := json.Unmarshal(msg.Body, &solution)
-	utils.FailOnError(err, "Failed to unmarshal the message body")
+	utils.CheckError(err, "Failed to unmarshal the message body")
 	log.Printf("Received a message")
 
 	task, err := getDataForSolutionRunner(db, solution.TaskId, solution.UserId, solution.UserSolutionId, solution.InputOutputId)
-	utils.FailOnError(err, "Failed to get data for solution runner")
+	utils.CheckError(err, "Failed to get data for solution runner")
 	log.Printf("Gathered data for solution runner")
 
-	err = createSolution(db, &solution)
-	utils.FailOnError(err, "Failed to mark solution as processing")
+
+	err = repositories.CreateSolution(db, &solution)
+	utils.CheckError(err, "Failed to mark solution as processing")
 	log.Printf("Solution entry created")
 
 	solutionResult, err := runSolution(task, solution.UserSolutionId)
-	utils.FailOnError(err, "Failed to run the solution")
+	utils.CheckError(err, "Failed to run the solution")
 	log.Printf("Solution ran")
 
-	err = storeSolutionResult(db, solutionResult)
-	utils.FailOnError(err, "Failed to store the solution result")
+	err = repositories.StoreSolutionResult(db, solutionResult)
+	utils.CheckError(err, "Failed to store the solution result")
 	log.Printf("Solution result stored")
 
-	err = markSolutionComplete(db, solution.Id)
-	utils.FailOnError(err, "Failed to mark solution as complete")
+	err = repositories.MarkSolutionComplete(db, solution.Id)
+	utils.CheckError(err, "Failed to mark solution as complete")
 	log.Printf("Solution marked as complete")
 }

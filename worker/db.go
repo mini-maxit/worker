@@ -3,19 +3,27 @@ package worker
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/mini-maxit/worker/utils"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+type postgresDataBase struct {
+	Db *gorm.DB
+}
+
+func Connect(db * postgresDataBase) *gorm.DB {
+	return db.Db
+}
+
 // Connect to the database using GORM
-func connectToDatabase() *gorm.DB {
-	DATABASE_USER := os.Getenv("DATABASE_USER")
-	DATABASE_PASSWORD := os.Getenv("DATABASE_PASSWORD")
-	DATABASE_NAME := os.Getenv("DATABASE_NAME")
-	DATABASE_SSL_MODE := os.Getenv("DATABASE_SSL_MODE")
+func NewPostgresDatabase() *postgresDataBase {
+	Config := LoadConfig()
+	DATABASE_USER := Config.DBUser
+	DATABASE_PASSWORD := Config.DBPassword
+	DATABASE_NAME := Config.DBName
+	DATABASE_SSL_MODE := Config.DBSslMode
 
 	dsn := fmt.Sprintf("host=postgres user=%s password=%s dbname=%s sslmode=%s",
 		DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME, DATABASE_SSL_MODE)
@@ -24,29 +32,7 @@ func connectToDatabase() *gorm.DB {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	//log the dsn to see if it is correct
 	log.Println(dsn)
-	utils.FailOnError(err, "failed to connect to database")
+	utils.CheckError(err, "failed to connect to database")
 
-	// Migrate the schema if needed
-	err = db.AutoMigrate(&Solution{}, &SolutionResult{})
-	utils.FailOnError(err, "failed to migrate database")
-
-	return db
-}
-
-// Create a new solution in the database marked as processing
-func createSolution(db *gorm.DB, solution *Solution) error {
-	solution.Status = "processing"
-	err := db.Create(solution).Error
-	return err
-}
-
-// Mark the solution as complete
-func markSolutionComplete(db *gorm.DB, solution_id int) error {
-	return db.Model(&Solution{}).Where("id = ?", solution_id).
-		Update("status", "complete").Update("checked_at", gorm.Expr("NOW()")).Error
-}
-
-// Store the result of the solution in the database
-func storeSolutionResult(db *gorm.DB, solutionResult SolutionResult) error {
-	return db.Create(&solutionResult).Error
+	return &postgresDataBase{Db: db}
 }
