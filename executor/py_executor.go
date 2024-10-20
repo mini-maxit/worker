@@ -3,11 +3,11 @@ package executor
 import (
 	"fmt"
 
-	"github.com/HermanPlay/maxit-worker/utils"
+	"github.com/mini-maxit/worker/utils"
 )
 
 var (
-	AVAILABLE_VERSION = []string{"3.11"}
+	PY_AVAILABLE_VERSION = []string{"3.11"}
 )
 
 type PyExecutor struct {
@@ -16,8 +16,6 @@ type PyExecutor struct {
 
 func (e *PyExecutor) ExecuteCommand(command string) *ExecutionResult {
 	return &ExecutionResult{
-		Stdout:     "stdout from pyexecutor",
-		Stderr:     "stderr from pyexecutor",
 		StatusCode: 0,
 	}
 }
@@ -27,7 +25,7 @@ func (e *PyExecutor) String() string {
 }
 
 func NewPyExecutor(version string) (*PyExecutor, error) {
-	if !utils.Contains(AVAILABLE_VERSION, version) {
+	if !utils.Contains(PY_AVAILABLE_VERSION, version) {
 		return nil, fmt.Errorf("invalid error supplied. got=%s", version)
 	}
 	return &PyExecutor{version: version}, nil
