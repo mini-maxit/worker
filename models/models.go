@@ -10,13 +10,17 @@ type Solution struct {
 	Status          string `json:"status"`
 }
 
+type File struct {
+	Content []byte
+}
+
 type Task struct {
-	FileToExecute  string
+	FileToExecute  File
 	CompilerType   string
 	TimeLimit      int
 	MemoryLimit    int
-	Stdin          string
-	ExpectedStdout string
+	StdinFiles     []File
+	ExpectedOutputs []File
 }
 
 type SolutionResult struct {

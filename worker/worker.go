@@ -12,14 +12,8 @@ import (
 )
 
 // Work starts the worker process
-func Work() {
-	postgresDataBase := NewPostgresDatabase()
-	db := Connect(postgresDataBase)
-
-	conn, ch := connectToRabbitMQ()
-	defer conn.Close()
-	defer ch.Close()
-
+func Work(db *gorm.DB, conn *amqp.Connection, ch *amqp.Channel) {
+	
 	// Declare a queue
 	q, err := ch.QueueDeclare(
 		"worker_queue", // name

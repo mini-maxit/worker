@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/mini-maxit/worker/utils"
+	"github.com/mini-maxit/worker/internal/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -18,12 +19,11 @@ func Connect(db * postgresDataBase) *gorm.DB {
 }
 
 // Connect to the database using GORM
-func NewPostgresDatabase() *postgresDataBase {
-	Config := LoadConfig()
-	DATABASE_USER := Config.DBUser
-	DATABASE_PASSWORD := Config.DBPassword
-	DATABASE_NAME := Config.DBName
-	DATABASE_SSL_MODE := Config.DBSslMode
+func NewPostgresDatabase(config config.Config) *postgresDataBase {
+	DATABASE_USER := config.DBUser
+	DATABASE_PASSWORD := config.DBPassword
+	DATABASE_NAME := config.DBName
+	DATABASE_SSL_MODE := config.DBSslMode
 
 	dsn := fmt.Sprintf("host=postgres user=%s password=%s dbname=%s sslmode=%s",
 		DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME, DATABASE_SSL_MODE)

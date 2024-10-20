@@ -3,12 +3,12 @@ package worker
 import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/mini-maxit/worker/utils"
+	"github.com/mini-maxit/worker/internal/config"
 )
 
 // ConnectToRabbitMQ establishes a connection to RabbitMQ and returns the connection and channel
-func connectToRabbitMQ() (*amqp.Connection, *amqp.Channel) {
-	Config := LoadConfig()
-	rabbitMQURL := Config.RQUrl
+func NewRabbitMQ(config config.Config) (*amqp.Connection, *amqp.Channel) {
+	rabbitMQURL := config.RQUrl
 
 	// Establish connection
 	conn, err := amqp.Dial(rabbitMQURL)

@@ -1,4 +1,4 @@
-package worker
+package config
 
 import (
 	"log"
@@ -15,7 +15,7 @@ type Config struct {
 	RQUrl string
 }
 
-func LoadConfig() Config {
+func LoadWorkerConfig() Config {
 	
 	err := godotenv.Load(".env")
 	if err != nil {
