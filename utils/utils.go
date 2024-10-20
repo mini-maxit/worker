@@ -13,3 +13,10 @@ func CloseFile(file *os.File) {
 		log.Panicf("error during closing file %s. %s", err.Path, err.Error())
 	}
 }
+
+// Helper function to log errors
+func CheckError(err error, msg string) {
+	if err != nil {
+		log.Printf("%s: %s", msg, err)
+	}
+}

@@ -1,15 +1,21 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/HermanPlay/maxit-worker/executor"
+	"github.com/mini-maxit/worker/worker"
+	"github.com/mini-maxit/worker/internal/config"
 )
 
 func main() {
-	executorConfig := executor.NewDefaultExecutorConfig()
-	executor := executor.NewDefaultExecutor(executorConfig)
+	// Load the configuration
+	config := config.LoadWorkerConfig()
 
-	fmt.Print(executor.ExecuteCommand("ls", ""))
+	// Connect to the database
+	postgresDataBase := worker.NewPostgresDatabase(config)
+	db := worker.Connect(postgresDataBase)
 
+	// Connect to RabbitMQ
+	conn, ch := worker.NewRabbitMQ(config)
+
+	// Start the worker
+	worker.Work(db, conn, ch)
 }
