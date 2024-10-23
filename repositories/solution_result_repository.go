@@ -6,6 +6,6 @@ import (
 )
 
 // Store the result of the solution in the database
-func StoreSolutionResult(db *gorm.DB, solutionResult models.SolutionResult) error {
-	return db.Create(&solutionResult).Error
+func StoreSolutionResult(tx *gorm.DB, solutionResult models.SolutionResult) error {
+	return tx.Create(&solutionResult).Error
 }

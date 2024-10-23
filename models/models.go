@@ -1,6 +1,6 @@
 package models
 
-// Solution struct (GORM Model)
+// Solution struct is a model of a message that retrived from the queue
 type Solution struct {
 	Id              int    `json:"id" gorm:"primaryKey"`
 	TaskId          int    `json:"task_id"`
@@ -10,17 +10,13 @@ type Solution struct {
 	Status          string `json:"status"`
 }
 
-type File struct {
-	Content []byte
-}
-
 type Task struct {
-	FileToExecute  File
-	CompilerType   string
-	TimeLimit      int
-	MemoryLimit    int
-	StdinFiles     []File
-	ExpectedOutputs []File
+	BaseDir			 	string
+	SolutionFileName    string
+	LanguageType        string
+	LanguageVersion     string
+	StdinDir            string
+	ExpectedOutputsDir  string
 }
 
 type SolutionResult struct {
@@ -31,8 +27,12 @@ type SolutionResult struct {
 }
 
 type InputOutputData struct {
-		TimeLimit      int
-		MemoryLimit    int
-		InputFilePath  string
-		OutputFilePath string
+	StdinDir  		   string
+	ExpectedOutputsDir string
+}
+
+type SolutionConfig struct {
+	LanguageType    string
+	LanguageVersion string
+	SolutionFileName string
 }

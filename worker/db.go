@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/mini-maxit/worker/utils"
 	"github.com/mini-maxit/worker/internal/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -30,9 +29,9 @@ func NewPostgresDatabase(config config.Config) *postgresDataBase {
 
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	//log the dsn to see if it is correct
-	log.Println(dsn)
-	utils.CheckError(err, "failed to connect to database")
+	if(err != nil) {
+		log.Fatalf("Failed to connect to database: %s", err)
+	}
 
 	return &postgresDataBase{Db: db}
 }
