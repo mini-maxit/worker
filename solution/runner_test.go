@@ -11,7 +11,14 @@ func TestRunnerRunCommandInvalidLanguage(t *testing.T) {
 		Type:    -1,
 		Version: "version",
 	}
-	solutionResult := runner.RunSolution(lang_conf, "", "", "")
+	solution := &Solution{
+		Language:         lang_conf,
+		BaseDir:          "",
+		SolutionFileName: "",
+		InputDir:         "",
+		OutputDir:        "",
+	}
+	solutionResult := runner.RunSolution(solution)
 
 	if solutionResult.Success {
 		t.Fatalf("solution succeded with invalid language type")
@@ -21,9 +28,16 @@ func TestRunnerRunCommandInvalidLanguage(t *testing.T) {
 		t.Fatalf("empty error message when invalid language")
 	}
 
-	lang_conf.Type = PYTHON
+	lang_conf.Type = CPP
 
-	solutionResult = runner.RunSolution(lang_conf, "", "", "")
+	solution = &Solution{
+		Language:         lang_conf,
+		BaseDir:          "",
+		SolutionFileName: "",
+		InputDir:         "",
+		OutputDir:        "",
+	}
+	solutionResult = runner.RunSolution(solution)
 
 	if solutionResult.Success {
 		t.Fatalf("solution succeded with invalid language version")

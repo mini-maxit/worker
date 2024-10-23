@@ -7,34 +7,17 @@ import (
 	"strings"
 
 	"github.com/mini-maxit/worker/executor"
-	"github.com/mini-maxit/worker/utils"
 	"github.com/mini-maxit/worker/verifier"
 )
 
 type LanguageType int
 
 const (
-	PYTHON LanguageType = iota
-	CPP
+	CPP LanguageType = iota + 1
 )
 
 type SolutionRunner interface {
 	RunSolution() SolutionResult
-}
-
-type SolutionResult struct {
-	Success     bool         // wether solution was without any error
-	StatusCode  int          // any status code in case of error or success
-	Code        string       // any code in case of error or success
-	Message     string       // any information message in case of error is error message
-	TestResults []TestResult // test results in case of error or success
-}
-type TestResult struct {
-	InputFile    string // Path to the input file used for the test
-	ExpectedFile string // Path to the expected output file
-	ActualFile   string // Path to the actual output file produced by the solution
-	Passed       bool   // Whether the test passed or failed
-	ErrorMessage string // Error message in case of failure (if any)
 }
 
 type Runner struct {
@@ -45,28 +28,13 @@ type LanguageConfig struct {
 	Version string       // Version should be valid version supported by the executor
 }
 
-// TODO: replace ALL Fatalf with approproiate SolutionResult, to inform end user about the error instead of crushing like oioioi))))
-// Input path contains points to directory with input files. File name should be of format {number}.in
-//
-// language is the language of the solution
-//
-// baseDir is the base directory where solution file is stored together with compiled file if applicable
-//
-// solutionFileName is the name of the solution file
-//
-// inputDir is the directory containing input files inside baseDir
-//
-// outputDir is the directory where correct output files are stored
-func (r *Runner) RunSolution(language LanguageConfig, baseDir string, solutionFileName string, inputDir string, outputDir string) SolutionResult {
-
+func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 	// Init appropriate executor
 	var exec executor.Executor
 	var err error
-	switch language.Type {
-	// case PYTHON:
-	// 	exec, err = executor.NewPyExecutor(language.Version)
+	switch solution.Language.Type {
 	case CPP:
-		exec, err = executor.NewCppExecutor(language.Version)
+		exec, err = executor.NewCppExecutor(solution.Language.Version)
 	default:
 		return SolutionResult{
 			Success: false,
@@ -75,55 +43,58 @@ func (r *Runner) RunSolution(language LanguageConfig, baseDir string, solutionFi
 	}
 	if err != nil {
 		return SolutionResult{
-			Success: false,
-			Message: err.Error(),
+			Success:    false,
+			StatusCode: InternalError,
+			Code:       getStatus(InternalError),
+			Message:    err.Error(),
 		}
 	}
 
 	var filePath string
 	if exec.IsCompiled() {
-		solutionFilePath := fmt.Sprintf("%s/%s", baseDir, solutionFileName)
+		solutionFilePath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.SolutionFileName)
 		log.Printf("compiling %s", solutionFilePath)
-		filePath, err = exec.Compile(solutionFilePath, baseDir)
+		filePath, err = exec.Compile(solutionFilePath, solution.BaseDir)
 		if err != nil {
-			log.Printf("error compiling %s. %s", solutionFileName, err.Error())
+			log.Printf("error compiling %s. %s", solution.SolutionFileName, err.Error())
 			return SolutionResult{
-				Success: false,
-				Message: err.Error(),
+				Success:    false,
+				StatusCode: Failed,
+				Code:       getStatus(Failed),
+				Message:    err.Error(),
 			}
 		}
 	} else {
-		filePath = solutionFileName
+		filePath = solution.SolutionFileName
 	}
 
-	inputPath := fmt.Sprintf("%s/%s", baseDir, inputDir)
+	inputPath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.InputDir)
 	inputFiles, err := r.parseInputFiles(inputPath)
 	if err != nil {
 		log.Fatalf("error reading input directory. %s", err.Error())
 	}
+
 	userOutputDir := "user-output"
-	err = os.Mkdir(fmt.Sprintf("%s/%s", baseDir, userOutputDir), os.ModePerm)
+	err = os.Mkdir(fmt.Sprintf("%s/%s", solution.BaseDir, userOutputDir), os.ModePerm)
 	if err != nil {
 		log.Fatalf("error creating user output directory. %s", err.Error())
 	}
+
 	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
 	for i, inputPath := range inputFiles {
-		outputPath := fmt.Sprintf("%s/%s/%d.out", baseDir, userOutputDir, i)
-		stderrPath := fmt.Sprintf("%s/%s/%d.err", baseDir, userOutputDir, i)
-		_ = exec.ExecuteCommand(filePath, executor.CommandConfig{StdinSource: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
-		// if execResult.StatusCode != 0 {
-		// 	log.Printf("error executing %s. %s", filePath, execResult.String())
-		// 	continue
-		// }
+		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, i)
+		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, i) // May be dropped in the future
+		_ = exec.ExecuteCommand(filePath, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
 
 		// Compare output with expected output
-		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", baseDir, outputDir, i)
+		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, i)
 		result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
 		if err != nil {
 			log.Printf("error comparing output. %s", err.Error())
-			continue
+			solutionSuccess = false
+			difference = err.Error()
 		}
 		if !result {
 			solutionSuccess = false
@@ -135,25 +106,22 @@ func (r *Runner) RunSolution(language LanguageConfig, baseDir string, solutionFi
 			Passed:       result,
 			ErrorMessage: difference,
 		}
+	}
 
+	for _, testCase := range testCases {
+		if !testCase.Passed {
+			solutionSuccess = false
+			break
+		}
 	}
 
 	return SolutionResult{
 		Success:     solutionSuccess,
-		StatusCode:  0,
-		Code:        "",
-		Message:     "",
+		StatusCode:  Success,
+		Code:        getStatus(Success),
+		Message:     "solution executed successfully",
 		TestResults: testCases,
 	}
-}
-
-func (r *Runner) RemoveDir(dir string) {
-	log.Printf("removing directory %s", dir)
-	err := utils.RemoveDir(dir, true, false)
-	if err != nil {
-		log.Printf("error occured while removing directory %s. %s", dir, err.Error())
-	}
-
 }
 
 func (r *Runner) parseInputFiles(inputDir string) ([]string, error) {

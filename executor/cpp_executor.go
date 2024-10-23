@@ -3,7 +3,6 @@ package executor
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -34,7 +33,7 @@ func (e *CppExecutor) ExecuteCommand(command string, commandConfig CommandConfig
 	stdout, err := os.OpenFile(commandConfig.StdoutPath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
 		return &ExecutionResult{
-			StatusCode: -1,
+			StatusCode: ErInternalError,
 			Message:    fmt.Sprintf("could not open stdout file. %s", err.Error()),
 		}
 	}
@@ -44,19 +43,22 @@ func (e *CppExecutor) ExecuteCommand(command string, commandConfig CommandConfig
 	stderr, err := os.OpenFile(commandConfig.StderrPath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
 		return &ExecutionResult{
-			StatusCode: -1,
+			StatusCode: ErInternalError,
 			Message:    fmt.Sprintf("could not open stderr file. %s", err.Error()),
 		}
 	}
-
 	cmd.Stderr = stderr
 	defer utils.CloseFile(stderr)
 
 	// Provide stdin if supplied
-	if len(commandConfig.StdinSource) > 0 {
-		stdin, err := os.Open(commandConfig.StdinSource)
+	if len(commandConfig.StdinPath) > 0 {
+		stdin, err := os.Open(commandConfig.StdinPath)
 		if err != nil {
-			log.Fatalf("could not open stdin file. %s", err.Error())
+			log.Printf("could not open stdin file. %s", err.Error())
+			return &ExecutionResult{
+				StatusCode: ErInternalError,
+				Message:    fmt.Sprintf("could not open stdin file. %s", err.Error()),
+			}
 		}
 		cmd.Stdin = stdin
 		defer utils.CloseFile(stdin)
@@ -65,31 +67,31 @@ func (e *CppExecutor) ExecuteCommand(command string, commandConfig CommandConfig
 	// Execute command
 	err = cmd.Run()
 	if err != nil {
-		log.Fatalf("could not run the command. %s", err.Error())
+		log.Printf("could not run the command. %s", err.Error())
+		return &ExecutionResult{
+			StatusCode: ErInternalError,
+			Message:    fmt.Sprintf("could not run the command. %s", err.Error()),
+		}
+
 	}
 
-	// Read the output
-	stdout.Seek(0, 0)
-	bufferSize := 1000
-	buffer := make([]byte, bufferSize)
-	n, err := stdout.Read(buffer)
-	log.Print("PROGRAM STDOUT:")
-	for err == nil && n != 0 {
-		fmt.Printf("%s", buffer)
-		n, err = stdout.Read(buffer)
-	}
-	if err != nil {
-		if err != io.EOF {
-			log.Fatalf("error while reading output of command. %s", err.Error())
+	var statusCode ExecutorStatusCode
+	switch cmd.ProcessState.ExitCode() {
+	case -1:
+		statusCode = ErSignalRecieved
+	case 0:
+		statusCode = ErSuccess
+	default:
+		return &ExecutionResult{
+			StatusCode: ErInternalError,
+			Message:    fmt.Sprintf("command exited with unknown status code. %d", cmd.ProcessState.ExitCode()),
 		}
 	}
-	log.Print("END PROGRAM STDOUT")
 
-	executionResult := &ExecutionResult{
-		StatusCode: cmd.ProcessState.ExitCode(),
+	return &ExecutionResult{
+		StatusCode: statusCode,
 		Message:    "Command executed successfully",
 	}
-	return executionResult
 }
 
 func (e *CppExecutor) String() string {
@@ -133,6 +135,10 @@ func (e *CppExecutor) Compile(sourceFilePath, dir string) (string, error) {
 		// Save stderr to a file
 		errPath := fmt.Sprintf("%s/compile-err.err", dir)
 		file, err := os.Create(errPath)
+		if err != nil {
+			return "", err
+		}
+		_, err = file.Write([]byte(cmdErr.Error()))
 		if err != nil {
 			return "", err
 		}
