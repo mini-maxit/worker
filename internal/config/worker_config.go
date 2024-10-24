@@ -16,7 +16,7 @@ type Config struct {
 }
 
 func LoadWorkerConfig() Config {
-	
+
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal(err)
