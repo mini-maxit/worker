@@ -9,7 +9,7 @@ RUN go mod download
 COPY . .
 
 COPY wait-for-it.sh /app/wait-for-it.sh
-RUN chmod +x /app/wait-for-it.sh 
+RUN chmod +x /app/wait-for-it.sh
 
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./main.go
