@@ -1,38 +1,60 @@
 package models
 
-// Solution struct is a model of a message that retrived from the queue
-type Solution struct {
-	Id              int    `json:"id" gorm:"primaryKey"`
-	TaskId          int    `json:"task_id"`
-	UserId          int    `json:"user_id"`
-	UserSolutionId  int    `json:"user_solution_id"`
-	InputOutputId   int    `json:"input_output_id"`
-	Status          string `json:"status"`
-}
+import (
+    "time"
+)
 
 type Task struct {
-	BaseDir			 	string
-	SolutionFileName    string
-	LanguageType        string
-	LanguageVersion     string
-	StdinDir            string
-	ExpectedOutputsDir  string
+    ID           uint   `gorm:"primaryKey;autoIncrement"`
+    Title        string `gorm:"type:varchar(255);not null"`
+    DirPath      string `gorm:"type:varchar(255);not null"`
+    InputDirPath string `gorm:"type:varchar(255);not null"`
+    OutputDirPath string `gorm:"type:varchar(255);not null"`
 }
 
-type SolutionResult struct {
-	ID             int    `json:"id" gorm:"primaryKey"`
-	UserSolutionId int    `json:"user_solution_id"`
-	StatusCode     int    `json:"status_code"`
-	Message        string `json:"message"`
+type UserSolution struct {
+    ID               uint      `gorm:"primaryKey;autoIncrement"`
+    TaskID           uint      `gorm:"not null"`
+    SolutionFileName string    `gorm:"type:varchar(255);not null"`
+    LanguageType     string    `gorm:"type:varchar(255);not null"`
+    LanguageVersion  string    `gorm:"type:varchar(50);not null"`
+    Status           string    `gorm:"type:varchar(50);not null"`
+    SubmittedAt      time.Time `gorm:"autoCreateTime"`
+    CheckedAt        *time.Time
+    WasDropped       bool      `gorm:"default:false"`
+
+    Task             Task      `gorm:"foreignKey:TaskID"`
 }
 
-type InputOutputData struct {
-	StdinDir  		   string
-	ExpectedOutputsDir string
+type InputOutput struct {
+    ID          uint    `gorm:"primaryKey;autoIncrement"`
+    TaskID      uint    `gorm:"not null"`
+    Order       int     `gorm:"not null"`
+    TimeLimit   float64 `gorm:"not null"`
+    MemoryLimit float64 `gorm:"not null"`
+
+    Task        Task    `gorm:"foreignKey:TaskID"`
 }
 
-type SolutionConfig struct {
-	LanguageType    string
-	LanguageVersion string
-	SolutionFileName string
+type UserSolutionResult struct {
+    ID             uint      `gorm:"primaryKey;autoIncrement"`
+    UserSolutionID uint      `gorm:"not null"`
+    Code           string    `gorm:"not null"`
+    Message        string    `gorm:"type:varchar(255);not null"`
+    CreatedAt      time.Time `gorm:"autoCreateTime"`
+
+    UserSolution   UserSolution `gorm:"foreignKey:UserSolutionID"`
+}
+
+
+type TestResult struct {
+    ID                    uint   `gorm:"primaryKey;autoIncrement"`
+    UserSolutionResultID   uint   `gorm:"not null"`
+    InputFilePath          string `gorm:"type:varchar(255);not null"`
+    ExpectedOutputFilePath string `gorm:"type:varchar(255);not null"`
+    OutputFilePath         string `gorm:"type:varchar(255);not null"`
+    Passed                 bool   `gorm:"not null"`
+    ErrorMessage           string `gorm:"type:varchar(255)"`
+
+    UserSolutionResult     UserSolutionResult `gorm:"foreignKey:UserSolutionResultID"`
 }

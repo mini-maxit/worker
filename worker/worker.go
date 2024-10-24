@@ -7,8 +7,15 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"gorm.io/gorm"
 	"github.com/mini-maxit/worker/models"
+	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/repositories"
 )
+
+type QueueMessage struct {
+	TaskID 		    int `json:"task_id"`
+	UserSolutionID 	int	`json:"user_solution_id"`
+	InputOutputIDs 	[]int	`json:"input_output_ids"`
+}
 
 // Maximum of retries on the same message
 const maxRetries = 3
@@ -58,19 +65,19 @@ func Work(db *gorm.DB, conn *amqp.Connection, ch *amqp.Channel) {
 }
 
 func processMessage(msg amqp.Delivery, db *gorm.DB) {
-	var solution models.Solution
+	var queueMessage QueueMessage
 
 	// Unmarshal the message
-	err := json.Unmarshal(msg.Body, &solution)
+	err := json.Unmarshal(msg.Body, &queueMessage)
 	if err != nil {
-		handleError(msg, err, "Failed to unmarshal message")
+		handleError(nil, msg, queueMessage ,err, "Failed to unmarshal message")
 		return
 	}
 
 	// Start a new transaction
 	tx := db.Begin()
 	if tx.Error != nil {
-		handleError(msg, tx.Error, "Failed to start transaction")
+		handleError(tx, msg, queueMessage, tx.Error, "Failed to start transaction")
 		return
 	}
 
@@ -82,49 +89,49 @@ func processMessage(msg amqp.Delivery, db *gorm.DB) {
 		}
 	}()
 
-	// Get the task and data for the solution runner
-	task, err := getDataForSolutionRunner(tx, solution.TaskId, solution.UserSolutionId, solution.InputOutputId)
+	// Get the configuration data needed to run the solution
+	task, err := getDataForSolutionRunner(tx, queueMessage.TaskID, queueMessage.UserSolutionID, queueMessage.InputOutputIDs)
 	if err != nil {
-		handleError(msg, err, "Failed to get data for solution runner")
+		handleError(tx, msg, queueMessage,err, "Failed to get data for solution runner")
 		tx.Rollback()
 		return
 	}
 
-	// Create a new solution in the database marked as processing
-	err = repositories.CreateSolution(tx, &solution)
-	if err != nil {
+	// Create a new user solution marked as processing
+	user_solution_id, err := createUserSolution(tx, queueMessage, task)
+	if (err != nil) {
+		handleError(tx, msg, queueMessage ,err, "Failed to create solution")
 		tx.Rollback()
-		handleError(msg, err, "Failed to create solution")
 		return
 	}
 
-	// Run the solution, forn now it's just a placeholder
-	solutionResult, err := runSolution(task, solution.UserSolutionId)
-	if err != nil {
+	// Create a new solution and run it
+	solutionResult, err := runSolution(task)
+	if (err != nil) {
+		handleError(tx, msg, queueMessage ,err, "Failed to run solution")
 		tx.Rollback()
-		handleError(msg, err, "Failed to run solution")
 		return
 	}
 
-	// Store the solution result
-	err = repositories.StoreSolutionResult(tx, solutionResult)
+	// Create a new user solution result and test results
+	err = CreateUserSolutionResultAndTestResults(tx, msg, user_solution_id, solutionResult, queueMessage)
 	if err != nil {
+		handleError(tx, msg, queueMessage ,err, "Failed to create solution result and test results")
 		tx.Rollback()
-		handleError(msg, err, "Failed to store solution result")
 		return
 	}
 
 	// Mark the solution as complete
-	err = repositories.MarkSolutionComplete(tx, solution.Id)
+	err = repositories.MarkUserSolutionComplete(tx, uint(queueMessage.UserSolutionID))
 	if err != nil {
 		tx.Rollback()
-		handleError(msg, err, "Failed to mark solution as complete")
+		handleError(tx, msg, queueMessage , err, "Failed to mark solution as complete")
 		return
 	}
 
     // Commit the transaction
     if err := tx.Commit().Error; err != nil {
-        handleError(msg, err, "Failed to commit transaction")
+        handleError(tx, msg, queueMessage ,err, "Failed to commit transaction")
         return
     }
 
@@ -133,7 +140,8 @@ func processMessage(msg amqp.Delivery, db *gorm.DB) {
 }
 
 
-func handleError(msg amqp.Delivery,err error, errMsg string) {
+// Helper functions to clean up the processMessage function
+func handleError(tx *gorm.DB,msg amqp.Delivery,queueMessage QueueMessage,err error, errMsg string) {
 	// Placeholder for custom error logger
     log.Printf("%s: %v", errMsg, err)
 
@@ -141,6 +149,7 @@ func handleError(msg amqp.Delivery,err error, errMsg string) {
     if retryCount >= maxRetries {
 		// Placeholder for custom error logger
         log.Printf("Dropping message after %d retries", retryCount)
+		repositories.MarkUserSolutionFailed(tx, uint(queueMessage.UserSolutionID))
 		// Message was retried maxRetries times, ack it and remove it from the queue
         msg.Ack(false)
         return
@@ -160,7 +169,75 @@ func getRetryCount(msg amqp.Delivery) int {
     return retryCount
 }
 
-func runSolution(task models.Task, userSolutionId int) (models.SolutionResult, error) {
-	// Placeholder for running the solution
-	return models.SolutionResult{}, nil
+func createUserSolution(tx *gorm.DB, queueMessage QueueMessage, task TaskForRunner) (uint, error){
+	userSolution  := models.UserSolution{
+		TaskID: uint(queueMessage.TaskID),
+		SolutionFileName: task.SolutionFileName,
+		LanguageType: task.LanguageType,
+		LanguageVersion: task.LanguageVersion,
+		Status: "processing",
+	}
+
+	user_solution_id, err := repositories.CreateUserSolution(tx, userSolution)
+	if err != nil {
+		return 0, err
+	}
+
+	return user_solution_id, nil
+}
+
+func runSolution(task TaskForRunner) (solution.SolutionResult, error) {
+	runner := solution.Runner{}
+	langType, err := solution.StringToLanguageType(task.LanguageType)
+	if err != nil {
+		return solution.SolutionResult{}, err
+	}
+
+	langConfig := solution.LanguageConfig{
+		Type: langType,
+		Version: task.LanguageVersion,
+	}
+
+	solution := solution.Solution{
+		Language: langConfig,
+		BaseDir: task.BaseDir,
+		SolutionFileName: task.SolutionFileName,
+		InputDir: task.StdinDir,
+		OutputDir: task.ExpectedOutputsDir,
+	}
+
+	solutionResult := runner.RunSolution(&solution)
+
+	return solutionResult, nil
+}
+
+func CreateUserSolutionResultAndTestResults(tx *gorm.DB, msg amqp.Delivery, user_solution_id uint, solutionResult solution.SolutionResult, queueMessage QueueMessage) error {
+
+	dbSolutionResult := models.UserSolutionResult{
+		UserSolutionID: user_solution_id,
+		Code: solutionResult.Code,
+		Message: solutionResult.Message,
+	}
+
+	user_solution_result_id, err := repositories.CreateUserSolutionResult(tx, dbSolutionResult)
+	if err != nil {
+		return err
+	}
+
+	for _, testResult := range solutionResult.TestResults {
+		dbTestResult := models.TestResult{
+			UserSolutionResultID: user_solution_result_id,
+			InputFilePath: testResult.InputFile,
+			ExpectedOutputFilePath: testResult.ExpectedFile,
+			OutputFilePath: testResult.ActualFile,
+			Passed: testResult.Passed,
+			ErrorMessage: testResult.ErrorMessage,
+		}
+		err = repositories.CreateTestResults(tx, dbTestResult)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
