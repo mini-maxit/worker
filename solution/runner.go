@@ -12,6 +12,17 @@ import (
 
 type LanguageType int
 
+var languageTypeMap = map[string]LanguageType{
+    "CPP": CPP,
+}
+
+func StringToLanguageType(s string) (LanguageType, error) {
+    if lt, ok := languageTypeMap[s]; ok {
+        return lt, nil
+    }
+    return 0, fmt.Errorf("invalid language type: %s", s)
+}
+
 const (
 	CPP LanguageType = iota + 1
 )
@@ -105,6 +116,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 			ActualFile:   outputPath,
 			Passed:       result,
 			ErrorMessage: difference,
+			Order: i,
 		}
 	}
 
