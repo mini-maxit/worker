@@ -116,6 +116,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 			ActualFile:   outputPath,
 			Passed:       result,
 			ErrorMessage: difference,
+			Order: i,
 		}
 	}
 

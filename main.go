@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/mini-maxit/worker/worker"
 	"github.com/mini-maxit/worker/internal/config"
+	"github.com/mini-maxit/worker/worker"
 )
 
 func main() {

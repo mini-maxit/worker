@@ -18,10 +18,10 @@ func MarkUserSolutionComplete(tx *gorm.DB, userSolutionID uint) error {
 	return err
 }
 
-func MarkUserSolutionFailed(tx *gorm.DB, userSolutionID uint) error {
+func MarkUserSolutionFailed(tx *gorm.DB, userSolutionID uint, errorMsg error) error {
 	err := tx.Model(&models.UserSolution{}).Where("id = ?", userSolutionID).Updates(map[string]interface{}{
 		"status":     "failed",
-		"was_dropped": true,
+		"status_message": errorMsg,
 	}).Error
 	return err
 }

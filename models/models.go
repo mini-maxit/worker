@@ -21,13 +21,12 @@ type UserSolution struct {
     Status           string    `gorm:"type:varchar(50);not null"`
     SubmittedAt      time.Time `gorm:"autoCreateTime"`
     CheckedAt        *time.Time
-    WasDropped       bool      `gorm:"default:false"`
-
+    StatusMessage    string    `gorm:"type:varchar"`
     Task             Task      `gorm:"foreignKey:TaskID"`
 }
 
 type InputOutput struct {
-    ID          uint    `gorm:"primaryKey;autoIncrement"`
+    ID          uint `gorm:"primaryKey"`
     TaskID      uint    `gorm:"not null"`
     Order       int     `gorm:"not null"`
     TimeLimit   float64 `gorm:"not null"`
@@ -50,11 +49,11 @@ type UserSolutionResult struct {
 type TestResult struct {
     ID                    uint   `gorm:"primaryKey;autoIncrement"`
     UserSolutionResultID   uint   `gorm:"not null"`
-    InputFilePath          string `gorm:"type:varchar(255);not null"`
-    ExpectedOutputFilePath string `gorm:"type:varchar(255);not null"`
+    InputOutputID          uint    `gorm:"not null"`
     OutputFilePath         string `gorm:"type:varchar(255);not null"`
     Passed                 bool   `gorm:"not null"`
     ErrorMessage           string `gorm:"type:varchar(255)"`
 
     UserSolutionResult     UserSolutionResult `gorm:"foreignKey:UserSolutionResultID"`
+    InputOutput            InputOutput `gorm:"foreignKey:InputOutputID"`
 }

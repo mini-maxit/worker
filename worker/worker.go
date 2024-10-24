@@ -4,17 +4,18 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/mini-maxit/worker/models"
+	"github.com/mini-maxit/worker/repositories"
+	"github.com/mini-maxit/worker/solution"
+	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"gorm.io/gorm"
-	"github.com/mini-maxit/worker/models"
-	"github.com/mini-maxit/worker/solution"
-	"github.com/mini-maxit/worker/repositories"
 )
 
 type QueueMessage struct {
 	TaskID 		    int `json:"task_id"`
+	UserID 			int `json:"user_id"`
 	UserSolutionID 	int	`json:"user_solution_id"`
-	InputOutputIDs 	[]int	`json:"input_output_ids"`
 }
 
 // Maximum of retries on the same message
@@ -90,7 +91,7 @@ func processMessage(msg amqp.Delivery, db *gorm.DB) {
 	}()
 
 	// Get the configuration data needed to run the solution
-	task, err := getDataForSolutionRunner(tx, queueMessage.TaskID, queueMessage.UserSolutionID, queueMessage.InputOutputIDs)
+	task, err := getDataForSolutionRunner(tx, queueMessage.TaskID, queueMessage.UserSolutionID)
 	if err != nil {
 		handleError(tx, msg, queueMessage,err, "Failed to get data for solution runner")
 		tx.Rollback()
@@ -112,6 +113,9 @@ func processMessage(msg amqp.Delivery, db *gorm.DB) {
 		tx.Rollback()
 		return
 	}
+
+	// Remove the temporary directorie
+	utils.RemoveDir(task.BaseDir, true, true)
 
 	// Create a new user solution result and test results
 	err = CreateUserSolutionResultAndTestResults(tx, msg, user_solution_id, solutionResult, queueMessage)
@@ -149,7 +153,7 @@ func handleError(tx *gorm.DB,msg amqp.Delivery,queueMessage QueueMessage,err err
     if retryCount >= maxRetries {
 		// Placeholder for custom error logger
         log.Printf("Dropping message after %d retries", retryCount)
-		repositories.MarkUserSolutionFailed(tx, uint(queueMessage.UserSolutionID))
+		repositories.MarkUserSolutionFailed(tx, uint(queueMessage.UserSolutionID), err)
 		// Message was retried maxRetries times, ack it and remove it from the queue
         msg.Ack(false)
         return
@@ -225,13 +229,16 @@ func CreateUserSolutionResultAndTestResults(tx *gorm.DB, msg amqp.Delivery, user
 	}
 
 	for _, testResult := range solutionResult.TestResults {
+		input_outpu_id, err := repositories.GetInputOutputId(tx, queueMessage.TaskID, testResult.Order)
+		if(err != nil) {
+			return err
+		}
 		dbTestResult := models.TestResult{
 			UserSolutionResultID: user_solution_result_id,
-			InputFilePath: testResult.InputFile,
-			ExpectedOutputFilePath: testResult.ExpectedFile,
 			OutputFilePath: testResult.ActualFile,
 			Passed: testResult.Passed,
 			ErrorMessage: testResult.ErrorMessage,
+			InputOutputID: uint(input_outpu_id),
 		}
 		err = repositories.CreateTestResults(tx, dbTestResult)
 		if err != nil {
