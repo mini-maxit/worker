@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/mini-maxit/worker/internal/config"
+	"github.com/mini-maxit/worker/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -31,6 +32,11 @@ func NewPostgresDatabase(config config.Config) *postgresDataBase {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if(err != nil) {
 		log.Fatalf("Failed to connect to database: %s", err)
+	}
+
+	err = db.AutoMigrate(&models.InputOutput{}, &models.Task{}, &models.TestResult{}, &models.UserSolution{}, &models.UserSolutionResult{})
+	if(err != nil) {
+		log.Fatalf("Failed to migrate database: %s", err)
 	}
 
 	return &postgresDataBase{Db: db}

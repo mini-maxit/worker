@@ -16,6 +16,7 @@ var errUnknownFileType = errors.New("unknown file type")
 
 type TaskForRunner struct {
 	BaseDir            string
+	TempDir            string
 	LanguageType       string
 	LanguageVersion    string
 	SolutionFileName   string
@@ -38,6 +39,7 @@ type SolutionConfig struct {
 }
 
 type DirConfig struct {
+	TempDir            string
     BaseDir            string `gorm:"column:dir_path"`
     StdinDir           string `gorm:"column:input_dir_path"`
     ExpectedOutputsDir string `gorm:"column:output_dir_path"`
@@ -54,6 +56,7 @@ func getDataForSolutionRunner(db *gorm.DB, task_id int, user_solution_id int) (T
 		return TaskForRunner{}, err
 	}
 
+	task.TempDir = dirConfig.TempDir
 	task.BaseDir = dirConfig.BaseDir
 	task.StdinDir = dirConfig.StdinDir
 	task.ExpectedOutputsDir = dirConfig.ExpectedOutputsDir
@@ -73,7 +76,7 @@ func getDataForSolutionRunner(db *gorm.DB, task_id int, user_solution_id int) (T
     // Get the time and memory limits for each input-output pair in order
 	var ioData []InputOutputData
 
-    err = db.Table("inputs_outputs").Select("id, time_limit, memory_limit, order").Where("task_id = ?", task_id).Order("order ASC").Find(&ioData).Error
+    err = db.Table("input_outputs").Select("time_limit, memory_limit, input_output_order").Where("task_id = ?", task_id).Order("input_output_order ASC").Find(&ioData).Error
     if err != nil {
         return TaskForRunner{}, err
     }
@@ -89,7 +92,7 @@ func getDataForSolutionRunner(db *gorm.DB, task_id int, user_solution_id int) (T
 
 func handlePackage() (DirConfig, error) {
 	//this will be gathered from the file storage for now just place holder
-	zipFile := "/Users/mateuszosik/repos/Testerka/worker/file.tgz"
+	zipFile := "/app/file.tar.gz"
 
 	//Create a temp directory to store the unzipped files
 	path, err := os.MkdirTemp("", "temp")
@@ -98,10 +101,12 @@ func handlePackage() (DirConfig, error) {
 	}
 
 	// Move the zip file to the temp directory
-	err = os.Rename(zipFile, path  +"/file.tgz")
+	err = os.Rename(zipFile, path  + "/file.tgz")
 	if err != nil {
+		utils.RemoveDir(path, true, true)
 		return DirConfig{}, err
 	}
+
 
 	// Unzip the file
 	err = ExtractTarGz(path + "/file.tgz", path)
@@ -110,16 +115,19 @@ func handlePackage() (DirConfig, error) {
 		return DirConfig{}, err
 	}
 
+
 	// Remove the zip file
 	err = os.Remove(path + "/file.tgz")
 	if err != nil {
 		return DirConfig{}, err
 	}
 
+
 	dirConfig := DirConfig{
+		TempDir:            path,
 		BaseDir:            path + "/Task",
-		StdinDir:           path + "/Task/inputs",
-		ExpectedOutputsDir: path + "/Task/outputs",
+		StdinDir:           "inputs",
+		ExpectedOutputsDir: "outputs",
 	}
 
 	return dirConfig, nil

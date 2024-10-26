@@ -95,12 +95,12 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
 	for i, inputPath := range inputFiles {
-		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, i)
+		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i+1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, i) // May be dropped in the future
 		_ = exec.ExecuteCommand(filePath, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
 
 		// Compare output with expected output
-		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, i)
+		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i+1))
 		result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
 		if err != nil {
 			log.Printf("error comparing output. %s", err.Error())
@@ -116,7 +116,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 			ActualFile:   outputPath,
 			Passed:       result,
 			ErrorMessage: difference,
-			Order: i,
+			Order: (i+1),
 		}
 	}
 

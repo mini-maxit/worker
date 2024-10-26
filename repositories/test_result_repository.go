@@ -7,5 +7,6 @@ import (
 
 
 func CreateTestResults(tx *gorm.DB, testResult models.TestResult)  error {
-	return tx.Create(testResult).Error
+	err := tx.Create(&testResult).Error
+	return err
 }

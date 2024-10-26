@@ -14,7 +14,7 @@ type Task struct {
 
 type UserSolution struct {
     ID               uint      `gorm:"primaryKey;autoIncrement"`
-    TaskID           uint      `gorm:"not null"`
+    TaskID           uint      `gorm:"not null; foreignKey:TaskID"`
     SolutionFileName string    `gorm:"type:varchar(255);not null"`
     LanguageType     string    `gorm:"type:varchar(255);not null"`
     LanguageVersion  string    `gorm:"type:varchar(50);not null"`
@@ -22,38 +22,30 @@ type UserSolution struct {
     SubmittedAt      time.Time `gorm:"autoCreateTime"`
     CheckedAt        *time.Time
     StatusMessage    string    `gorm:"type:varchar"`
-    Task             Task      `gorm:"foreignKey:TaskID"`
 }
 
 type InputOutput struct {
     ID          uint `gorm:"primaryKey"`
-    TaskID      uint    `gorm:"not null"`
-    Order       int     `gorm:"not null"`
+    TaskID      uint    `gorm:"not null: foreignKey:TaskID"`
+    InputOutputOrder       int     `gorm:"not null"`
     TimeLimit   float64 `gorm:"not null"`
     MemoryLimit float64 `gorm:"not null"`
-
-    Task        Task    `gorm:"foreignKey:TaskID"`
 }
 
 type UserSolutionResult struct {
     ID             uint      `gorm:"primaryKey;autoIncrement"`
-    UserSolutionID uint      `gorm:"not null"`
+    UserSolutionID uint      `gorm:"not null; foreignKey:UserSolutionID"`
     Code           string    `gorm:"not null"`
     Message        string    `gorm:"type:varchar(255);not null"`
     CreatedAt      time.Time `gorm:"autoCreateTime"`
-
-    UserSolution   UserSolution `gorm:"foreignKey:UserSolutionID"`
 }
 
 
 type TestResult struct {
     ID                    uint   `gorm:"primaryKey;autoIncrement"`
-    UserSolutionResultID   uint   `gorm:"not null"`
-    InputOutputID          uint    `gorm:"not null"`
-    OutputFilePath         string `gorm:"type:varchar(255);not null"`
+    UserSolutionResultID   uint   `gorm:"not null; foreignKey:UserSolutionResultID"`
+    InputOutputID          uint    `gorm:"not null; foreignKey:InputOutputID"`
+    OutputFilePath         string `gorm:"type:varchar;not null"`
     Passed                 bool   `gorm:"not null"`
-    ErrorMessage           string `gorm:"type:varchar(255)"`
-
-    UserSolutionResult     UserSolutionResult `gorm:"foreignKey:UserSolutionResultID"`
-    InputOutput            InputOutput `gorm:"foreignKey:InputOutputID"`
+    ErrorMessage           string `gorm:"type:varchar"`
 }
