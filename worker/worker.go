@@ -4,25 +4,40 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/mini-maxit/worker/models"
-	"github.com/mini-maxit/worker/repositories"
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"gorm.io/gorm"
 )
 
 type QueueMessage struct {
-	TaskID         int `json:"task_id"`
-	UserID         int `json:"user_id"`
-	UserSolutionID int `json:"user_solution_id"`
+	MessageID 				string    `json:"message_id"`
+	BackendResponseQueue    string    `json:"backend_response_queue"`
+	TaskID         			int 	  `json:"task_id"`
+	UserID         			int 	  `json:"user_id"`
+	UserSolutionID 			int       `json:"user_solution_id"`
+	LanguageType  			string 	  `json:"language_type"`
+	LanguageVersion 		string    `json:"language_version"`
+	SolutionFileName 		string    `json:"solution_file_name"`
+	TimeLimits	  			[]float64 `json:"time_limits"`
+	MemoryLimits	  		[]float64 `json:"memory_limits"`
+	OutputDirName 			string    `json:"output_dir_name"`
+	InputDirName 			string    `json:"input_dir_name"`
 }
+
+type ResponseMessage struct {
+	MessageID	 	string 					`json:"message_id"`
+	TaskID   		int 					`json:"task_id"`
+	UserID  		int 					`json:"user_id"`
+	UserSolutionID  int 					`json:"user_solution_id"`
+	Result 			solution.SolutionResult `json:"result"`
+}
+
 
 // Maximum of retries on the same message
 const maxRetries = 2
 
 // Work starts the worker process
-func Work(db *gorm.DB, conn *amqp.Connection, ch *amqp.Channel) {
+func Work(ch *amqp.Channel) {
 
 	// Declare a queue
 	q, err := ch.QueueDeclare(
@@ -63,30 +78,23 @@ func Work(db *gorm.DB, conn *amqp.Connection, ch *amqp.Channel) {
 				// Unmarshal the message body
 				err := json.Unmarshal(msg.Body, &queueMessage)
 				if err != nil {
-					handleError(nil, db, &msg, ch, uint(queueMessage.UserSolutionID), err)
-				}
-
-				// Start a transaction
-				tx := db.Begin()
-				if tx.Error != nil {
-					handleError(nil, db, &msg, ch, uint(queueMessage.UserSolutionID), tx.Error)
+					log.Printf("Failed to unmarshal the message: %s", err)
+					handleError(QueueMessage{}, &msg, ch, err)
 				}
 
 				defer func() {
 					if r := recover(); r != nil {
 						msg.Ack(false)
-						tx.Rollback()
 						log.Printf("Recovered from panic: %v", r)
 					}
 				}()
 
 				// Process the message
-				err = processMessage(queueMessage, tx)
+				err = processMessage(queueMessage, ch)
 				if err != nil {
-					handleError(tx, db, &msg, ch, uint(queueMessage.UserSolutionID), err)
+					handleError(queueMessage, &msg, ch, err)
 				} else {
 					msg.Ack(false)
-					tx.Commit()
 				}
 
 				log.Printf("Processed message")
@@ -100,21 +108,21 @@ func Work(db *gorm.DB, conn *amqp.Connection, ch *amqp.Channel) {
 }
 
 // Process the incoming message
-func processMessage(queueMessage QueueMessage,tx *gorm.DB) error {
+func processMessage(queueMessage QueueMessage, ch *amqp.Channel) error {
 
 	// Get the configuration data needed to run the solution
-	task, err := getDataForSolutionRunner(tx, queueMessage.TaskID, queueMessage.UserSolutionID)
+	task, err := getDataForSolutionRunner(queueMessage.TaskID, queueMessage.UserID, queueMessage.UserSolutionID)
 	if err != nil {
 		return err
 	}
 
-
-	// Mark user solution as processing
-	err = repositories.MarkUserSolutionProcessing(tx, queueMessage.UserSolutionID)
-	if err != nil {
-		return err
-	}
-
+	task.LanguageType = queueMessage.LanguageType
+	task.LanguageVersion = queueMessage.LanguageVersion
+	task.SolutionFileName = queueMessage.SolutionFileName
+	task.TimeLimits = queueMessage.TimeLimits
+	task.MemoryLimits = queueMessage.MemoryLimits
+	task.InputDirName = queueMessage.InputDirName
+	task.OutputDirName = queueMessage.OutputDirName
 
 	// Create a new solution and run it
 	solutionResult, err := runSolution(task)
@@ -122,17 +130,13 @@ func processMessage(queueMessage QueueMessage,tx *gorm.DB) error {
 		return err
 	}
 
+	log.Printf("Solution result: %v", solutionResult)
+
 	// Remove the temporary directorie
-	utils.RemoveDir(task.TempDir, true, true)
+	utils.RemoveIO(task.TempDir, true, true)
 
-	// Create a new user solution result and test results
-	err = CreateUserSolutionResultAndTestResults(tx, uint(queueMessage.UserSolutionID), solutionResult, queueMessage)
-	if err != nil {
-		return err
-	}
-
-	// Mark the solution as complete
-	err = repositories.MarkUserSolutionComplete(tx, uint(queueMessage.UserSolutionID))
+	// Send the response message to the backend
+	err = sendResponseMessage(queueMessage ,solutionResult, ch)
 	if err != nil {
 		return err
 	}
@@ -140,20 +144,67 @@ func processMessage(queueMessage QueueMessage,tx *gorm.DB) error {
 	return nil
 }
 
-// Handle errors and requeue the message if needed
-func handleError(tx *gorm.DB,  db *gorm.DB, msg *amqp.Delivery, ch *amqp.Channel, user_solution_id uint, err error) {
+// Send response message to backend with solution result
+func sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.SolutionResult, ch *amqp.Channel) error {
 
-	// Rollback any active transaction if needed
-	if tx != nil && tx.Error == nil {
-		tx.Rollback()
+	// Create a response message
+	responseMessage := ResponseMessage{
+		MessageID: queueMessage.MessageID,
+		TaskID:   queueMessage.TaskID,
+		UserID:  queueMessage.UserID,
+		UserSolutionID: queueMessage.UserSolutionID,
+		Result: solutionResult,
 	}
+
+	// Marshal the solution result
+	solutionResultBytes, err := json.Marshal(responseMessage)
+	if err != nil {
+		return err
+	}
+
+	err = ch.Publish(
+		"",               // exchange
+		queueMessage.BackendResponseQueue, // routing key (queue name)
+		false,            // mandatory
+		false,            // immediate
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        solutionResultBytes,
+		})
+	if err != nil {
+		log.Printf("Failed to send response message to the backend: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+// Handle errors and requeue the message if needed
+func handleError(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel, err error) {
+
+	// Placeholder for custom error logger
+	log.Printf("Error processing message: %s", err)
+
 
 	newMsg := getNewMsg(msg)
 	if newMsg.Body == nil {
 		// Placeholder for custom error logger
 		log.Printf("Dropping message after 3 retries")
-		repositories.MarkUserSolutionFailed(db, user_solution_id, err)
 
+		failedSolutionResult := solution.SolutionResult{
+			Success:    false,
+			StatusCode: solution.InternalError,
+			Code:       "500",
+			Message:    "Failed to process the message after 3 retries: " + err.Error(),
+			TestResults: nil,
+		}
+
+		// Send the response message to the backend
+		err = sendResponseMessage(queueMessage, failedSolutionResult, ch)
+		if err != nil {
+			// Placeholder for custom error logger
+			log.Printf("Failed to send response message to the backend: %s", err)
+		}
 		// Message was retried maxRetries times, ack it and remove it from the queue
 		msg.Ack(false)
 		return
@@ -176,7 +227,6 @@ func handleError(tx *gorm.DB,  db *gorm.DB, msg *amqp.Delivery, ch *amqp.Channel
 	if err != nil {
 		// Placeholder for custom error logger
 		log.Printf("Failed to send message to the queue: %s", err)
-		repositories.MarkUserSolutionFailed(db, user_solution_id, err)
 	}
 }
 
@@ -210,45 +260,11 @@ func runSolution(task TaskForRunner) (solution.SolutionResult, error) {
 		Language:         langConfig,
 		BaseDir:          task.BaseDir,
 		SolutionFileName: task.SolutionFileName,
-		InputDir:         task.StdinDir,
-		OutputDir:        task.ExpectedOutputsDir,
+		InputDir:         task.InputDirName,
+		OutputDir:        task.OutputDirName,
 	}
 
 	solutionResult := runner.RunSolution(&solution)
 
 	return solutionResult, nil
-}
-
-// Create a new user solution result and test results
-func CreateUserSolutionResultAndTestResults(tx *gorm.DB, user_solution_id uint, solutionResult solution.SolutionResult, queueMessage QueueMessage) error {
-
-	dbSolutionResult := models.UserSolutionResult{
-		UserSolutionID: user_solution_id,
-		Code:           solutionResult.Code,
-		Message:        solutionResult.Message,
-	}
-
-	user_solution_result_id, err := repositories.CreateUserSolutionResult(tx, dbSolutionResult)
-	if err != nil {
-		return err
-	}
-
-	for _, testResult := range solutionResult.TestResults {
-		input_outpu_id, err := repositories.GetInputOutputId(tx, queueMessage.TaskID, testResult.Order)
-		if err != nil {
-			return err
-		}
-		dbTestResult := models.TestResult{
-			UserSolutionResultID: user_solution_result_id,
-			OutputFilePath:       testResult.ActualFile,
-			Passed:               testResult.Passed,
-			ErrorMessage:         testResult.ErrorMessage,
-			InputOutputID:        uint(input_outpu_id),
-		}
-		err = repositories.CreateTestResults(tx, dbTestResult)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

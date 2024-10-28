@@ -4,11 +4,15 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"path"
+
+	"github.com/google/uuid"
 
 	"github.com/mini-maxit/worker/utils"
-	"gorm.io/gorm"
 )
 
 var errUnknownFileType = errors.New("unknown file type")
@@ -20,79 +24,65 @@ type TaskForRunner struct {
 	LanguageType       string
 	LanguageVersion    string
 	SolutionFileName   string
-	StdinDir           string
-	ExpectedOutputsDir string
+	InputDirName        string
+	OutputDirName 		string
 	TimeLimits 	       []float64
 	MemoryLimits 	   []float64
-}
-
-type InputOutputData struct {
-	TimeLimit  		float64  `gorm:"column:time_limit"`
-	MemoryLimit     float64  `gorm:"column:memory_limit"`
-	Order 		    int      `gorm:"column:order"`
-}
-
-type SolutionConfig struct {
-	LanguageType    string  `gorm:"column:language_type"`
-	LanguageVersion string  `gorm:"column:language_version"`
-	SolutionFileName string `gorm:"column:solution_file_name"`
 }
 
 type DirConfig struct {
 	TempDir            string
     BaseDir            string `gorm:"column:dir_path"`
-    StdinDir           string `gorm:"column:input_dir_path"`
-    ExpectedOutputsDir string `gorm:"column:output_dir_path"`
 }
 
 
 // GetDataForSolutionRunner retrieves the data needed to run the solution
-func getDataForSolutionRunner(db *gorm.DB, task_id int, user_solution_id int) (TaskForRunner, error) {
+func getDataForSolutionRunner(task_id, user_id, submission_number int) (TaskForRunner, error) {
 	var task TaskForRunner
 
-    // Get the directories configuration - base dir, input dir, output dir
-	dirConfig, err := handlePackage()
+	// Get the tar.gz file from the storage
+	request_url := fmt.Sprintf("http://host.docker.internal:8080/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", task_id, user_id, submission_number)
+	response, err := http.Get(request_url)
+	if err != nil {
+		return TaskForRunner{}, err
+	}
+
+	if(response.StatusCode != 200) {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return TaskForRunner{}, errors.New(string(bodyBytes))
+	}
+
+	id := uuid.New()
+	filePath := fmt.Sprintf("/app/%s.tar.gz", id.String())
+	file, err := os.Create(filePath)
+	if err != nil {
+		return TaskForRunner{}, err
+	}
+
+	defer file.Close()
+
+	_, err = io.Copy(file, response.Body)
+	if err != nil {
+		return TaskForRunner{}, err
+	}
+
+    // Get the directories configuration - temp dir and base dir
+	dirConfig, err := handlePackage(filePath)
 	if err != nil {
 		return TaskForRunner{}, err
 	}
 
 	task.TempDir = dirConfig.TempDir
 	task.BaseDir = dirConfig.BaseDir
-	task.StdinDir = dirConfig.StdinDir
-	task.ExpectedOutputsDir = dirConfig.ExpectedOutputsDir
 
-    // Get the soluton configuration - language type, language version, solution file name
-    var solutionData SolutionConfig
-
-	err = db.Table("user_solutions").Select("language_type, language_version, solution_file_name").Where("id = ?", user_solution_id).Scan(&solutionData).Error
-	if err != nil {
-		return TaskForRunner{}, err
-	}
-
-	task.LanguageType = solutionData.LanguageType
-	task.LanguageVersion = solutionData.LanguageVersion
-    task.SolutionFileName = solutionData.SolutionFileName
-
-    // Get the time and memory limits for each input-output pair in order
-	var ioData []InputOutputData
-
-    err = db.Table("input_outputs").Select("time_limit, memory_limit, input_output_order").Where("task_id = ?", task_id).Order("input_output_order ASC").Find(&ioData).Error
-    if err != nil {
-        return TaskForRunner{}, err
-    }
-
-	for _, io := range ioData {
-        task.TimeLimits = append(task.TimeLimits, io.TimeLimit)
-        task.MemoryLimits = append(task.MemoryLimits, io.MemoryLimit)
-    }
+	file.Close()
+	utils.RemoveIO(filePath, false, false)
 
 	return task, nil
 }
 
 
-func handlePackage() (DirConfig, error) {
-	//this will be gathered from the file storage for now just place holder
-	zipFile := "/app/file.tar.gz"
+func handlePackage(zipFilePath string) (DirConfig, error) {
 
 	//Create a temp directory to store the unzipped files
 	path, err := os.MkdirTemp("", "temp")
@@ -101,39 +91,32 @@ func handlePackage() (DirConfig, error) {
 	}
 
 	// Move the zip file to the temp directory
-	err = os.Rename(zipFile, path  + "/file.tgz")
+	err = os.Rename(zipFilePath, path  + "/file.tar.gz")
 	if err != nil {
-		utils.RemoveDir(path, true, true)
+		utils.RemoveIO(path, true, true)
 		return DirConfig{}, err
 	}
-
 
 	// Unzip the file
-	err = ExtractTarGz(path + "/file.tgz", path)
+	err = ExtractTarGz(path + "/file.tar.gz", path)
 	if err != nil {
-		utils.RemoveDir(path, true, true)
+		utils.RemoveIO(path, true, true)
 		return DirConfig{}, err
 	}
-
 
 	// Remove the zip file
-	err = os.Remove(path + "/file.tgz")
-	if err != nil {
-		return DirConfig{}, err
-	}
-
+	utils.RemoveIO(path + "/file.tar.gz", false, false)
 
 	dirConfig := DirConfig{
 		TempDir:            path,
 		BaseDir:            path + "/Task",
-		StdinDir:           "inputs",
-		ExpectedOutputsDir: "outputs",
 	}
 
 	return dirConfig, nil
 }
 
 func ExtractTarGz(filePath string, baseFilePath string) error {
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -159,19 +142,26 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.Mkdir(baseFilePath + "/" + header.Name, 0755); err != nil {
+			dirPath := path.Join(baseFilePath, header.Name)
+			if err := os.MkdirAll(dirPath, 0755); err != nil {
 				return err
 			}
+
 		case tar.TypeReg:
-			outFile, err := os.Create(baseFilePath + "/" + header.Name)
+			filePath := path.Join(baseFilePath, header.Name)
+			if err := os.MkdirAll(path.Dir(filePath), 0755); err != nil {
+				return err
+			}
+
+			outFile, err := os.Create(filePath)
 			if err != nil {
 				return err
 			}
+			defer outFile.Close() // Close the file after copying
+
 			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
 				return err
 			}
-			outFile.Close()
 
 		default:
 			return errUnknownFileType

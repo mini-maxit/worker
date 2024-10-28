@@ -80,6 +80,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 	}
 
 	inputPath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.InputDir)
+	log.Printf("reading input files from %s", inputPath)
 	inputFiles, err := r.parseInputFiles(inputPath)
 	if err != nil {
 		log.Fatalf("error reading input directory. %s", err.Error())
