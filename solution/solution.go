@@ -45,4 +45,5 @@ type TestResult struct {
 	ActualFile   string // Path to the actual output file produced by the solution
 	Passed       bool   // Whether the test passed or failed
 	ErrorMessage string // Error message in case of failure (if any)
+	Order 		 int // Order to input output pair for ex 1 mean in1.in and out1.out was used
 }

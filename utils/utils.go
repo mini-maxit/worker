@@ -26,7 +26,7 @@ func Contains[V string](array []V, value V) bool {
 }
 
 // attempts to remove dir and optionaly its content. Can ignore error, for example if folder does not exist
-func RemoveDir(dir string, recursive, ignore_error bool) error {
+func RemoveIO(dir string, recursive, ignore_error bool) error {
 	var err error
 	if recursive {
 		err = os.RemoveAll(dir)

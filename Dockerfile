@@ -1,13 +1,17 @@
-FROM golang:1.23
+FROM golang:1.23-bullseye
 
-RUN apt-get update && apt-get install -y \
-    git \
-    g++
+WORKDIR /app
 
-WORKDIR /maxit/worker
+COPY go.mod go.sum ./
 
-COPY go.mod .
-RUN go mod download && go mod verify
+RUN go mod download
 
 COPY . .
-CMD ["go", "run", "cmd/main.go"]
+
+COPY wait-for-it.sh /app/wait-for-it.sh
+RUN chmod +x /app/wait-for-it.sh
+
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./main.go
+
+CMD ["./wait-for-it.sh", "postgres:5432", "--", "./wait-for-it.sh", "rabbitmq:5672", "--", "/worker-service"]
