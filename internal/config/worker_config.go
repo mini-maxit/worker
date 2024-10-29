@@ -8,10 +8,6 @@ import (
 )
 
 type Config struct {
-	DBUser	 string
-	DBPassword string
-	DBName string
-	DBSslMode string
 	RQUrl string
 }
 
@@ -23,10 +19,6 @@ func LoadWorkerConfig() Config {
 	}
 
 	return Config{
-		DBUser: os.Getenv("DATABASE_USER"),
-		DBPassword: os.Getenv("DATABASE_PASSWORD"),
-		DBName: os.Getenv("DATABASE_NAME"),
-		DBSslMode: os.Getenv("DATABASE_SSL_MODE"),
 		RQUrl: os.Getenv("RABBITMQ_URL"),
 	}
 }
