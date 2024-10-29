@@ -8,13 +8,12 @@ RUN go mod download
 
 COPY . .
 
-COPY wait-for-it.sh /app/wait-for-it.sh
-RUN chmod +x /app/wait-for-it.sh
+COPY wait-for-it.sh wait-for-it.sh
+RUN chmod +x wait-for-it.sh
 
-COPY app_entery_script.sh /app/app_entery_script.sh
-RUN chmod +x /app/app_entery_script.sh
+COPY app_entry_script.sh app_entry_script.sh
+RUN chmod +x app_entry_script.sh
 
+RUN CGO_ENABLED=0 GOOS=linux go build -o bin/worker-service ./main.go
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./main.go
-
-ENTRYPOINT [ "/app/app_entery_script.sh" ]
+ENTRYPOINT [ "./app_entry_script.sh" ]
