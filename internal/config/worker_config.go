@@ -8,10 +8,6 @@ import (
 )
 
 type Config struct {
-	DBUser	 string
-	DBPassword string
-	DBName string
-	DBSslMode string
 	RQUrl string
 }
 
@@ -22,11 +18,15 @@ func LoadWorkerConfig() Config {
 		log.Fatal(err)
 	}
 
+	rabbitmq_host := os.Getenv("RABBITMQ_HOST")
+	rabbitmq_user := os.Getenv("RABBITMQ_USER")
+	rabbitmq_password := os.Getenv("RABBITMQ_PASSWORD")
+	rabbitmq_port := os.Getenv("RABBITMQ_PORT")
+
+
+	rabbitmq_url := "amqp://" + rabbitmq_user + ":" + rabbitmq_password + "@" + rabbitmq_host + ":" + rabbitmq_port + "/"
+
 	return Config{
-		DBUser: os.Getenv("DATABASE_USER"),
-		DBPassword: os.Getenv("DATABASE_PASSWORD"),
-		DBName: os.Getenv("DATABASE_NAME"),
-		DBSslMode: os.Getenv("DATABASE_SSL_MODE"),
-		RQUrl: os.Getenv("RABBITMQ_URL"),
+		RQUrl: rabbitmq_url,
 	}
 }

@@ -1,4 +1,4 @@
-FROM golang:1.23-bullseye
+FROM golang:1.23
 
 WORKDIR /app
 
@@ -8,10 +8,9 @@ RUN go mod download
 
 COPY . .
 
-COPY wait-for-it.sh /app/wait-for-it.sh
-RUN chmod +x /app/wait-for-it.sh
+RUN chmod +x wait-for-it.sh
+RUN chmod +x app_entry_script.sh
 
+RUN CGO_ENABLED=0 GOOS=linux go build -o bin/worker-service ./main.go
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./main.go
-
-CMD ["./wait-for-it.sh", "postgres:5432", "--", "./wait-for-it.sh", "rabbitmq:5672", "--", "/worker-service"]
+ENTRYPOINT [ "./app_entry_script.sh" ]
