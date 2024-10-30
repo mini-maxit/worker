@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Wait for RabbitMQ to be available
-./wait-for-it.sh rabbitmq:$RABBITMQ_PORT --
+./wait-for-it.sh $QUEUE_BROKER:$RABBITMQ_PORT --
 
-# Run the worker service
-exec /app/bin/worker-service
+# Run the worker
+exec ./bin/worker-service
