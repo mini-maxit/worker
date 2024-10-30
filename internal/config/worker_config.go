@@ -19,8 +19,8 @@ func LoadWorkerConfig() Config {
 	}
 
 	rabbitmq_host := os.Getenv("RABBITMQ_HOST")
-	rabbitmq_user := os.Getenv("USER")
-	rabbitmq_password := os.Getenv("PASSWORD")
+	rabbitmq_user := os.Getenv("RABBITMQ_USER")
+	rabbitmq_password := os.Getenv("RABBITMQ_PASSWORD")
 	rabbitmq_port := os.Getenv("RABBITMQ_PORT")
 
 
