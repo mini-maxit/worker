@@ -33,6 +33,7 @@ func getStatus(statusCode SolutionStatus) string {
 }
 
 type SolutionResult struct {
+	OutputDir	string // Directory where output files are stored
 	Success     bool           // wether solution passed or failed
 	StatusCode  SolutionStatus // Status of the solution execution
 	Code        string         // any code in case of error or success depending on status code
@@ -40,9 +41,6 @@ type SolutionResult struct {
 	TestResults []TestResult   // test results in case of error or success
 }
 type TestResult struct {
-	InputFile    string // Path to the input file used for the test
-	ExpectedFile string // Path to the expected output file
-	ActualFile   string // Path to the actual output file produced by the solution
 	Passed       bool   // Whether the test passed or failed
 	ErrorMessage string // Error message in case of failure (if any)
 	Order 		 int // Order to input output pair for ex 1 mean in1.in and out1.out was used

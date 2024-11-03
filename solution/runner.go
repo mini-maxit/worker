@@ -61,6 +61,12 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 		}
 	}
 
+	userOutputDir := "user-output"
+	err = os.Mkdir(fmt.Sprintf("%s/%s", solution.BaseDir, userOutputDir), os.ModePerm)
+	if err != nil {
+		log.Fatalf("error creating user output directory. %s", err.Error())
+	}
+
 	var filePath string
 	if exec.IsCompiled() {
 		solutionFilePath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.SolutionFileName)
@@ -69,6 +75,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 		if err != nil {
 			log.Printf("error compiling %s. %s", solution.SolutionFileName, err.Error())
 			return SolutionResult{
+				OutputDir: userOutputDir,
 				Success:    false,
 				StatusCode: Failed,
 				Code:       getStatus(Failed),
@@ -86,18 +93,12 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 		log.Fatalf("error reading input directory. %s", err.Error())
 	}
 
-	userOutputDir := "user-output"
-	err = os.Mkdir(fmt.Sprintf("%s/%s", solution.BaseDir, userOutputDir), os.ModePerm)
-	if err != nil {
-		log.Fatalf("error creating user output directory. %s", err.Error())
-	}
-
 	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i+1))
-		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, i) // May be dropped in the future
+		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, (i+1)) // May be dropped in the future
 		_ = exec.ExecuteCommand(filePath, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
 
 		// Compare output with expected output
@@ -112,9 +113,6 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 			solutionSuccess = false
 		}
 		testCases[i] = TestResult{
-			InputFile:    inputPath,
-			ExpectedFile: expectedFilePath,
-			ActualFile:   outputPath,
 			Passed:       result,
 			ErrorMessage: difference,
 			Order: (i+1),
@@ -129,6 +127,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 	}
 
 	return SolutionResult{
+		OutputDir:   userOutputDir,
 		Success:     solutionSuccess,
 		StatusCode:  Success,
 		Code:        getStatus(Success),
