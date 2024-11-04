@@ -29,6 +29,8 @@ const (
 	ErSignalRecieved
 )
 
+const CompileErrorFileName = "compile-err.err"
+
 type ExecutionResult struct {
 	StatusCode ExecutorStatusCode
 	Message    string

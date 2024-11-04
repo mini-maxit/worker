@@ -130,15 +130,18 @@ func (e *CppExecutor) Compile(sourceFilePath, dir string) (string, error) {
 	// Correctly pass the command and its arguments as separate strings
 	cmd := exec.Command("g++", "-o", outFilePath, fmt.Sprintf("-std=%s", versionFlag), sourceFilePath)
 
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
 		// Save stderr to a file
-		errPath := fmt.Sprintf("%s/compile-err.err", dir)
+		errPath := fmt.Sprintf("%s/%s", dir, CompileErrorFileName)
 		file, err := os.Create(errPath)
 		if err != nil {
 			return "", err
 		}
-		_, err = file.Write([]byte(cmdErr.Error()))
+		_, err = file.Write(stderr.Bytes())
 		if err != nil {
 			return "", err
 		}

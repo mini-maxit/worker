@@ -18,15 +18,15 @@ func LoadWorkerConfig() Config {
 		log.Fatal(err)
 	}
 
-	rabbitmq_host := os.Getenv("RABBITMQ_HOST")
-	rabbitmq_user := os.Getenv("RABBITMQ_USER")
-	rabbitmq_password := os.Getenv("RABBITMQ_PASSWORD")
-	rabbitmq_port := os.Getenv("RABBITMQ_PORT")
+	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
+	rabbitmqUser := os.Getenv("RABBITMQ_USER")
+	rabbitmqPassword := os.Getenv("RABBITMQ_PASSWORD")
+	rabbitmqPort := os.Getenv("RABBITMQ_PORT")
 
 
-	rabbitmq_url := "amqp://" + rabbitmq_user + ":" + rabbitmq_password + "@" + rabbitmq_host + ":" + rabbitmq_port + "/"
+	rabbitmqUrl := "amqp://" + rabbitmqUser + ":" + rabbitmqPassword + "@" + rabbitmqHost + ":" + rabbitmqPort + "/"
 
 	return Config{
-		RQUrl: rabbitmq_url,
+		RQUrl: rabbitmqUrl,
 	}
 }

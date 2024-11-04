@@ -1,25 +1,19 @@
 package worker
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path"
-
 	"github.com/google/uuid"
-
 	"github.com/mini-maxit/worker/utils"
 )
 
-var errUnknownFileType = errors.New("unknown file type")
 
 
 type TaskForRunner struct {
-	BaseDir            string
+	TaskDir            string
 	TempDir            string
 	LanguageType       string
 	LanguageVersion    string
@@ -32,17 +26,17 @@ type TaskForRunner struct {
 
 type DirConfig struct {
 	TempDir            string
-    BaseDir            string `gorm:"column:dir_path"`
+    TaskDir            string
 }
 
 
 // GetDataForSolutionRunner retrieves the data needed to run the solution
-func getDataForSolutionRunner(task_id, user_id, submission_number int) (TaskForRunner, error) {
+func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRunner, error) {
 	var task TaskForRunner
 
 	// Get the tar.gz file from the storage
-	request_url := fmt.Sprintf("http://host.docker.internal:8080/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", task_id, user_id, submission_number)
-	response, err := http.Get(request_url)
+	requestUrl := fmt.Sprintf("http://host.docker.internal:8080/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", taskId, userId, submissionNumber)
+	response, err := http.Get(requestUrl)
 	if err != nil {
 		return TaskForRunner{}, err
 	}
@@ -73,15 +67,14 @@ func getDataForSolutionRunner(task_id, user_id, submission_number int) (TaskForR
 	}
 
 	task.TempDir = dirConfig.TempDir
-	task.BaseDir = dirConfig.BaseDir
+	task.TaskDir = dirConfig.TaskDir
 
 	file.Close()
-	utils.RemoveIO(filePath, false, false)
 
 	return task, nil
 }
 
-
+// handlePackage unzips the package and returns the directories configuration
 func handlePackage(zipFilePath string) (DirConfig, error) {
 
 	//Create a temp directory to store the unzipped files
@@ -98,7 +91,7 @@ func handlePackage(zipFilePath string) (DirConfig, error) {
 	}
 
 	// Unzip the file
-	err = ExtractTarGz(path + "/file.tar.gz", path)
+	err = utils.ExtractTarGz(path + "/file.tar.gz", path)
 	if err != nil {
 		utils.RemoveIO(path, true, true)
 		return DirConfig{}, err
@@ -109,63 +102,8 @@ func handlePackage(zipFilePath string) (DirConfig, error) {
 
 	dirConfig := DirConfig{
 		TempDir:            path,
-		BaseDir:            path + "/Task",
+		TaskDir:            path + "/Task",
 	}
 
 	return dirConfig, nil
-}
-
-func ExtractTarGz(filePath string, baseFilePath string) error {
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	uncompressedStream, err := gzip.NewReader(file)
-	if err != nil {
-		return err
-	}
-	defer uncompressedStream.Close()
-
-	tarReader := tar.NewReader(uncompressedStream)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			dirPath := path.Join(baseFilePath, header.Name)
-			if err := os.MkdirAll(dirPath, 0755); err != nil {
-				return err
-			}
-
-		case tar.TypeReg:
-			filePath := path.Join(baseFilePath, header.Name)
-			if err := os.MkdirAll(path.Dir(filePath), 0755); err != nil {
-				return err
-			}
-
-			outFile, err := os.Create(filePath)
-			if err != nil {
-				return err
-			}
-			defer outFile.Close() // Close the file after copying
-
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				return err
-			}
-
-		default:
-			return errUnknownFileType
-		}
-	}
-	return nil
 }

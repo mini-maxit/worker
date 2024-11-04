@@ -2,13 +2,21 @@
 
 ## Overview
 
-The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are then sent back to a specified backend queue.
+The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are stored using the file storage service and sent back to the backend service.
+
+
+
+
 
 ## Message Structure
 
 ### Message Headers
 
 - `x-retry-count=0`: This header tracks the number of times a message has been retried. If a message fails to process after 3 retries, it will be dropped.
+
+### Message Properties
+
+- `reply_to=test`: This property specifies the queue to which the worker will send the response.
 
 ### Message Body
 
@@ -17,17 +25,13 @@ The body of the message is a JSON object with the following structure:
 ```json
 {
   "message_id": "adsa",
-  "backend_response_queue": "test",
   "task_id": 123,
   "user_id": 1,
-  "user_solution_id": 1,
+  "submission_number": 1,
   "language_type": "CPP",
   "language_version": "20",
-  "solution_file_name": "solution.cpp",
   "time_limits": [25],
-  "memory_limits": [512],
-  "output_dir_name": "outputs",
-  "input_dir_name": "inputs"
+  "memory_limits": [512]
 }
 ```
 
@@ -47,9 +51,6 @@ Upon successful execution of the task, the worker sends a message to the specifi
 ```json
 {
   "message_id": "adsa",
-  "task_id": 123,
-  "user_id": 1,
-  "user_solution_id": 1,
   "result": {
     "Success": true,
     "StatusCode": 1,
@@ -57,17 +58,11 @@ Upon successful execution of the task, the worker sends a message to the specifi
     "Message": "solution executed successfully",
     "TestResults": [
       {
-        "InputFile": "/tmp/temp302885701/Task/inputs/1.in",
-        "ExpectedFile": "/tmp/temp302885701/Task/outputs/1.out",
-        "ActualFile": "/tmp/temp302885701/Task/user-output/1.out",
         "Passed": false,
         "ErrorMessage": "Difference at line 1:\nOutput:   Hello, World!\nExpected: Hello World!\n\n",
         "Order": 1
       },
       {
-        "InputFile": "/tmp/temp302885701/Task/inputs/2.in",
-        "ExpectedFile": "/tmp/temp302885701/Task/outputs/2.out",
-        "ActualFile": "/tmp/temp302885701/Task/user-output/2.out",
         "Passed": true,
         "ErrorMessage": "",
         "Order": 2
@@ -84,9 +79,6 @@ In case of an error, the worker will return an error message structured as follo
 ```json
 {
   "message_id": "adsa",
-  "task_id": 123,
-  "user_id": 1,
-  "user_solution_id": 1,
   "result": {
     "Success": false,
     "StatusCode": 3,
