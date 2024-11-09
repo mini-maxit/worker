@@ -11,7 +11,6 @@ import (
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 )
-
 type TaskForRunner struct {
 	TaskDir            string
 	TempDir            string
