@@ -50,7 +50,6 @@ const maxRetries = 2
 // Error message for failed to store the solution result
 var errorFailedToStore = errors.New("failed to store the solution result")
 
-
 // Work starts the worker process
 func Work(conn *amqp.Connection) {
 	logger := logger.NewNamedLogger("worker")
@@ -155,6 +154,7 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 
 	// Get the solution file name with the correct extension
 	task.SolutionFileName, err = solution.GetSolutionFileNameWithExtension(solutionFileBaseName, task.LanguageType)
+	// Get the solution file name with the correct extension
 	if err != nil {
 		return err
 	}
