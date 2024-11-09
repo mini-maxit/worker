@@ -157,7 +157,7 @@ func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, er
 			logger.Errorf("Could not create stderr file. %s [MsgID: %s]", err.Error(), messageID)
 			return "", err
 		}
-    
+
 		logger.Infof("Writing error to sdterr file [MsgID: %s]", messageID)
 		_, err = file.Write(stderr.Bytes())
 		if err != nil {
