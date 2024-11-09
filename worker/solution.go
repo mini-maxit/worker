@@ -6,16 +6,16 @@ import (
 	"io"
 	"net/http"
 	"os"
+
 	"github.com/google/uuid"
+	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 )
-
-
 
 type TaskForRunner struct {
 	TaskDir            string
 	TempDir            string
-	LanguageType       string
+	LanguageType       solution.LanguageType
 	LanguageVersion    string
 	SolutionFileName   string
 	InputDirName        string

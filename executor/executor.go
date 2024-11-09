@@ -15,9 +15,9 @@ type CommandConfig struct {
 }
 
 type Executor interface {
-	ExecuteCommand(command string, commandConfig CommandConfig) *ExecutionResult
+	ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult
 	IsCompiled() bool // Indicate whether the program should be compiled before execution
-	Compile(filePath string, dir string) (string, error)
+	Compile(filePath, dir, messageID string) (string, error)
 	String() string
 }
 
