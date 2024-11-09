@@ -170,10 +170,7 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 	logger.Infof("Running solution [MsgID: %s]", queueMessage.MessageID)
 
 	// Create a new solution and run it
-	solutionResult, err := runSolution(task, queueMessage.MessageID)
-	if err != nil {
-		return err
-	}
+	solutionResult := runSolution(task, queueMessage.MessageID)
 
 	logger.Infof("Solution ran successfully [MsgID: %s]", queueMessage.MessageID)
 
@@ -296,7 +293,7 @@ func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 }
 
 // Run the solution using the solution runner
-func runSolution(task TaskForRunner, messageID string) (solution.SolutionResult, error) {
+func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 	runner := solution.Runner{}
 
 
@@ -316,7 +313,7 @@ func runSolution(task TaskForRunner, messageID string) (solution.SolutionResult,
 
 	solutionResult := runner.RunSolution(&solution, messageID)
 
-	return solutionResult, nil
+	return solutionResult
 }
 
 // storeSolutionResult sends a POST request with form data including a tar.gz archive.
