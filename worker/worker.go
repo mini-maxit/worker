@@ -16,8 +16,13 @@ import (
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
+
+type Worker struct {
+	logger *zap.SugaredLogger
+	ch   *amqp.Channel
+}
 
 type QueueMessage struct {
 	MessageID 				string    `json:"message_id"`
@@ -50,21 +55,27 @@ const maxRetries = 2
 // Error message for failed to store the solution result
 var errorFailedToStore = errors.New("failed to store the solution result")
 
-// Work starts the worker process
-func Work(conn *amqp.Connection) {
-	logger := logger.NewNamedLogger("worker")
-
+// NewWorker creates a new worker
+func NewWorker(conn *amqp.Connection) *Worker {
 	ch := NewRabbitMQChannel(conn)
+	return &Worker{
+		ch: ch,
+		logger: logger.NewNamedLogger("worker"),
+	}
+}
+
+// Work starts the worker process
+func (w *Worker) Work() {
+
 	defer func() {
-		logger.Info("Worker exiting. Closing the channel")
-		ch.Close()
+		w.logger.Info("Worker exiting. Closing the channel")
+		w.ch.Close()
 	}()
 
-
-	logger.Info("Worker started")
+	w.logger.Info("Worker started")
 
 	// Declare a queue
-	q, err := ch.QueueDeclare(
+	q, err := w.ch.QueueDeclare(
 		"worker_queue", // name
 		false,          // durable
 		false,          // delete when unused
@@ -73,13 +84,13 @@ func Work(conn *amqp.Connection) {
 		nil,            // arguments
 	)
 	if err != nil {
-		logger.Fatalf("Failed to declare a queue: %s", err)
+		w.logger.Fatalf("Failed to declare a queue: %s", err)
 	}
 
-	logger.Info("Queue declared")
+	w.logger.Info("Queue declared")
 
 	// Consume messages from the queue
-	msgs, err := ch.Consume(
+	msgs, err := w.ch.Consume(
 		q.Name, // queue
 		"",     // consumer
 		false,  // auto-ack to be able to handle errors and requeue
@@ -89,7 +100,7 @@ func Work(conn *amqp.Connection) {
 		nil,    // args
 	)
 	if err != nil {
-		logger.Fatalf("Failed to register a consumer: %s", err)
+		w.logger.Fatalf("Failed to register a consumer: %s", err)
 	}
 
 	var forever = make(chan struct{})
@@ -99,44 +110,44 @@ func Work(conn *amqp.Connection) {
 			func(msg amqp.Delivery) {
 				var queueMessage QueueMessage
 
-				logger.Info("Received a message")
+				w.logger.Info("Received a message")
 
 				// Unmarshal the message body
 				err := json.Unmarshal(msg.Body, &queueMessage)
 				if err != nil {
-					handleError(QueueMessage{}, &msg, ch, err, logger)
+					w.handleError(QueueMessage{}, &msg, err)
 				}
 
-				logger.Infof("Processing message [MsgID: %s]", queueMessage.MessageID)
+				w.logger.Infof("Processing message [MsgID: %s]", queueMessage.MessageID)
 
 				defer func() {
 					if r := recover(); r != nil {
 						msg.Ack(false)
-						logger.Errorf("Recovered from panic: %v", r)
+						w.logger.Errorf("Recovered from panic: %v", r)
 					}
 				}()
 
 				// Process the message
-				err = processMessage(queueMessage, &msg, ch, logger)
+				err = w.processMessage(queueMessage, &msg)
 				if err != nil {
-					handleError(queueMessage, &msg, ch, err, logger)
+					w.handleError(queueMessage, &msg, err)
 				} else {
 					msg.Ack(false)
 				}
 
-				logger.Infof("Processed message [MsgID: %s]", queueMessage.MessageID)
+				w.logger.Infof("Processed message [MsgID: %s]", queueMessage.MessageID)
 			}(msg)
 		}
 	}()
 
-	logger.Info("[*] Waiting for messages")
+	w.logger.Info("[*] Waiting for messages")
 	<-forever
 }
 
 // Process the incoming message
-func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Channel, logger *log.Entry) error {
+func (w *Worker)processMessage(queueMessage QueueMessage, msg *amqp.Delivery) error {
 
-	logger.Infof("Getting data for solution runner [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Getting data for solution runner [MsgID: %s]", queueMessage.MessageID)
 	// Get the configuration data needed to run the solution
 	task, err := getDataForSolutionRunner(queueMessage.TaskID, queueMessage.UserID, queueMessage.SubmissionNumber)
 	if err != nil {
@@ -165,16 +176,16 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 	task.InputDirName = inputDirName
 	task.OutputDirName = outputDirName
 
-	logger.Infof("Data for solution runner retrieved [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Data for solution runner retrieved [MsgID: %s]", queueMessage.MessageID)
 
-	logger.Infof("Running solution [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Running solution [MsgID: %s]", queueMessage.MessageID)
 
 	// Create a new solution and run it
 	solutionResult := runSolution(task, queueMessage.MessageID)
 
-	logger.Infof("Solution ran successfully [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Solution ran successfully [MsgID: %s]", queueMessage.MessageID)
 
-	logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
 
 	// Store the solution result
 	err = storeSolutionResult(solutionResult ,task, queueMessage)
@@ -182,23 +193,23 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 		return err
 	}
 
-	logger.Infof("Solution result stored [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Solution result stored [MsgID: %s]", queueMessage.MessageID)
 
-	logger.Infof("Sending response message [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Sending response message [MsgID: %s]", queueMessage.MessageID)
 
 	// Send the response message to the backend
-	err = sendResponseMessage(queueMessage ,solutionResult, msg ,ch)
+	err = w.sendResponseMessage(queueMessage ,solutionResult, msg)
 	if err != nil {
 		return err
 	}
 
-	logger.Infof("Response message sent [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Response message sent [MsgID: %s]", queueMessage.MessageID)
 
 	return nil
 }
 
 // Send response message to backend with solution result
-func sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.SolutionResult, msg *amqp.Delivery,ch *amqp.Channel) error {
+func (w *Worker)sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.SolutionResult, msg *amqp.Delivery) error {
 
 	// Create a response message
 	responseMessage := ResponseMessage{
@@ -212,7 +223,7 @@ func sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.Solu
 		return err
 	}
 
-	err = ch.Publish(
+	err = w.ch.Publish(
 		"",               // exchange
 		msg.ReplyTo, // routing key (queue name)
 		false,            // mandatory
@@ -229,14 +240,14 @@ func sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.Solu
 }
 
 // Handle errors and requeue the message if needed
-func handleError(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel, err error, logger *log.Entry) {
+func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err error) {
 
-	logger.Errorf("Error processing message [MsgID: %s]: %s", queueMessage.MessageID, err)
+	w.logger.Errorf("Error processing message [MsgID: %s]: %s", queueMessage.MessageID, err)
 
 
 	newMsg := getNewMsg(msg)
 	if newMsg.Body == nil {
-		logger.Infof("Dropping message [MsgID: %s] after 3 retries", queueMessage.MessageID)
+		w.logger.Infof("Dropping message [MsgID: %s] after 3 retries", queueMessage.MessageID)
 
 		failedSolutionResult := solution.SolutionResult{
 			Success:    false,
@@ -247,9 +258,9 @@ func handleError(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel
 		}
 
 		// Send the response message to the backend
-		err = sendResponseMessage(queueMessage, failedSolutionResult, msg, ch)
+		err = w.sendResponseMessage(queueMessage, failedSolutionResult, msg)
 		if err != nil {
-			logger.Errorf("Failed to send response message [MsgID: %s] to the backend: %s", queueMessage.MessageID, err)
+			w.logger.Errorf("Failed to send response message [MsgID: %s] to the backend: %s", queueMessage.MessageID, err)
 		}
 		// Message was retried maxRetries times, ack it and remove it from the queue
 		msg.Ack(false)
@@ -259,10 +270,10 @@ func handleError(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel
 	// The original message was not processed successfully, acknowledge it and send an updated message to the queue
 	msg.Ack(false)
 
-	logger.Infof("Requeuing message [MsgID: %s]", queueMessage.MessageID)
+	w.logger.Infof("Requeuing message [MsgID: %s]", queueMessage.MessageID)
 
 	// Send the updated message to the queue
-	err = ch.Publish(
+	err = w.ch.Publish(
 		"",             // exchange
 		"worker_queue", // routing key
 		false,          // mandatory
@@ -274,7 +285,7 @@ func handleError(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel
 			ReplyTo:     newMsg.ReplyTo,
 		})
 	if err != nil {
-		logger.Errorf("Failed to send message [MsgID: %s] to the queue: %s", queueMessage.MessageID, err)
+		w.logger.Errorf("Failed to send message [MsgID: %s] to the queue: %s", queueMessage.MessageID, err)
 	}
 }
 
@@ -294,8 +305,7 @@ func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 
 // Run the solution using the solution runner
 func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
-	runner := solution.Runner{}
-
+	runner := solution.NewRunner()
 
 	langConfig := solution.LanguageConfig{
 		Type:    task.LanguageType,

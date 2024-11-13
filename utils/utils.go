@@ -24,6 +24,37 @@ func CloseFile(file *os.File) {
 	}
 }
 
+// CopyFile copies a file from src to dst. It returns an error if any occurs during the copy.
+func CopyFile(src, dst string) error {
+	// Open the source file
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	// Create or truncate the destination file
+	destinationFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destinationFile.Close()
+
+	// Copy contents from the source file to the destination file
+	_, err = io.Copy(destinationFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Ensure the data is flushed to disk
+	err = destinationFile.Sync()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Checks if given elements is contained in given array
 func Contains[V string](array []V, value V) bool {
 	for _, el := range array {

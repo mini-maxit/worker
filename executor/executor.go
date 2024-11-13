@@ -3,6 +3,8 @@ package executor
 import (
 	"bytes"
 	"fmt"
+	"os/exec"
+	"github.com/mini-maxit/worker/logger"
 )
 
 type CommandConfig struct {
@@ -27,9 +29,13 @@ const (
 	ErInternalError ExecutorStatusCode = iota
 	ErSuccess
 	ErSignalRecieved
+	ErNetworkProhibited
+	ErJailed
 )
 
 const CompileErrorFileName = "compile-err.err"
+
+const BaseChrootDir = "../tmp/chroot"
 
 type ExecutionResult struct {
 	StatusCode ExecutorStatusCode
@@ -44,4 +50,20 @@ func (er *ExecutionResult) String() string {
 	out.WriteString("}")
 
 	return out.String()
+}
+
+// restrictCommand creates a new exec.Cmd that restricts the command to run in a chroot environment
+func restrictCommand(executablePath string) *exec.Cmd {
+    logger := logger.NewNamedLogger("executor")
+    logger.Infof("Restricting command %s", executablePath)
+
+	executeCommand := fmt.Sprintf("./%s", executablePath)
+
+    args := []string{
+        "chroot",
+        BaseChrootDir,
+        executeCommand,
+    }
+
+    return exec.Command(args[0], args[1:]...)
 }

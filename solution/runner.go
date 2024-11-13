@@ -9,6 +9,7 @@ import (
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/logger"
 	"github.com/mini-maxit/worker/verifier"
+	"go.uber.org/zap"
 )
 
 var ErrInvalidLanguageType = errors.New("invalid language type")
@@ -46,6 +47,7 @@ type SolutionRunner interface {
 }
 
 type Runner struct {
+	logger *zap.SugaredLogger
 }
 
 type LanguageConfig struct {
@@ -54,25 +56,24 @@ type LanguageConfig struct {
 }
 
 func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResult {
-	logger := logger.NewNamedLogger("runner")
 
-	logger.Infof("Initializing executor [MsgID: %s]", messageID)
+	r.logger.Infof("Initializing executor [MsgID: %s]", messageID)
 	// Init appropriate executor
 	var exec executor.Executor
 	var err error
 	switch solution.Language.Type {
 	case CPP:
-		logger.Infof("Initializing C++ executor [MsgID: %s]", messageID)
+		r.logger.Infof("Initializing C++ executor [MsgID: %s]", messageID)
 		exec, err = executor.NewCppExecutor(solution.Language.Version, messageID)
 	default:
-		logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
+		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success: false,
 			Message: "invalid language type supplied",
 		}
 	}
 	if err != nil {
-		logger.Errorf("Error occured during initialization [MsgID: %s]", messageID)
+		r.logger.Errorf("Error occured during initialization [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success:    false,
 			StatusCode: InternalError,
@@ -81,12 +82,12 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		}
 	}
 
-	logger.Infof("Creating user output directory [MsgID: %s]", messageID)
+	r.logger.Infof("Creating user output directory [MsgID: %s]", messageID)
 
 	userOutputDir := "user-output"
 	err = os.Mkdir(fmt.Sprintf("%s/%s", solution.BaseDir, userOutputDir), os.ModePerm)
 	if err != nil {
-		logger.Errorf("Error creating user output directory [MsgID: %s]: %s", messageID, err.Error())
+		r.logger.Errorf("Error creating user output directory [MsgID: %s]: %s", messageID, err.Error())
 		return SolutionResult{
 			Success:    false,
 			StatusCode: InternalError,
@@ -95,15 +96,15 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		}
 	}
 
-	logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
+	r.logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
 
 	var filePath string
 	if exec.IsCompiled() {
 		solutionFilePath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.SolutionFileName)
-		logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
+		r.logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
 		filePath, err = exec.Compile(solutionFilePath, solution.BaseDir, messageID)
 		if err != nil {
-			logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
+			r.logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
 			return SolutionResult{
 				OutputDir: userOutputDir,
 				Success:    false,
@@ -117,10 +118,10 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 	}
 
 	inputPath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.InputDir)
-	logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
+	r.logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
 	inputFiles, err := r.parseInputFiles(inputPath)
 	if err != nil {
-		logger.Errorf("Error reading input files from %s [MsgID: %s]: %s", inputPath, messageID, err.Error())
+		r.logger.Errorf("Error reading input files from %s [MsgID: %s]: %s", inputPath, messageID, err.Error())
 		return SolutionResult{
 			OutputDir: userOutputDir,
 			Success:    false,
@@ -130,7 +131,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		}
 	}
 
-	logger.Infof("Executing solution [MsgID: %s]", messageID)
+	r.logger.Infof("Executing solution [MsgID: %s]", messageID)
 	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
@@ -140,11 +141,11 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		_ = exec.ExecuteCommand(filePath, messageID, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
 
 		// Compare output with expected output
-		logger.Infof("Comparing output %s with expected output [MsgID: %s]",outputPath ,messageID)
+		r.logger.Infof("Comparing output %s with expected output [MsgID: %s]",outputPath ,messageID)
 		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i+1))
 		result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
 		if err != nil {
-			logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
+			r.logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
 			solutionSuccess = false
 			difference = err.Error()
 		}
@@ -158,7 +159,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		}
 	}
 
-	logger.Infof("Solution executed successfully [MsgID: %s]", messageID)
+	r.logger.Infof("Solution executed successfully [MsgID: %s]", messageID)
 	return SolutionResult{
 		OutputDir:   userOutputDir,
 		Success:     solutionSuccess,
@@ -188,9 +189,10 @@ func (r *Runner) parseInputFiles(inputDir string) ([]string, error) {
 	}
 
 	return result, nil
-
 }
 
 func NewRunner() *Runner {
-	return &Runner{}
+	logger := logger.NewNamedLogger("runner")
+
+	return &Runner{logger: logger}
 }
