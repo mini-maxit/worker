@@ -1,14 +1,18 @@
 package solution
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	"github.com/mini-maxit/worker/executor"
+	"github.com/mini-maxit/worker/logger"
 	"github.com/mini-maxit/worker/verifier"
+	"go.uber.org/zap"
 )
+
+var ErrInvalidLanguageType = errors.New("invalid language type")
 
 type LanguageType int
 
@@ -16,11 +20,22 @@ var languageTypeMap = map[string]LanguageType{
     "CPP": CPP,
 }
 
+var languageExtensionMap = map[LanguageType]string{
+	CPP: ".cpp",
+}
+
+func GetSolutionFileNameWithExtension(solutionName string, language LanguageType) (string, error) {
+	if extension, ok := languageExtensionMap[language]; ok {
+		return fmt.Sprintf("%s%s", solutionName, extension), nil
+	}
+	return "", ErrInvalidLanguageType
+}
+
 func StringToLanguageType(s string) (LanguageType, error) {
     if lt, ok := languageTypeMap[s]; ok {
         return lt, nil
     }
-    return 0, fmt.Errorf("invalid language type: %s", s)
+    return 0, ErrInvalidLanguageType
 }
 
 const (
@@ -32,6 +47,7 @@ type SolutionRunner interface {
 }
 
 type Runner struct {
+	logger *zap.SugaredLogger
 }
 
 type LanguageConfig struct {
@@ -39,20 +55,25 @@ type LanguageConfig struct {
 	Version string       // Version should be valid version supported by the executor
 }
 
-func (r *Runner) RunSolution(solution *Solution) SolutionResult {
+func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResult {
+
+	r.logger.Infof("Initializing executor [MsgID: %s]", messageID)
 	// Init appropriate executor
 	var exec executor.Executor
 	var err error
 	switch solution.Language.Type {
 	case CPP:
-		exec, err = executor.NewCppExecutor(solution.Language.Version)
+		r.logger.Infof("Initializing C++ executor [MsgID: %s]", messageID)
+		exec, err = executor.NewCppExecutor(solution.Language.Version, messageID)
 	default:
+		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success: false,
 			Message: "invalid language type supplied",
 		}
 	}
 	if err != nil {
+		r.logger.Errorf("Error occured during initialization [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success:    false,
 			StatusCode: InternalError,
@@ -61,19 +82,29 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 		}
 	}
 
+	r.logger.Infof("Creating user output directory [MsgID: %s]", messageID)
+
 	userOutputDir := "user-output"
 	err = os.Mkdir(fmt.Sprintf("%s/%s", solution.BaseDir, userOutputDir), os.ModePerm)
 	if err != nil {
-		log.Fatalf("error creating user output directory. %s", err.Error())
+		r.logger.Errorf("Error creating user output directory [MsgID: %s]: %s", messageID, err.Error())
+		return SolutionResult{
+			Success:    false,
+			StatusCode: InternalError,
+			Code:       getStatus(InternalError),
+			Message:    err.Error(),
+		}
 	}
+
+	r.logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
 
 	var filePath string
 	if exec.IsCompiled() {
 		solutionFilePath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.SolutionFileName)
-		log.Printf("compiling %s", solutionFilePath)
-		filePath, err = exec.Compile(solutionFilePath, solution.BaseDir)
+		r.logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
+		filePath, err = exec.Compile(solutionFilePath, solution.BaseDir, messageID)
 		if err != nil {
-			log.Printf("error compiling %s. %s", solution.SolutionFileName, err.Error())
+			r.logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
 			return SolutionResult{
 				OutputDir: userOutputDir,
 				Success:    false,
@@ -87,25 +118,34 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 	}
 
 	inputPath := fmt.Sprintf("%s/%s", solution.BaseDir, solution.InputDir)
-	log.Printf("reading input files from %s", inputPath)
+	r.logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
 	inputFiles, err := r.parseInputFiles(inputPath)
 	if err != nil {
-		log.Fatalf("error reading input directory. %s", err.Error())
+		r.logger.Errorf("Error reading input files from %s [MsgID: %s]: %s", inputPath, messageID, err.Error())
+		return SolutionResult{
+			OutputDir: userOutputDir,
+			Success:    false,
+			StatusCode: Failed,
+			Code:       getStatus(Failed),
+			Message:    err.Error(),
+		}
 	}
 
+	r.logger.Infof("Executing solution [MsgID: %s]", messageID)
 	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i+1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, (i+1)) // May be dropped in the future
-		_ = exec.ExecuteCommand(filePath, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
+		_ = exec.ExecuteCommand(filePath, messageID, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
 
 		// Compare output with expected output
+		r.logger.Infof("Comparing output %s with expected output [MsgID: %s]",outputPath ,messageID)
 		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i+1))
 		result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
 		if err != nil {
-			log.Printf("error comparing output. %s", err.Error())
+			r.logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
 			solutionSuccess = false
 			difference = err.Error()
 		}
@@ -119,13 +159,7 @@ func (r *Runner) RunSolution(solution *Solution) SolutionResult {
 		}
 	}
 
-	for _, testCase := range testCases {
-		if !testCase.Passed {
-			solutionSuccess = false
-			break
-		}
-	}
-
+	r.logger.Infof("Solution executed successfully [MsgID: %s]", messageID)
 	return SolutionResult{
 		OutputDir:   userOutputDir,
 		Success:     solutionSuccess,
@@ -155,9 +189,10 @@ func (r *Runner) parseInputFiles(inputDir string) ([]string, error) {
 	}
 
 	return result, nil
-
 }
 
 func NewRunner() *Runner {
-	return &Runner{}
+	logger := logger.NewNamedLogger("runner")
+
+	return &Runner{logger: logger}
 }

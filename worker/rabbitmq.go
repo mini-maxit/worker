@@ -1,27 +1,39 @@
 package worker
 
 import (
-	"log"
-
 	"github.com/mini-maxit/worker/internal/config"
+	"github.com/mini-maxit/worker/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// ConnectToRabbitMQ establishes a connection to RabbitMQ and returns the connection and channel
-func NewRabbitMQ(config config.Config) (*amqp.Connection, *amqp.Channel) {
-	rabbitMQURL := config.RQUrl
+func NewRabbitMqConnection(envConfig config.Config) *amqp.Connection {
+	logger := logger.NewNamedLogger("rabbitmq")
+
+	logger.Info("Establishing connection to RabbitMQ")
+	rabbitMQURL := envConfig.RQUrl
 
 	// Establish connection
 	conn, err := amqp.Dial(rabbitMQURL)
 	if(err != nil) {
-		log.Fatalf("Failed to connect to RabbitMQ: %s", err)
+		logger.Fatalf("Failed to connect to RabbitMQ: %s", err)
 	}
+
+	logger.Info("Connection o RabbitMQ established")
+
+	return conn
+}
+
+// ConnectToRabbitMQ establishes a connection to RabbitMQ and returns the connection and channel
+func NewRabbitMQChannel(conn *amqp.Connection) *amqp.Channel {
+	logger := logger.NewNamedLogger("rabbitmq")
+
+	logger.Info("Creating RabbitMQ channel")
 
 	// Create a channel
 	ch, err := conn.Channel()
 	if(err != nil) {
-		log.Fatalf("Failed to open a channel: %s", err)
+		logger.Fatalf("Failed to open a channel: %s", err)
 	}
 
-	return conn, ch
+	return ch
 }
