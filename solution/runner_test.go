@@ -6,6 +6,7 @@ import (
 
 func TestRunnerRunCommandInvalidLanguage(t *testing.T) {
 	runner := NewRunner()
+	testMessageID := "testMessageID"
 
 	lang_conf := LanguageConfig{
 		Type:    -1,
@@ -18,7 +19,7 @@ func TestRunnerRunCommandInvalidLanguage(t *testing.T) {
 		InputDir:         "",
 		OutputDir:        "",
 	}
-	solutionResult := runner.RunSolution(solution)
+	solutionResult := runner.RunSolution(solution, testMessageID)
 
 	if solutionResult.Success {
 		t.Fatalf("solution succeded with invalid language type")
@@ -37,7 +38,7 @@ func TestRunnerRunCommandInvalidLanguage(t *testing.T) {
 		InputDir:         "",
 		OutputDir:        "",
 	}
-	solutionResult = runner.RunSolution(solution)
+	solutionResult = runner.RunSolution(solution, testMessageID)
 
 	if solutionResult.Success {
 		t.Fatalf("solution succeded with invalid language version")
