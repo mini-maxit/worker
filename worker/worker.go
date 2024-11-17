@@ -20,19 +20,19 @@ import (
 )
 
 type QueueMessage struct {
-	MessageID 				string    `json:"message_id"`
-	TaskID         			int64 	  `json:"task_id"`
-	UserID         			int64 	  `json:"user_id"`
-	SubmissionNumber 		int64     `json:"submission_number"`
-	LanguageType  			string 	  `json:"language_type"`
-	LanguageVersion 		string    `json:"language_version"`
-	TimeLimits	  			[]float64 `json:"time_limits"`
-	MemoryLimits	  		[]float64 `json:"memory_limits"`
+	MessageID        string    `json:"message_id"`
+	TaskID           int64     `json:"task_id"`
+	UserID           int64     `json:"user_id"`
+	SubmissionNumber int64     `json:"submission_number"`
+	LanguageType     string    `json:"language_type"`
+	LanguageVersion  string    `json:"language_version"`
+	TimeLimits       []float64 `json:"time_limits"`
+	MemoryLimits     []float64 `json:"memory_limits"`
 }
 
 type ResponseMessage struct {
-	MessageID	 	string 					`json:"message_id"`
-	Result 			solution.SolutionResult `json:"result"`
+	MessageID string                  `json:"message_id"`
+	Result    solution.SolutionResult `json:"result"`
 }
 
 // Base name for the solution file
@@ -60,13 +60,12 @@ func Work(conn *amqp.Connection) {
 		ch.Close()
 	}()
 
-
 	logger.Info("Worker started")
 
 	// Declare a queue
 	q, err := ch.QueueDeclare(
 		"worker_queue", // name
-		false,          // durable
+		true,           // durable
 		false,          // delete when unused
 		false,          // exclusive
 		false,          // no-wait
@@ -134,7 +133,7 @@ func Work(conn *amqp.Connection) {
 }
 
 // Process the incoming message
-func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Channel, logger *log.Entry) error {
+func processMessage(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel, logger *log.Entry) error {
 
 	logger.Infof("Getting data for solution runner [MsgID: %s]", queueMessage.MessageID)
 	// Get the configuration data needed to run the solution
@@ -177,7 +176,7 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 	logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
 
 	// Store the solution result
-	err = storeSolutionResult(solutionResult ,task, queueMessage)
+	err = storeSolutionResult(solutionResult, task, queueMessage)
 	if err != nil {
 		return err
 	}
@@ -187,7 +186,7 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 	logger.Infof("Sending response message [MsgID: %s]", queueMessage.MessageID)
 
 	// Send the response message to the backend
-	err = sendResponseMessage(queueMessage ,solutionResult, msg ,ch)
+	err = sendResponseMessage(queueMessage, solutionResult, msg, ch)
 	if err != nil {
 		return err
 	}
@@ -198,12 +197,12 @@ func processMessage(queueMessage QueueMessage, msg *amqp.Delivery ,ch *amqp.Chan
 }
 
 // Send response message to backend with solution result
-func sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.SolutionResult, msg *amqp.Delivery,ch *amqp.Channel) error {
+func sendResponseMessage(queueMessage QueueMessage, solutionResult solution.SolutionResult, msg *amqp.Delivery, ch *amqp.Channel) error {
 
 	// Create a response message
 	responseMessage := ResponseMessage{
 		MessageID: queueMessage.MessageID,
-		Result: solutionResult,
+		Result:    solutionResult,
 	}
 
 	// Marshal the solution result
@@ -213,10 +212,10 @@ func sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.Solu
 	}
 
 	err = ch.Publish(
-		"",               // exchange
+		"",          // exchange
 		msg.ReplyTo, // routing key (queue name)
-		false,            // mandatory
-		false,            // immediate
+		false,       // mandatory
+		false,       // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        solutionResultBytes,
@@ -233,16 +232,15 @@ func handleError(queueMessage QueueMessage, msg *amqp.Delivery, ch *amqp.Channel
 
 	logger.Errorf("Error processing message [MsgID: %s]: %s", queueMessage.MessageID, err)
 
-
 	newMsg := getNewMsg(msg)
 	if newMsg.Body == nil {
 		logger.Infof("Dropping message [MsgID: %s] after 3 retries", queueMessage.MessageID)
 
 		failedSolutionResult := solution.SolutionResult{
-			Success:    false,
-			StatusCode: solution.InternalError,
-			Code:       "500",
-			Message:    "Failed to process the message after 3 retries: " + err.Error(),
+			Success:     false,
+			StatusCode:  solution.InternalError,
+			Code:        "500",
+			Message:     "Failed to process the message after 3 retries: " + err.Error(),
 			TestResults: nil,
 		}
 
@@ -296,11 +294,9 @@ func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 	runner := solution.Runner{}
 
-
 	langConfig := solution.LanguageConfig{
 		Type:    task.LanguageType,
 		Version: task.LanguageVersion,
-
 	}
 
 	solution := solution.Solution{
@@ -317,14 +313,14 @@ func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 }
 
 // storeSolutionResult sends a POST request with form data including a tar.gz archive.
-func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunner, queueMessage QueueMessage) error {
+func storeSolutionResult(solutionResult solution.SolutionResult, task TaskForRunner, queueMessage QueueMessage) error {
 	requestURL := "http://host.docker.internal:8080/storeOutputs"
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
 	// Move the compile error file to the output folder if the solution failed.
-	if (solutionResult.StatusCode == solution.Failed) {
+	if solutionResult.StatusCode == solution.Failed {
 		compilationErrorPath := task.TaskDir + "/" + executor.CompileErrorFileName
-		err := os.Rename(compilationErrorPath, outputsFolderPath + "/" + executor.CompileErrorFileName)
+		err := os.Rename(compilationErrorPath, outputsFolderPath+"/"+executor.CompileErrorFileName)
 		if err != nil {
 			return err
 		}
