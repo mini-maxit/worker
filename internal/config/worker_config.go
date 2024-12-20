@@ -14,7 +14,7 @@ const (
 	DefailtRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
 	DefaultRabbitmqPassword = "guest"
-	DefaultRabbitmqPort     = "5672"
+	DefaultRabbitmqPort     = "15672"
 )
 
 type Config struct {
