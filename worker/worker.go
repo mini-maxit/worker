@@ -244,7 +244,6 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 
 	w.logger.Errorf("Error processing message [MsgID: %s]: %s", queueMessage.MessageID, err)
 
-
 	newMsg := getNewMsg(msg)
 	if newMsg.Body == nil {
 		w.logger.Infof("Dropping message [MsgID: %s] after 3 retries", queueMessage.MessageID)
