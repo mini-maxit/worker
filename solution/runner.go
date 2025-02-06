@@ -31,6 +31,17 @@ func GetSolutionFileNameWithExtension(solutionName string, language LanguageType
 	return "", ErrInvalidLanguageType
 }
 
+var languageExtensionMap = map[LanguageType]string{
+	CPP: ".cpp",
+}
+
+func GetSolutionFileNameWithExtension(solutionName string, language LanguageType) (string, error) {
+	if extension, ok := languageExtensionMap[language]; ok {
+		return fmt.Sprintf("%s%s", solutionName, extension), nil
+	}
+	return "", ErrInvalidLanguageType
+}
+
 func StringToLanguageType(s string) (LanguageType, error) {
 	if lt, ok := languageTypeMap[s]; ok {
 		return lt, nil

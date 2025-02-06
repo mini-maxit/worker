@@ -36,8 +36,8 @@ type QueueMessage struct {
 }
 
 type ResponseMessage struct {
-	MessageID	 	string 					`json:"message_id"`
-	Result 			solution.SolutionResult `json:"result"`
+	MessageID string                  `json:"message_id"`
+	Result    solution.SolutionResult `json:"result"`
 }
 
 // Base name for the solution file
@@ -188,7 +188,7 @@ func (w *Worker)processMessage(queueMessage QueueMessage, msg *amqp.Delivery) er
 	w.logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
 
 	// Store the solution result
-	err = storeSolutionResult(solutionResult ,task, queueMessage)
+	err = storeSolutionResult(solutionResult, task, queueMessage)
 	if err != nil {
 		return err
 	}
@@ -199,11 +199,13 @@ func (w *Worker)processMessage(queueMessage QueueMessage, msg *amqp.Delivery) er
 
 	// Send the response message to the backend
 	err = w.sendResponseMessage(queueMessage ,solutionResult, msg)
+
 	if err != nil {
 		return err
 	}
 
 	w.logger.Infof("Response message sent [MsgID: %s]", queueMessage.MessageID)
+
 
 	return nil
 }
@@ -211,10 +213,11 @@ func (w *Worker)processMessage(queueMessage QueueMessage, msg *amqp.Delivery) er
 // Send response message to backend with solution result
 func (w *Worker)sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.SolutionResult, msg *amqp.Delivery) error {
 
+
 	// Create a response message
 	responseMessage := ResponseMessage{
 		MessageID: queueMessage.MessageID,
-		Result: solutionResult,
+		Result:    solutionResult,
 	}
 
 	// Marshal the solution result
@@ -226,8 +229,8 @@ func (w *Worker)sendResponseMessage(queueMessage QueueMessage ,solutionResult so
 	err = w.ch.Publish(
 		"",               // exchange
 		msg.ReplyTo, // routing key (queue name)
-		false,            // mandatory
-		false,            // immediate
+		false,       // mandatory
+		false,       // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        solutionResultBytes,
@@ -249,10 +252,10 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 		w.logger.Infof("Dropping message [MsgID: %s] after 3 retries", queueMessage.MessageID)
 
 		failedSolutionResult := solution.SolutionResult{
-			Success:    false,
-			StatusCode: solution.InternalError,
-			Code:       "500",
-			Message:    "Failed to process the message after 3 retries: " + err.Error(),
+			Success:     false,
+			StatusCode:  solution.InternalError,
+			Code:        "500",
+			Message:     "Failed to process the message after 3 retries: " + err.Error(),
 			TestResults: nil,
 		}
 
@@ -333,9 +336,9 @@ func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunn
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
 	// Move the compile error file to the output folder if the solution failed.
-	if (solutionResult.StatusCode == solution.Failed) {
+	if solutionResult.StatusCode == solution.Failed {
 		compilationErrorPath := task.TaskDir + "/" + executor.CompileErrorFileName
-		err := os.Rename(compilationErrorPath, outputsFolderPath + "/" + executor.CompileErrorFileName)
+		err := os.Rename(compilationErrorPath, outputsFolderPath+"/"+executor.CompileErrorFileName)
 		if err != nil {
 			return err
 		}
