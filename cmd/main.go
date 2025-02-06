@@ -11,10 +11,10 @@ func main() {
 		logger.InitializeLogger()
 
 		// Load the configuration
-		config := config.NewConfig()
+		config := config.LoadWorkerConfig()
 
 		// Connect to RabbitMQ
-		conn := worker.NewRabbitMqConnection(*config)
+		conn := worker.NewRabbitMqConnection(config)
 
 		defer conn.Close()
 
