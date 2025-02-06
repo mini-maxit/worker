@@ -7,9 +7,12 @@ CHROOT_DIR="/tmp/chroot"
 echo "Creating directory structure in ${CHROOT_DIR}..."
 mkdir -p "$CHROOT_DIR"/{bin,lib/x86_64-linux-gnu,usr/lib/x86_64-linux-gnu,usr/bin,usr/sbin,etc/security}
 
+# List of esential binaries
+ESSENTIAL_BINARIES="/bin/bash /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt /usr/bin/timeout"
+
 # Copy essential binaries for apt, prlimit, and utilities into chroot
 echo "Copying apt, prlimit, and utilities to chroot..."
-for binary in /bin/bash  /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt /usr/bin/timeout; do
+for binary in $ESSENTIAL_BINARIES; do
   if [[ -f "$binary" ]]; then
     dest_dir="$CHROOT_DIR$(dirname "$binary")"
     mkdir -p "$dest_dir"
@@ -32,7 +35,7 @@ copyLibs() {
 }
 
 # Copy libraries for all apt-related binaries, prlimit, and timeout
-for binary in /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt /usr/bin/timeout; do
+for binary in $ESSENTIAL_BINARIES; do
   copyLibs "$binary"
 done
 
