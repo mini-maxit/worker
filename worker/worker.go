@@ -31,8 +31,8 @@ type QueueMessage struct {
 	SubmissionNumber 		int64     `json:"submission_number"`
 	LanguageType  			string 	  `json:"language_type"`
 	LanguageVersion 		string    `json:"language_version"`
-	TimeLimits	  			[]float64 `json:"time_limits"`
-	MemoryLimits	  		[]float64 `json:"memory_limits"`
+	TimeLimits	  			[]int `json:"time_limits"`
+	MemoryLimits	  		[]int `json:"memory_limits"`
 }
 
 type ResponseMessage struct {
@@ -77,7 +77,7 @@ func (w *Worker) Work() {
 	// Declare a queue
 	q, err := w.ch.QueueDeclare(
 		"worker_queue", // name
-		false,          // durable
+		true,          // durable
 		false,          // delete when unused
 		false,          // exclusive
 		false,          // no-wait
@@ -315,6 +315,8 @@ func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 
 	solution := solution.Solution{
 		Language:         langConfig,
+		TimeLimits:       task.TimeLimits,
+		MemoryLimits:     task.MemoryLimits,
 		BaseDir:          task.TaskDir,
 		SolutionFileName: task.SolutionFileName,
 		InputDir:         task.InputDirName,
@@ -328,7 +330,7 @@ func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 
 // storeSolutionResult sends a POST request with form data including a tar.gz archive.
 func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunner, queueMessage QueueMessage) error {
-	requestURL := "http://host.docker.internal:8080/storeOutputs"
+	requestURL := "http://host.docker.internal:8888/storeOutputs"
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
 	// Move the compile error file to the output folder if the solution failed.

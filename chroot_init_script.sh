@@ -5,11 +5,11 @@ CHROOT_DIR="/tmp/chroot"
 
 # Create necessary directories
 echo "Creating directory structure in ${CHROOT_DIR}..."
-mkdir -p "$CHROOT_DIR"/{bin,lib/x86_64-linux-gnu,usr/lib/x86_64-linux-gnu,usr/bin,usr/sbin}
+mkdir -p "$CHROOT_DIR"/{bin,lib/x86_64-linux-gnu,usr/lib/x86_64-linux-gnu,usr/bin,usr/sbin,etc/security}
 
-# Copy essential binaries for apt and utilities into chroot
-echo "Copying apt and utilities to chroot..."
-for binary in /bin/bash /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt; do
+# Copy essential binaries for apt, prlimit, and utilities into chroot
+echo "Copying apt, prlimit, and utilities to chroot..."
+for binary in /bin/bash  /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt /usr/bin/timeout; do
   if [[ -f "$binary" ]]; then
     dest_dir="$CHROOT_DIR$(dirname "$binary")"
     mkdir -p "$dest_dir"
@@ -19,13 +19,11 @@ for binary in /bin/bash /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/a
   fi
 done
 
-# Copy necessary libraries for apt tools
-copy_libs() {
+# Copy necessary libraries for apt tools, prlimit, and timeout
+copyLibs() {
   local binary="$1"
-  # Use `ldd` to get the list of dependencies and copy them
   ldd "$binary" | grep -o '/[^ ]*' | while read -r lib; do
     if [[ -f "$lib" ]]; then
-      # Get directory path within chroot
       lib_dir="$CHROOT_DIR$(dirname "$lib")"
       mkdir -p "$lib_dir"
       cp -n "$lib" "$lib_dir"
@@ -33,10 +31,21 @@ copy_libs() {
   done
 }
 
-# Copy libraries for all apt-related binaries
-for binary in /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt; do
-  copy_libs "$binary"
+# Copy libraries for all apt-related binaries, prlimit, and timeout
+for binary in /bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/sbin/apt /usr/bin/timeout; do
+  copyLibs "$binary"
 done
+
+# Copy necessary shell binaries and libraries
+echo "Copying shell and its dependencies..."
+cp /bin/bash "$CHROOT_DIR/bin/bash"
+copyLibs /bin/bash
+
+# Copy C++ standard libraries and dependencies
+echo "Copying C++ standard libraries and dependencies..."
+copyLibs "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+copyLibs "/lib/x86_64-linux-gnu/libgcc_s.so.1"
+
 
 # Copy the apt configuration and sources.list to chroot
 echo "Copying apt configuration files..."
@@ -53,7 +62,7 @@ echo "Mounting proc and sys for chroot environment..."
 sudo mount -t proc proc "$CHROOT_DIR/proc"
 sudo mount -t sysfs sys "$CHROOT_DIR/sys"
 
-# Chroot into the environment and update package list, then install g++
+# Install g++ inside chroot
 echo "Chrooting into the environment and installing g++..."
 sudo chroot "$CHROOT_DIR" /bin/bash -c "
   apt-get update &&

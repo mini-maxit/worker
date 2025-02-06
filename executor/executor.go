@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strconv"
+
 	"github.com/mini-maxit/worker/logger"
 )
 
@@ -31,6 +33,8 @@ const (
 	ErSignalRecieved
 	ErNetworkProhibited
 	ErJailed
+	ErTimeout
+	ErMemoryLimitExceeded
 )
 
 const CompileErrorFileName = "compile-err.err"
@@ -52,17 +56,19 @@ func (er *ExecutionResult) String() string {
 	return out.String()
 }
 
-// restrictCommand creates a new exec.Cmd that restricts the command to run in a chroot environment
-func restrictCommand(executablePath string) *exec.Cmd {
+func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
     logger := logger.NewNamedLogger("executor")
     logger.Infof("Restricting command %s", executablePath)
 
-	executeCommand := fmt.Sprintf("./%s", executablePath)
+    executeCommand := fmt.Sprintf("./%s", executablePath)
+    timeLimitSecondsString := strconv.Itoa(timeLimit)
 
     args := []string{
         "chroot",
         BaseChrootDir,
-        executeCommand,
+		"timeout",
+		timeLimitSecondsString,
+		executeCommand,
     }
 
     return exec.Command(args[0], args[1:]...)

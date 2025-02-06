@@ -17,7 +17,7 @@ var ErrInvalidLanguageType = errors.New("invalid language type")
 type LanguageType int
 
 var languageTypeMap = map[string]LanguageType{
-    "CPP": CPP,
+	"CPP": CPP,
 }
 
 var languageExtensionMap = map[LanguageType]string{
@@ -32,10 +32,10 @@ func GetSolutionFileNameWithExtension(solutionName string, language LanguageType
 }
 
 func StringToLanguageType(s string) (LanguageType, error) {
-    if lt, ok := languageTypeMap[s]; ok {
-        return lt, nil
-    }
-    return 0, ErrInvalidLanguageType
+	if lt, ok := languageTypeMap[s]; ok {
+		return lt, nil
+	}
+	return 0, ErrInvalidLanguageType
 }
 
 const (
@@ -106,7 +106,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		if err != nil {
 			r.logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
 			return SolutionResult{
-				OutputDir: userOutputDir,
+				OutputDir:  userOutputDir,
 				Success:    false,
 				StatusCode: Failed,
 				Code:       getStatus(Failed),
@@ -123,7 +123,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 	if err != nil {
 		r.logger.Errorf("Error reading input files from %s [MsgID: %s]: %s", inputPath, messageID, err.Error())
 		return SolutionResult{
-			OutputDir: userOutputDir,
+			OutputDir:  userOutputDir,
 			Success:    false,
 			StatusCode: Failed,
 			Code:       getStatus(Failed),
@@ -136,13 +136,20 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
 	for i, inputPath := range inputFiles {
-		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i+1))
-		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, (i+1)) // May be dropped in the future
-		_ = exec.ExecuteCommand(filePath, messageID, executor.CommandConfig{StdinPath: inputPath, StdoutPath: outputPath, StderrPath: stderrPath})
+		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i + 1))
+		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, (i + 1)) // May be dropped in the future
+		commandConfig := executor.CommandConfig{
+			StdinPath:   inputPath,
+			StdoutPath:  outputPath,
+			StderrPath:  stderrPath,
+			TimeLimit:   solution.TimeLimits[i],
+			MemoryLimit: solution.MemoryLimits[i],
+		}
+		_ = exec.ExecuteCommand(filePath, messageID, commandConfig)
 
 		// Compare output with expected output
-		r.logger.Infof("Comparing output %s with expected output [MsgID: %s]",outputPath ,messageID)
-		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i+1))
+		r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
+		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i + 1))
 		result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
 		if err != nil {
 			r.logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
@@ -155,7 +162,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		testCases[i] = TestResult{
 			Passed:       result,
 			ErrorMessage: difference,
-			Order: (i+1),
+			Order:        (i + 1),
 		}
 	}
 

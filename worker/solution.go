@@ -19,8 +19,8 @@ type TaskForRunner struct {
 	SolutionFileName   string
 	InputDirName        string
 	OutputDirName 		string
-	TimeLimits 	       []float64
-	MemoryLimits 	   []float64
+	TimeLimits 	       []int
+	MemoryLimits 	   []int
 }
 
 type DirConfig struct {
@@ -34,7 +34,7 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRu
 	var task TaskForRunner
 
 	// Get the tar.gz file from the storage
-	requestUrl := fmt.Sprintf("http://host.docker.internal:8080/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", taskId, userId, submissionNumber)
+	requestUrl := fmt.Sprintf("http://host.docker.internal:8888/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", taskId, userId, submissionNumber)
 	response, err := http.Get(requestUrl)
 	if err != nil {
 		return TaskForRunner{}, err

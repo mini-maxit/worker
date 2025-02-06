@@ -4,9 +4,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"os"
 )
 
-const logPath = "./logger/logs/log.txt"
+const logPath = "./logger/logs/worker/log.txt"
 
 const (
 	timeKey   = "time"
@@ -20,11 +21,14 @@ var sugarLogger *zap.SugaredLogger
 // InitializeLogger sets up Zap with a custom configuration and initializes the SugaredLogger
 func InitializeLogger() {
 	// Configure log rotation with lumberjack
-	w := zapcore.AddSync(&lumberjack.Logger{
+	fileSync := zapcore.AddSync(&lumberjack.Logger{
 		Filename: logPath,
 		MaxAge:   1,
 		Compress: true,
 	})
+
+	// Configure console output
+	consoleSync := zapcore.AddSync(os.Stdout)
 
 	// Encoder configuration for Console format
 	encoderConfig := zapcore.EncoderConfig{
@@ -37,12 +41,22 @@ func InitializeLogger() {
 		EncodeDuration: zapcore.StringDurationEncoder,
 	}
 
-	// Create the core
-	core := zapcore.NewCore(
+	// Create the core for file logging
+	fileCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),
-		w,
+		fileSync,
 		zap.InfoLevel,
 	)
+
+	// Create the core for console logging
+	consoleCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		consoleSync,
+		zap.InfoLevel,
+	)
+
+	// Combine the cores
+	core := zapcore.NewTee(fileCore, consoleCore)
 
 	// Initialize the sugared logger
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
