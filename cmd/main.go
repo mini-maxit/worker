@@ -19,6 +19,6 @@ func main() {
 	defer conn.Close()
 
 	// Start the worker
-	worker := worker.NewWorker(conn)
+	worker := worker.NewWorker(conn, config)
 	worker.Work()
 }

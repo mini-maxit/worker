@@ -11,7 +11,7 @@ func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	logger := logger.NewNamedLogger("rabbitmq")
 
 	logger.Info("Establishing connection to RabbitMQ")
-	rabbitMQURL := config.RQUrl
+	rabbitMQURL := config.RabiitMQUrl
 
 	// Establish connection
 	conn, err := amqp.Dial(rabbitMQURL)

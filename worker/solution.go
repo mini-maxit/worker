@@ -30,11 +30,10 @@ type DirConfig struct {
 
 
 // GetDataForSolutionRunner retrieves the data needed to run the solution
-func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRunner, error) {
+func getDataForSolutionRunner(taskId, userId, submissionNumber int64, fileStorageUrl string) (TaskForRunner, error) {
 	var task TaskForRunner
 
-	// Get the tar.gz file from the storage
-	requestUrl := fmt.Sprintf("http://host.docker.internal:8888/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", taskId, userId, submissionNumber)
+	requestUrl := fmt.Sprintf("%s/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", fileStorageUrl, taskId, userId, submissionNumber)
 	response, err := http.Get(requestUrl)
 	if err != nil {
 		return TaskForRunner{}, err
@@ -59,7 +58,6 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRu
 		return TaskForRunner{}, err
 	}
 
-    // Get the directories configuration - temp dir and base dir
 	dirConfig, err := handlePackage(filePath)
 	if err != nil {
 		return TaskForRunner{}, err
@@ -73,30 +71,26 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRu
 	return task, nil
 }
 
-// handlePackage unzips the package and returns the directories configuration
+// unzips the package and returns the directories configuration
 func handlePackage(zipFilePath string) (DirConfig, error) {
 
-	//Create a temp directory to store the unzipped files
 	path, err := os.MkdirTemp("", "temp")
 	if err != nil {
 		return DirConfig{}, err
 	}
 
-	// Move the zip file to the temp directory
 	err = os.Rename(zipFilePath, path  + "/file.tar.gz")
 	if err != nil {
 		utils.RemoveIO(path, true, true)
 		return DirConfig{}, err
 	}
 
-	// Unzip the file
 	err = utils.ExtractTarGz(path + "/file.tar.gz", path)
 	if err != nil {
 		utils.RemoveIO(path, true, true)
 		return DirConfig{}, err
 	}
 
-	// Remove the zip file
 	utils.RemoveIO(path + "/file.tar.gz", false, false)
 
 	dirConfig := DirConfig{

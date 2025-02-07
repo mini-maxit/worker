@@ -18,19 +18,15 @@ const (
 
 var sugarLogger *zap.SugaredLogger
 
-// InitializeLogger sets up Zap with a custom configuration and initializes the SugaredLogger
 func InitializeLogger() {
-	// Configure log rotation with lumberjack
 	fileSync := zapcore.AddSync(&lumberjack.Logger{
 		Filename: logPath,
 		MaxAge:   1,
 		Compress: true,
 	})
 
-	// Configure console output
 	consoleSync := zapcore.AddSync(os.Stdout)
 
-	// Encoder configuration for Console format
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        timeKey,
 		LevelKey:       levelKey,
@@ -41,29 +37,24 @@ func InitializeLogger() {
 		EncodeDuration: zapcore.StringDurationEncoder,
 	}
 
-	// Create the core for file logging
 	fileCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),
 		fileSync,
 		zap.InfoLevel,
 	)
 
-	// Create the core for console logging
 	consoleCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),
 		consoleSync,
 		zap.InfoLevel,
 	)
 
-	// Combine the cores
 	core := zapcore.NewTee(fileCore, consoleCore)
 
-	// Initialize the sugared logger
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	sugarLogger = logger.Sugar()
 }
 
-// NewNamedLogger creates a new named SugaredLogger for a given service
 func NewNamedLogger(serviceName string) *zap.SugaredLogger {
 	if sugarLogger == nil {
 		InitializeLogger()

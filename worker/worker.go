@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/mini-maxit/worker/executor"
+	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/logger"
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
@@ -20,19 +22,20 @@ import (
 )
 
 type Worker struct {
-	logger *zap.SugaredLogger
-	ch   *amqp.Channel
+	logger         *zap.SugaredLogger
+	ch             *amqp.Channel
+	fileStorageUrl string
 }
 
 type QueueMessage struct {
-	MessageID 				string    `json:"message_id"`
-	TaskID         			int64 	  `json:"task_id"`
-	UserID         			int64 	  `json:"user_id"`
-	SubmissionNumber 		int64     `json:"submission_number"`
-	LanguageType  			string 	  `json:"language_type"`
-	LanguageVersion 		string    `json:"language_version"`
-	TimeLimits	  			[]int `json:"time_limits"`
-	MemoryLimits	  		[]int `json:"memory_limits"`
+	MessageID        string `json:"message_id"`
+	TaskID           int64  `json:"task_id"`
+	UserID           int64  `json:"user_id"`
+	SubmissionNumber int64  `json:"submission_number"`
+	LanguageType     string `json:"language_type"`
+	LanguageVersion  string `json:"language_version"`
+	TimeLimits       []int  `json:"time_limits"`
+	MemoryLimits     []int  `json:"memory_limits"`
 }
 
 type ResponseMessage struct {
@@ -40,31 +43,25 @@ type ResponseMessage struct {
 	Result    solution.SolutionResult `json:"result"`
 }
 
-// Base name for the solution file
 const solutionFileBaseName = "solution"
 
-// Input directory name
 const inputDirName = "inputs"
 
-// Output directory name
 const outputDirName = "outputs"
 
-// Maximum of retries on the same message
 const maxRetries = 2
 
-// Error message for failed to store the solution result
 var errorFailedToStore = errors.New("failed to store the solution result")
 
-// NewWorker creates a new worker
-func NewWorker(conn *amqp.Connection) *Worker {
+func NewWorker(conn *amqp.Connection, envConfig *config.Config) *Worker {
 	ch := NewRabbitMQChannel(conn)
 	return &Worker{
-		ch: ch,
+		ch:     ch,
+		fileStorageUrl: envConfig.FileStorageUrl,
 		logger: logger.NewNamedLogger("worker"),
 	}
 }
 
-// Work starts the worker process
 func (w *Worker) Work() {
 
 	defer func() {
@@ -77,7 +74,7 @@ func (w *Worker) Work() {
 	// Declare a queue
 	q, err := w.ch.QueueDeclare(
 		"worker_queue", // name
-		true,          // durable
+		true,           // durable
 		false,          // delete when unused
 		false,          // exclusive
 		false,          // no-wait
@@ -112,7 +109,6 @@ func (w *Worker) Work() {
 
 				w.logger.Info("Received a message")
 
-				// Unmarshal the message body
 				err := json.Unmarshal(msg.Body, &queueMessage)
 				if err != nil {
 					w.handleError(QueueMessage{}, &msg, err)
@@ -127,7 +123,6 @@ func (w *Worker) Work() {
 					}
 				}()
 
-				// Process the message
 				err = w.processMessage(queueMessage, &msg)
 				if err != nil {
 					w.handleError(queueMessage, &msg, err)
@@ -145,27 +140,23 @@ func (w *Worker) Work() {
 }
 
 // Process the incoming message
-func (w *Worker)processMessage(queueMessage QueueMessage, msg *amqp.Delivery) error {
+func (w *Worker) processMessage(queueMessage QueueMessage, msg *amqp.Delivery) error {
 
 	w.logger.Infof("Getting data for solution runner [MsgID: %s]", queueMessage.MessageID)
-	// Get the configuration data needed to run the solution
-	task, err := getDataForSolutionRunner(queueMessage.TaskID, queueMessage.UserID, queueMessage.SubmissionNumber)
+
+	task, err := getDataForSolutionRunner(queueMessage.TaskID, queueMessage.UserID, queueMessage.SubmissionNumber, w.fileStorageUrl)
 	if err != nil {
 		return err
 	}
 
-	// Remove the temp directory after the task is done
 	defer utils.RemoveIO(task.TempDir, true, true)
 
-	// Get the language type
 	task.LanguageType, err = solution.StringToLanguageType(queueMessage.LanguageType)
 	if err != nil {
 		return err
 	}
 
-	// Get the solution file name with the correct extension
 	task.SolutionFileName, err = solution.GetSolutionFileNameWithExtension(solutionFileBaseName, task.LanguageType)
-	// Get the solution file name with the correct extension
 	if err != nil {
 		return err
 	}
@@ -180,54 +171,42 @@ func (w *Worker)processMessage(queueMessage QueueMessage, msg *amqp.Delivery) er
 
 	w.logger.Infof("Running solution [MsgID: %s]", queueMessage.MessageID)
 
-	// Create a new solution and run it
 	solutionResult := runSolution(task, queueMessage.MessageID)
-
-	w.logger.Infof("Solution ran successfully [MsgID: %s]", queueMessage.MessageID)
 
 	w.logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
 
-	// Store the solution result
-	err = storeSolutionResult(solutionResult, task, queueMessage)
+	err = storeSolutionResult(solutionResult, task, queueMessage, w.fileStorageUrl)
 	if err != nil {
 		return err
 	}
 
-	w.logger.Infof("Solution result stored [MsgID: %s]", queueMessage.MessageID)
-
 	w.logger.Infof("Sending response message [MsgID: %s]", queueMessage.MessageID)
 
-	// Send the response message to the backend
-	err = w.sendResponseMessage(queueMessage ,solutionResult, msg)
-
+	err = w.sendResponseMessage(queueMessage, solutionResult, msg)
 	if err != nil {
 		return err
 	}
 
 	w.logger.Infof("Response message sent [MsgID: %s]", queueMessage.MessageID)
 
-
 	return nil
 }
 
 // Send response message to backend with solution result
-func (w *Worker)sendResponseMessage(queueMessage QueueMessage ,solutionResult solution.SolutionResult, msg *amqp.Delivery) error {
+func (w *Worker) sendResponseMessage(queueMessage QueueMessage, solutionResult solution.SolutionResult, msg *amqp.Delivery) error {
 
-
-	// Create a response message
 	responseMessage := ResponseMessage{
 		MessageID: queueMessage.MessageID,
 		Result:    solutionResult,
 	}
 
-	// Marshal the solution result
 	solutionResultBytes, err := json.Marshal(responseMessage)
 	if err != nil {
 		return err
 	}
 
 	err = w.ch.Publish(
-		"",               // exchange
+		"",          // exchange
 		msg.ReplyTo, // routing key (queue name)
 		false,       // mandatory
 		false,       // immediate
@@ -259,22 +238,19 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 			TestResults: nil,
 		}
 
-		// Send the response message to the backend
 		err = w.sendResponseMessage(queueMessage, failedSolutionResult, msg)
 		if err != nil {
 			w.logger.Errorf("Failed to send response message [MsgID: %s] to the backend: %s", queueMessage.MessageID, err)
 		}
-		// Message was retried maxRetries times, ack it and remove it from the queue
+
 		msg.Ack(false)
 		return
 	}
 
-	// The original message was not processed successfully, acknowledge it and send an updated message to the queue
 	msg.Ack(false)
 
 	w.logger.Infof("Requeuing message [MsgID: %s]", queueMessage.MessageID)
 
-	// Send the updated message to the queue
 	err = w.ch.Publish(
 		"",             // exchange
 		"worker_queue", // routing key
@@ -291,7 +267,6 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 	}
 }
 
-// Get the a new messsage to be requeued
 func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 	oldHeaderCount := msg.Headers["x-retry-count"]
 
@@ -300,19 +275,18 @@ func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 	}
 	newHeaderCount := oldHeaderCount.(int64) + 1
 
+	// Update new messege header
 	newMsg := amqp.Delivery{Body: msg.Body, Headers: amqp.Table{"x-retry-count": newHeaderCount}, ReplyTo: string(msg.ReplyTo)}
 
 	return &newMsg
 }
 
-// Run the solution using the solution runner
 func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 	runner := solution.NewRunner()
 
 	langConfig := solution.LanguageConfig{
 		Type:    task.LanguageType,
 		Version: task.LanguageVersion,
-
 	}
 
 	solution := solution.Solution{
@@ -330,12 +304,10 @@ func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 	return solutionResult
 }
 
-// storeSolutionResult sends a POST request with form data including a tar.gz archive.
-func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunner, queueMessage QueueMessage) error {
-	requestURL := "http://host.docker.internal:8888/storeOutputs"
+func storeSolutionResult(solutionResult solution.SolutionResult, task TaskForRunner, queueMessage QueueMessage, fileStorageUrl string) error {
+	requestURL := fmt.Sprintf("%s/storeOutputs", fileStorageUrl)
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
-	// Move the compile error file to the output folder if the solution failed.
 	if solutionResult.StatusCode == solution.Failed {
 		compilationErrorPath := task.TaskDir + "/" + executor.CompileErrorFileName
 		err := os.Rename(compilationErrorPath, outputsFolderPath+"/"+executor.CompileErrorFileName)
@@ -344,30 +316,25 @@ func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunn
 		}
 	}
 
-	// Remove empty error files from the output folder.
 	err := utils.RemoveEmptyErrFiles(outputsFolderPath)
 	if err != nil {
 		return err
 	}
 
-	// Compress the output folder into a tar.gz file.
 	archiveFilePath, err := utils.TarGzFolder(outputsFolderPath)
 	if err != nil {
 		return err
 	}
 
-	// Open the tar.gz file for reading.
 	file, err := os.Open(archiveFilePath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	// Create a buffer to store the form data.
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Add the userID, taskID, submissionNumber and atchive form fields.
 	if err := writer.WriteField("userID", strconv.Itoa(int(queueMessage.UserID))); err != nil {
 		return err
 	}
@@ -390,16 +357,13 @@ func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunn
 		return err
 	}
 
-	// Create the HTTP request.
 	req, err := http.NewRequest("POST", requestURL, body)
 	if err != nil {
 		return err
 	}
 
-	// Set the content type to multipart/form-data.
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	// Send the request.
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -407,7 +371,6 @@ func storeSolutionResult(solutionResult solution.SolutionResult,task TaskForRunn
 	}
 	defer resp.Body.Close()
 
-	// Check the response status.
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes := new(bytes.Buffer)
 		bodyBytes.ReadFrom(resp.Body)

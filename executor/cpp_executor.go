@@ -107,9 +107,29 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	// Execute the command
 	e.logger.Infof("Executing command [MsgID: %s]", messageID)
 	runErr := restrictedCmd.Run()
-	if runErr != nil {
 
-		//Check if the command timed out or exceeded memory limit
+	if runErr == nil {
+		var statusCode ExecutorStatusCode
+		switch restrictedCmd.ProcessState.ExitCode() {
+		case -1:
+			statusCode = ErSignalRecieved
+		case 0:
+			statusCode = ErSuccess
+		default:
+			e.logger.Errorf("Command exited with unknown status code. %d [MsgID: %s]", restrictedCmd.ProcessState.ExitCode(), messageID)
+			return &ExecutionResult{
+				StatusCode: ErInternalError,
+				Message:    fmt.Sprintf("command exited with unknown status code. %d", restrictedCmd.ProcessState.ExitCode()),
+			}
+		}
+
+		e.logger.Infof("Finished executing command with status code: %d [MsgID: %s]", statusCode, messageID)
+		return &ExecutionResult{
+			StatusCode: statusCode,
+			Message:    "Command executed successfully",
+		}
+	} else {
+		//Check if the command timed out or was blocked by chroot
 		exitError := runErr.(*exec.ExitError)
 
 		e.logger.Infof("Command exited with status code %d [MsgID: %s]", exitError.ExitCode(), messageID)
@@ -143,26 +163,12 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 				Message:    fmt.Sprintf("command blocked due to chroot restrictions. %s", errorOutput),
 			}
 		}
-	}
 
-	var statusCode ExecutorStatusCode
-	switch restrictedCmd.ProcessState.ExitCode() {
-	case -1:
-		statusCode = ErSignalRecieved
-	case 0:
-		statusCode = ErSuccess
-	default:
-		e.logger.Errorf("Command exited with unknown status code. %d [MsgID: %s]", restrictedCmd.ProcessState.ExitCode(), messageID)
+		e.logger.Errorf("Error executing command. %s [MsgID: %s]", errorOutput, messageID)
 		return &ExecutionResult{
 			StatusCode: ErInternalError,
-			Message:    fmt.Sprintf("command exited with unknown status code. %d", restrictedCmd.ProcessState.ExitCode()),
+			Message:    fmt.Sprintf("error executing command. %s", errorOutput),
 		}
-	}
-
-	e.logger.Infof("Command executed successfully [MsgID: %s]", messageID)
-	return &ExecutionResult{
-		StatusCode: statusCode,
-		Message:    "Command executed successfully",
 	}
 }
 

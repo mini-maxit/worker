@@ -26,27 +26,23 @@ func CloseFile(file *os.File) {
 
 // CopyFile copies a file from src to dst. It returns an error if any occurs during the copy.
 func CopyFile(src, dst string) error {
-	// Open the source file
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer sourceFile.Close()
 
-	// Create or truncate the destination file
 	destinationFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer destinationFile.Close()
 
-	// Copy contents from the source file to the destination file
 	_, err = io.Copy(destinationFile, sourceFile)
 	if err != nil {
 		return err
 	}
 
-	// Ensure the data is flushed to disk
 	err = destinationFile.Sync()
 	if err != nil {
 		return err
@@ -124,7 +120,7 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 			if err != nil {
 				return err
 			}
-			defer outFile.Close() // Close the file after copying
+			defer outFile.Close()
 
 			if _, err := io.Copy(outFile, tarReader); err != nil {
 				return err
@@ -139,7 +135,6 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 
 
 func TarGzFolder(srcDir string) (string, error) {
-    // Get the absolute path of the source directory and its parent directory.
     absSrcDir, err := filepath.Abs(srcDir)
     if err != nil {
         return "", err
@@ -148,58 +143,48 @@ func TarGzFolder(srcDir string) (string, error) {
     outputFileName := filepath.Base(absSrcDir) + ".tar.gz"
     outputFilePath := filepath.Join(parentDir, outputFileName)
 
-    // Create the tar.gz file in the same level as the source directory.
     outFile, err := os.Create(outputFilePath)
     if err != nil {
         return "", err
     }
     defer outFile.Close()
 
-    // Create a new gzip writer.
     gzWriter := gzip.NewWriter(outFile)
     defer gzWriter.Close()
 
-    // Create a tar writer that writes to the gzip writer.
     tarWriter := tar.NewWriter(gzWriter)
     defer tarWriter.Close()
 
-    // Walk through the directory and add files to the tarball.
     err = filepath.Walk(absSrcDir, func(file string, fi os.FileInfo, err error) error {
         if err != nil {
             return err
         }
 
-        // Create a tar header for the file or directory.
         header, err := tar.FileInfoHeader(fi, file)
         if err != nil {
             return err
         }
 
-        // Update the header name to ensure the full path structure is retained.
         relPath, err := filepath.Rel(parentDir, file)
         if err != nil {
             return err
         }
         header.Name = relPath
 
-        // Write the header to the tarball.
         if err := tarWriter.WriteHeader(header); err != nil {
             return err
         }
 
-        // If it's a directory, we don't need to copy any content.
         if fi.IsDir() {
             return nil
         }
 
-        // Open the file.
         f, err := os.Open(file)
         if err != nil {
             return err
         }
         defer f.Close()
 
-        // Copy the file content to the tar writer.
         if _, err := io.Copy(tarWriter, f); err != nil {
             return err
         }
@@ -210,7 +195,6 @@ func TarGzFolder(srcDir string) (string, error) {
         return "", err
     }
 
-    // Close the tar writer and gzip writer to finalize the archive.
     if err := tarWriter.Close(); err != nil {
         return "", err
     }
@@ -218,7 +202,6 @@ func TarGzFolder(srcDir string) (string, error) {
         return "", err
     }
 
-    // Return the path of the created tar.gz file.
     return outputFilePath, nil
 }
 
