@@ -133,59 +133,59 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 }
 
 func TarGzFolder(srcDir string) (string, error) {
-    absSrcDir, err := filepath.Abs(srcDir)
-    if err != nil {
-        return "", err
-    }
-    parentDir := filepath.Dir(absSrcDir)
-    outputFileName := filepath.Base(absSrcDir) + ".tar.gz"
-    outputFilePath := filepath.Join(parentDir, outputFileName)
+	absSrcDir, err := filepath.Abs(srcDir)
+	if err != nil {
+		return "", err
+	}
+	parentDir := filepath.Dir(absSrcDir)
+	outputFileName := filepath.Base(absSrcDir) + ".tar.gz"
+	outputFilePath := filepath.Join(parentDir, outputFileName)
 
-    outFile, err := os.Create(outputFilePath)
-    if err != nil {
-        return "", err
-    }
-    defer outFile.Close()
+	outFile, err := os.Create(outputFilePath)
+	if err != nil {
+		return "", err
+	}
+	defer outFile.Close()
 
-    gzWriter := gzip.NewWriter(outFile)
-    defer gzWriter.Close()
+	gzWriter := gzip.NewWriter(outFile)
+	defer gzWriter.Close()
 
-    tarWriter := tar.NewWriter(gzWriter)
-    defer tarWriter.Close()
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
 
-    err = filepath.Walk(absSrcDir, func(file string, fi os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
+	err = filepath.Walk(absSrcDir, func(file string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-        header, err := tar.FileInfoHeader(fi, file)
-        if err != nil {
-            return err
-        }
+		header, err := tar.FileInfoHeader(fi, file)
+		if err != nil {
+			return err
+		}
 
-        relPath, err := filepath.Rel(parentDir, file)
-        if err != nil {
-            return err
-        }
-        header.Name = relPath
+		relPath, err := filepath.Rel(parentDir, file)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
 
-        if err := tarWriter.WriteHeader(header); err != nil {
-            return err
-        }
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
 
-        if fi.IsDir() {
-            return nil
-        }
+		if fi.IsDir() {
+			return nil
+		}
 
-        f, err := os.Open(file)
-        if err != nil {
-            return err
-        }
-        defer f.Close()
+		f, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
 
-        if _, err := io.Copy(tarWriter, f); err != nil {
-            return err
-        }
+		if _, err := io.Copy(tarWriter, f); err != nil {
+			return err
+		}
 
 		return nil
 	})
@@ -193,14 +193,14 @@ func TarGzFolder(srcDir string) (string, error) {
 		return "", err
 	}
 
-    if err := tarWriter.Close(); err != nil {
-        return "", err
-    }
-    if err := gzWriter.Close(); err != nil {
-        return "", err
-    }
+	if err := tarWriter.Close(); err != nil {
+		return "", err
+	}
+	if err := gzWriter.Close(); err != nil {
+		return "", err
+	}
 
-    return outputFilePath, nil
+	return outputFilePath, nil
 }
 
 func GetSolutionFileNameWithExtension(SolutionFileBaseName string, languageType string) (string, error) {

@@ -46,7 +46,11 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 			Message:    fmt.Sprintf("could not copy executable to chroot. %s", err.Error()),
 		}
 	}
-	defer utils.RemoveIO(rootToChrootExecPath, false, false)
+	defer func() {
+		if err := utils.RemoveIO(rootToChrootExecPath, false, false); err != nil {
+			e.logger.Errorf("Could not remove executable from chroot. %s [MsgID: %s]", err.Error(), messageID)
+		}
+	}()
 
 	// Chane the permissions of the executable
 	err = os.Chmod(rootToChrootExecPath, 0755)

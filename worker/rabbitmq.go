@@ -6,7 +6,6 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-
 func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	logger := logger.NewNamedLogger("rabbitmq")
 

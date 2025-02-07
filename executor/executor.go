@@ -57,19 +57,19 @@ func (er *ExecutionResult) String() string {
 }
 
 func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
-    logger := logger.NewNamedLogger("executor")
-    logger.Infof("Restricting command %s", executablePath)
+	logger := logger.NewNamedLogger("executor")
+	logger.Infof("Restricting command %s", executablePath)
 
-    executeCommand := fmt.Sprintf("./%s", executablePath)
-    timeLimitSecondsString := strconv.Itoa(timeLimit)
+	executeCommand := fmt.Sprintf("./%s", executablePath)
+	timeLimitSecondsString := strconv.Itoa(timeLimit)
 
-    args := []string{
-        "chroot",
-        BaseChrootDir,
+	args := []string{
+		"chroot",
+		BaseChrootDir,
 		"timeout",
 		timeLimitSecondsString,
 		executeCommand,
-    }
+	}
 
-    return exec.Command(args[0], args[1:]...)
+	return exec.Command(args[0], args[1:]...)
 }

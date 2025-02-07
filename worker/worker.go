@@ -56,9 +56,9 @@ var errorFailedToStore = errors.New("failed to store the solution result")
 func NewWorker(conn *amqp.Connection, envConfig *config.Config) *Worker {
 	ch := NewRabbitMQChannel(conn)
 	return &Worker{
-		ch:     ch,
+		ch:             ch,
 		fileStorageUrl: envConfig.FileStorageUrl,
-		logger: logger.NewNamedLogger("worker"),
+		logger:         logger.NewNamedLogger("worker"),
 	}
 }
 
@@ -118,7 +118,10 @@ func (w *Worker) Work() {
 
 				defer func() {
 					if r := recover(); r != nil {
-						msg.Ack(false)
+						err := msg.Ack(false)
+						if err != nil {
+							w.logger.Errorf("Failed to acknowledge message [MsgID: %s]: %s", queueMessage.MessageID, err)
+						}
 						w.logger.Errorf("Recovered from panic: %v", r)
 					}
 				}()
@@ -127,7 +130,10 @@ func (w *Worker) Work() {
 				if err != nil {
 					w.handleError(queueMessage, &msg, err)
 				} else {
-					msg.Ack(false)
+					err := msg.Ack(false)
+					if err != nil {
+						w.logger.Errorf("Failed to acknowledge message [MsgID: %s]: %s", queueMessage.MessageID, err)
+					}
 				}
 
 				w.logger.Infof("Processed message [MsgID: %s]", queueMessage.MessageID)
@@ -144,12 +150,19 @@ func (w *Worker) processMessage(queueMessage QueueMessage, msg *amqp.Delivery) e
 
 	w.logger.Infof("Getting data for solution runner [MsgID: %s]", queueMessage.MessageID)
 
-	task, err := getDataForSolutionRunner(queueMessage.TaskID, queueMessage.UserID, queueMessage.SubmissionNumber, w.fileStorageUrl)
+	solutionData := NewSolutionData(queueMessage.TaskID, queueMessage.UserID, queueMessage.SubmissionNumber)
+
+	task, err := solutionData.getDataForSolutionRunner(w.fileStorageUrl)
 	if err != nil {
 		return err
 	}
 
-	defer utils.RemoveIO(task.TempDir, true, true)
+	defer func() {
+		err := utils.RemoveIO(task.TempDir, true, true)
+		if err != nil {
+			w.logger.Errorf("Failed to remove temp directory: %s", err)
+		}
+	}()
 
 	task.LanguageType, err = solution.StringToLanguageType(queueMessage.LanguageType)
 	if err != nil {
@@ -175,7 +188,7 @@ func (w *Worker) processMessage(queueMessage QueueMessage, msg *amqp.Delivery) e
 
 	w.logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
 
-	err = storeSolutionResult(solutionResult, task, queueMessage, w.fileStorageUrl)
+	err = w.storeSolutionResult(solutionResult, task, queueMessage, w.fileStorageUrl)
 	if err != nil {
 		return err
 	}
@@ -243,11 +256,17 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 			w.logger.Errorf("Failed to send response message [MsgID: %s] to the backend: %s", queueMessage.MessageID, err)
 		}
 
-		msg.Ack(false)
+		err = msg.Ack(false)
+		if err != nil {
+			w.logger.Errorf("Failed to acknowledge message [MsgID: %s]: %s", queueMessage.MessageID, err)
+		}
 		return
 	}
 
-	msg.Ack(false)
+	err = msg.Ack(false)
+	if err != nil {
+		w.logger.Errorf("Failed to acknowledge message [MsgID: %s]: %s", queueMessage.MessageID, err)
+	}
 
 	w.logger.Infof("Requeuing message [MsgID: %s]", queueMessage.MessageID)
 
@@ -304,7 +323,7 @@ func runSolution(task TaskForRunner, messageID string) solution.SolutionResult {
 	return solutionResult
 }
 
-func storeSolutionResult(solutionResult solution.SolutionResult, task TaskForRunner, queueMessage QueueMessage, fileStorageUrl string) error {
+func (w *Worker) storeSolutionResult(solutionResult solution.SolutionResult, task TaskForRunner, queueMessage QueueMessage, fileStorageUrl string) error {
 	requestURL := fmt.Sprintf("%s/storeOutputs", fileStorageUrl)
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
@@ -373,7 +392,11 @@ func storeSolutionResult(solutionResult solution.SolutionResult, task TaskForRun
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes := new(bytes.Buffer)
-		bodyBytes.ReadFrom(resp.Body)
+		_, err := bodyBytes.ReadFrom(resp.Body)
+		if err != nil {
+			w.logger.Errorf("Failed to read response body: %s", err)
+		}
+		w.logger.Errorf("Failed to store the solution result: %s", bodyBytes.String())
 		return errorFailedToStore
 	}
 

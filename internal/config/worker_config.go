@@ -82,12 +82,11 @@ func NewConfig() *Config {
 		logger.Fatalf("failed to parse FILESTORAGE_PORT with error: %v", err)
 	}
 
-
 	rabbitmqUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/", rabbitmqUser, rabbitmqPassword, rabbitmqHost, rabbitmqPort)
 	fileStorageUrl := fmt.Sprintf("http://%s:%d", fileStorageHost, fileStoragePort)
 
 	return &Config{
-		RabbitMQUrl: rabbitmqUrl,
+		RabbitMQUrl:    rabbitmqUrl,
 		FileStorageUrl: fileStorageUrl,
 	}
 }

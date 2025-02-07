@@ -9,7 +9,7 @@ type ExecutorConfig struct {
 }
 
 const (
-    ExitCodeTimeout          = 124
+	ExitCodeTimeout = 124
 )
 
 // Creates config with default base values
