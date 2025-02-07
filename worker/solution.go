@@ -11,6 +11,7 @@ import (
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 )
+
 type TaskForRunner struct {
 	TaskDir            string
 	TempDir            string
@@ -24,10 +25,9 @@ type TaskForRunner struct {
 }
 
 type DirConfig struct {
-	TempDir            string
-    TaskDir            string
+	TempDir string
+	TaskDir string
 }
-
 
 // GetDataForSolutionRunner retrieves the data needed to run the solution
 func getDataForSolutionRunner(taskId, userId, submissionNumber int64, fileStorageUrl string) (TaskForRunner, error) {
@@ -39,7 +39,7 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64, fileStorag
 		return TaskForRunner{}, err
 	}
 
-	if(response.StatusCode != 200) {
+	if response.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(response.Body)
 		return TaskForRunner{}, errors.New(string(bodyBytes))
 	}
@@ -94,8 +94,8 @@ func handlePackage(zipFilePath string) (DirConfig, error) {
 	utils.RemoveIO(path + "/file.tar.gz", false, false)
 
 	dirConfig := DirConfig{
-		TempDir:            path,
-		TaskDir:            path + "/Task",
+		TempDir: path,
+		TaskDir: path + "/Task",
 	}
 
 	return dirConfig, nil

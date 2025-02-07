@@ -14,7 +14,6 @@ import (
 var errUnknownFileType = errors.New("unknown file type")
 var errUnknownLanguageType = errors.New("unknown language type")
 
-
 // Attemts to close the file, and panics if something goes wrong
 func CloseFile(file *os.File) {
 	err := file.Close()
@@ -133,7 +132,6 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 	return nil
 }
 
-
 func TarGzFolder(srcDir string) (string, error) {
     absSrcDir, err := filepath.Abs(srcDir)
     if err != nil {
@@ -189,11 +187,11 @@ func TarGzFolder(srcDir string) (string, error) {
             return err
         }
 
-        return nil
-    })
-    if err != nil {
-        return "", err
-    }
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
 
     if err := tarWriter.Close(); err != nil {
         return "", err
@@ -204,7 +202,6 @@ func TarGzFolder(srcDir string) (string, error) {
 
     return outputFilePath, nil
 }
-
 
 func GetSolutionFileNameWithExtension(SolutionFileBaseName string, languageType string) (string, error) {
 	switch languageType {
@@ -230,7 +227,7 @@ func RemoveEmptyErrFiles(dir string) error {
 		}
 
 		filePath := path.Join(dir, file.Name())
-		if (filepath.Ext(filePath) != ".err") {
+		if filepath.Ext(filePath) != ".err" {
 			continue
 		}
 		fileInfo, err := os.Stat(filePath)

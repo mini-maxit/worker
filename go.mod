@@ -1,6 +1,8 @@
 module github.com/mini-maxit/worker
 
-go 1.21.3
+go 1.22.1
+
+toolchain go1.23.1
 
 require (
 	github.com/google/uuid v1.6.0
