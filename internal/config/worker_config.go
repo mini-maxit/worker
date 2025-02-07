@@ -20,7 +20,7 @@ const (
 )
 
 type Config struct {
-	RabiitMQUrl    string
+	RabbitMQUrl    string
 	FileStorageUrl string
 }
 
@@ -87,7 +87,7 @@ func NewConfig() *Config {
 	fileStorageUrl := fmt.Sprintf("http://%s:%d", fileStorageHost, fileStoragePort)
 
 	return &Config{
-		RabiitMQUrl: rabbitmqUrl,
+		RabbitMQUrl: rabbitmqUrl,
 		FileStorageUrl: fileStorageUrl,
 	}
 }
