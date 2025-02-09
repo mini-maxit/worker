@@ -14,7 +14,7 @@ const (
 	DefailtRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
 	DefaultRabbitmqPassword = "guest"
-	DefaultRabbitmqPort     = "15672"
+	DefaultRabbitmqPort     = "5672"
 	DefaultFileStorageHost  = "file-storage"
 	DefaultFilesStoragePort = "8888"
 )

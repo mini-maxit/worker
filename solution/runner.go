@@ -77,7 +77,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		return SolutionResult{
 			Success:    false,
 			StatusCode: InternalError,
-			Code:       getStatus(InternalError),
+			Code:       InternalError.String(),
 			Message:    err.Error(),
 		}
 	}
@@ -91,7 +91,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		return SolutionResult{
 			Success:    false,
 			StatusCode: InternalError,
-			Code:       getStatus(InternalError),
+			Code:       InternalError.String(),
 			Message:    err.Error(),
 		}
 	}
@@ -108,8 +108,8 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 			return SolutionResult{
 				OutputDir:  userOutputDir,
 				Success:    false,
-				StatusCode: Failed,
-				Code:       getStatus(Failed),
+				StatusCode: CompilationError,
+				Code:       CompilationError.String(),
 				Message:    err.Error(),
 			}
 		}
@@ -126,7 +126,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 			OutputDir:  userOutputDir,
 			Success:    false,
 			StatusCode: Failed,
-			Code:       getStatus(Failed),
+			Code:       Failed.String(),
 			Message:    err.Error(),
 		}
 	}
@@ -145,7 +145,18 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 			TimeLimit:   solution.TimeLimits[i],
 			MemoryLimit: solution.MemoryLimits[i],
 		}
-		_ = exec.ExecuteCommand(filePath, messageID, commandConfig)
+
+		execResult := exec.ExecuteCommand(filePath, messageID, commandConfig)
+		if execResult.StatusCode != executor.ErSuccess {
+			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
+			return SolutionResult{
+				OutputDir:  userOutputDir,
+				Success:    false,
+				StatusCode: Failed,
+				Code:       execResult.StatusCode.String(),
+				Message:    execResult.Message,
+			}
+		}
 
 		// Compare output with expected output
 		r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
@@ -171,7 +182,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		OutputDir:   userOutputDir,
 		Success:     solutionSuccess,
 		StatusCode:  Success,
-		Code:        getStatus(Success),
+		Code:        Success.String(),
 		Message:     "solution executed successfully",
 		TestResults: testCases,
 	}

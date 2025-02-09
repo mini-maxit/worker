@@ -2,6 +2,7 @@ package logger
 
 import (
 	"os"
+	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -17,43 +18,51 @@ const (
 	msgKey    = "msg"
 )
 
-var sugarLogger *zap.SugaredLogger
+var (
+	sugarLogger  *zap.SugaredLogger
+	currentLevel zap.AtomicLevel
+	once         sync.Once
+)
 
 func InitializeLogger() {
-	fileSync := zapcore.AddSync(&lumberjack.Logger{
-		Filename: logPath,
-		MaxAge:   1,
-		Compress: true,
+	once.Do(func() {
+		currentLevel = zap.NewAtomicLevelAt(zap.InfoLevel) // Default to InfoLevel
+
+		fileSync := zapcore.AddSync(&lumberjack.Logger{
+			Filename: logPath,
+			MaxAge:   1,
+			Compress: true,
+		})
+
+		consoleSync := zapcore.AddSync(os.Stdout)
+
+		encoderConfig := zapcore.EncoderConfig{
+			TimeKey:        timeKey,
+			LevelKey:       levelKey,
+			NameKey:        "source",
+			MessageKey:     msgKey,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeLevel:    zapcore.CapitalLevelEncoder,
+			EncodeDuration: zapcore.StringDurationEncoder,
+		}
+
+		fileCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			fileSync,
+			currentLevel, // Use dynamic log level
+		)
+
+		consoleCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			consoleSync,
+			currentLevel, // Use dynamic log level
+		)
+
+		core := zapcore.NewTee(fileCore, consoleCore)
+
+		logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+		sugarLogger = logger.Sugar()
 	})
-
-	consoleSync := zapcore.AddSync(os.Stdout)
-
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        timeKey,
-		LevelKey:       levelKey,
-		NameKey:        "source",
-		MessageKey:     msgKey,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
-		EncodeDuration: zapcore.StringDurationEncoder,
-	}
-
-	fileCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),
-		fileSync,
-		zap.InfoLevel,
-	)
-
-	consoleCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),
-		consoleSync,
-		zap.InfoLevel,
-	)
-
-	core := zapcore.NewTee(fileCore, consoleCore)
-
-	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-	sugarLogger = logger.Sugar()
 }
 
 func NewNamedLogger(serviceName string) *zap.SugaredLogger {
@@ -61,4 +70,11 @@ func NewNamedLogger(serviceName string) *zap.SugaredLogger {
 		InitializeLogger()
 	}
 	return sugarLogger.Named(serviceName)
+}
+
+func SetLoggerLevel(level zapcore.Level) {
+	if sugarLogger == nil {
+		InitializeLogger()
+	}
+	currentLevel.SetLevel(level)
 }

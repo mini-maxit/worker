@@ -327,7 +327,7 @@ func (w *Worker) storeSolutionResult(solutionResult solution.SolutionResult, tas
 	requestURL := fmt.Sprintf("%s/storeOutputs", fileStorageUrl)
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
-	if solutionResult.StatusCode == solution.Failed {
+	if solutionResult.StatusCode == solution.CompilationError {
 		compilationErrorPath := task.TaskDir + "/" + executor.CompileErrorFileName
 		err := os.Rename(compilationErrorPath, outputsFolderPath+"/"+executor.CompileErrorFileName)
 		if err != nil {

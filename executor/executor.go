@@ -46,6 +46,27 @@ type ExecutionResult struct {
 	Message    string
 }
 
+func (ec ExecutorStatusCode) String() string {
+	switch ec {
+	case ErInternalError:
+		return "InternalError"
+	case ErSuccess:
+		return "Success"
+	case ErSignalRecieved:
+		return "SignalRecieved"
+	case ErNetworkProhibited:
+		return "NetworkProhibited"
+	case ErJailed:
+		return "Jailed"
+	case ErTimeout:
+		return "Timeout"
+	case ErMemoryLimitExceeded:
+		return "MemoryLimitExceeded"
+	default:
+		return "Unknown"
+	}
+}
+
 func (er *ExecutionResult) String() string {
 	var out bytes.Buffer
 

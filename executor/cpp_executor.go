@@ -111,10 +111,11 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	// Execute the command
 	e.logger.Infof("Executing command [MsgID: %s]", messageID)
 	runErr := restrictedCmd.Run()
+	exitCode := restrictedCmd.ProcessState.ExitCode()
 
 	if runErr == nil {
 		var statusCode ExecutorStatusCode
-		switch restrictedCmd.ProcessState.ExitCode() {
+		switch exitCode {
 		case -1:
 			statusCode = ErSignalRecieved
 		case 0:
@@ -133,11 +134,8 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 			Message:    "Command executed successfully",
 		}
 	} else {
-		//Check if the command timed out or was blocked by chroot
-		exitError := runErr.(*exec.ExitError)
-
-		e.logger.Infof("Command exited with status code %d [MsgID: %s]", exitError.ExitCode(), messageID)
-		if exitError.ExitCode() == ExitCodeTimeout {
+		e.logger.Infof("Command exited with status code %d [MsgID: %s]", exitCode, messageID)
+		if exitCode == ExitCodeTimeout {
 			e.logger.Errorf("Command timed out [MsgID: %s]", messageID)
 			timeOutContent := fmt.Sprintf("The command timed out after %d seconds\n", commandConfig.TimeLimit)
 			fmt.Fprint(stderr, timeOutContent)

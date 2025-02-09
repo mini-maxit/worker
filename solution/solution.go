@@ -15,20 +15,24 @@ type SolutionStatus int
 const (
 	// Means the solution executed successfully without any errors. Does not mean that all tests passed
 	Success SolutionStatus = iota + 1
+	// Means there was a compilation error while compiling the solution
+	CompilationError
 	// Means the solution failed to execute
 	Failed
 	// Means there was an internal error while executing the solution. This implies that the solution failed to execute
 	InternalError
 )
 
-func getStatus(statusCode SolutionStatus) string {
-	switch statusCode {
+func (ss SolutionStatus) String() string {
+	switch ss {
 	case Success:
 		return "Success"
 	case Failed:
 		return "Failed"
 	case InternalError:
 		return "InternalError"
+	case CompilationError:
+		return "CompilationError"
 	default:
 		return "Unknown"
 	}
