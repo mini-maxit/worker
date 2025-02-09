@@ -1,53 +1,80 @@
 package logger
 
 import (
-	log "github.com/sirupsen/logrus"
+	"os"
+	"sync"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"sort"
 )
 
-const logPath = "./logger/logs/log.txt"
+const logPath = "./logger/logs/worker/log.txt"
 
 const (
-    timeKey   = "time"
-    levelKey  = "level"
-    sourceKey = "source"
-    msgKey    = "msg"
+	timeKey   = "time"
+	levelKey  = "level"
+	sourceKey = "source"
+	msgKey    = "msg"
 )
 
-func customSort(keys []string) {
-    order := map[string]int{
-        timeKey:   0,
-        levelKey:  1,
-        sourceKey: 2,
-        msgKey:    3,
-    }
-    sort.Slice(keys, func(i, j int) bool {
-        return order[keys[i]] < order[keys[j]]
-    })
-}
-
-var lumberjackLogger = &lumberjack.Logger{
-	Filename:   logPath,
-	MaxAge:     1,
-	Compress:   true,
-
-}
-
-var logFormatter = &log.TextFormatter{
-	FullTimestamp: true,
-	DisableQuote:  true,
-	SortingFunc:  customSort,
-}
+var (
+	sugarLogger  *zap.SugaredLogger
+	currentLevel zap.AtomicLevel
+	once         sync.Once
+)
 
 func InitializeLogger() {
-	log.SetFormatter(logFormatter)
-	log.SetOutput(lumberjackLogger)
+	once.Do(func() {
+		currentLevel = zap.NewAtomicLevelAt(zap.InfoLevel) // Default to InfoLevel
+
+		fileSync := zapcore.AddSync(&lumberjack.Logger{
+			Filename: logPath,
+			MaxAge:   1,
+			Compress: true,
+		})
+
+		consoleSync := zapcore.AddSync(os.Stdout)
+
+		encoderConfig := zapcore.EncoderConfig{
+			TimeKey:        timeKey,
+			LevelKey:       levelKey,
+			NameKey:        "source",
+			MessageKey:     msgKey,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeLevel:    zapcore.CapitalLevelEncoder,
+			EncodeDuration: zapcore.StringDurationEncoder,
+		}
+
+		fileCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			fileSync,
+			currentLevel, // Use dynamic log level
+		)
+
+		consoleCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			consoleSync,
+			currentLevel, // Use dynamic log level
+		)
+
+		core := zapcore.NewTee(fileCore, consoleCore)
+
+		logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+		sugarLogger = logger.Sugar()
+	})
 }
 
-func NewNamedLogger(serviceName string) *log.Entry {
-	contextLogger := log.WithFields(log.Fields{
-		"source": serviceName,
-	})
-	return contextLogger
+func NewNamedLogger(serviceName string) *zap.SugaredLogger {
+	if sugarLogger == nil {
+		InitializeLogger()
+	}
+	return sugarLogger.Named(serviceName)
+}
+
+func SetLoggerLevel(level zapcore.Level) {
+	if sugarLogger == nil {
+		InitializeLogger()
+	}
+	currentLevel.SetLevel(level)
 }

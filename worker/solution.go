@@ -8,39 +8,50 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/mini-maxit/worker/logger"
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
+	"go.uber.org/zap"
 )
+
 type TaskForRunner struct {
-	TaskDir            string
-	TempDir            string
-	LanguageType       solution.LanguageType
-	LanguageVersion    string
-	SolutionFileName   string
-	InputDirName        string
-	OutputDirName 		string
-	TimeLimits 	       []float64
-	MemoryLimits 	   []float64
+	TaskDir          string
+	TempDir          string
+	LanguageType     solution.LanguageType
+	LanguageVersion  string
+	SolutionFileName string
+	InputDirName     string
+	OutputDirName    string
+	TimeLimits       []int
+	MemoryLimits     []int
 }
 
 type DirConfig struct {
-	TempDir            string
-    TaskDir            string
+	TempDir string
+	TaskDir string
 }
 
+type SolutionData struct {
+	taskId           int64
+	userId           int64
+	submissionNumber int64
+	logger           *zap.SugaredLogger
+}
 
 // GetDataForSolutionRunner retrieves the data needed to run the solution
-func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRunner, error) {
+func (sd *SolutionData) getDataForSolutionRunner(fileStorageUrl string) (TaskForRunner, error) {
 	var task TaskForRunner
 
-	// Get the tar.gz file from the storage
-	requestUrl := fmt.Sprintf("http://host.docker.internal:8080/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", taskId, userId, submissionNumber)
+	sd.logger.Infof("Getting solution package [TaskID: %d, UserID: %d, SubmissionNumber: %d]", sd.taskId, sd.userId, sd.submissionNumber)
+	requestUrl := fmt.Sprintf("%s/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d", fileStorageUrl, sd.taskId, sd.userId, sd.submissionNumber)
 	response, err := http.Get(requestUrl)
 	if err != nil {
+		sd.logger.Errorf("Failed to get solution package. %s", err)
 		return TaskForRunner{}, err
 	}
 
-	if(response.StatusCode != 200) {
+	if response.StatusCode != 200 {
+		sd.logger.Errorf("Failed to get solution package. %s", response.Status)
 		bodyBytes, _ := io.ReadAll(response.Body)
 		return TaskForRunner{}, errors.New(string(bodyBytes))
 	}
@@ -49,6 +60,7 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRu
 	filePath := fmt.Sprintf("/app/%s.tar.gz", id.String())
 	file, err := os.Create(filePath)
 	if err != nil {
+		sd.logger.Errorf("Failed to create file. %s", err)
 		return TaskForRunner{}, err
 	}
 
@@ -56,11 +68,11 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRu
 
 	_, err = io.Copy(file, response.Body)
 	if err != nil {
+		sd.logger.Errorf("Failed to copy file. %s", err)
 		return TaskForRunner{}, err
 	}
 
-    // Get the directories configuration - temp dir and base dir
-	dirConfig, err := handlePackage(filePath)
+	dirConfig, err := sd.handlePackage(filePath)
 	if err != nil {
 		return TaskForRunner{}, err
 	}
@@ -73,36 +85,56 @@ func getDataForSolutionRunner(taskId, userId, submissionNumber int64) (TaskForRu
 	return task, nil
 }
 
-// handlePackage unzips the package and returns the directories configuration
-func handlePackage(zipFilePath string) (DirConfig, error) {
+// unzips the package and returns the directories configuration
+func (sd *SolutionData) handlePackage(zipFilePath string) (DirConfig, error) {
+	sd.logger.Infof("Unzipping solution package [Path: %s]", zipFilePath)
 
-	//Create a temp directory to store the unzipped files
 	path, err := os.MkdirTemp("", "temp")
 	if err != nil {
+		sd.logger.Errorf("Failed to create temp directory. %s", err)
 		return DirConfig{}, err
 	}
 
-	// Move the zip file to the temp directory
-	err = os.Rename(zipFilePath, path  + "/file.tar.gz")
+	err = os.Rename(zipFilePath, path+"/file.tar.gz")
 	if err != nil {
-		utils.RemoveIO(path, true, true)
+		sd.logger.Errorf("Failed to rename file. %s", err)
+		errRemove := utils.RemoveIO(path, true, true)
+		if errRemove != nil {
+			sd.logger.Errorf("Failed to remove temp directory. %s", errRemove)
+		}
 		return DirConfig{}, err
 	}
 
-	// Unzip the file
-	err = utils.ExtractTarGz(path + "/file.tar.gz", path)
+	err = utils.ExtractTarGz(path+"/file.tar.gz", path)
 	if err != nil {
-		utils.RemoveIO(path, true, true)
+		sd.logger.Errorf("Failed to extract file. %s", err)
+		errRemove := utils.RemoveIO(path, true, true)
+		if errRemove != nil {
+			sd.logger.Errorf("Failed to remove temp directory. %s", errRemove)
+		}
 		return DirConfig{}, err
 	}
 
-	// Remove the zip file
-	utils.RemoveIO(path + "/file.tar.gz", false, false)
+	errRemove := utils.RemoveIO(path+"/file.tar.gz", false, false)
+	if errRemove != nil {
+		sd.logger.Errorf("Failed to remove file. %s", errRemove)
+	}
 
 	dirConfig := DirConfig{
-		TempDir:            path,
-		TaskDir:            path + "/Task",
+		TempDir: path,
+		TaskDir: path + "/Task",
 	}
 
 	return dirConfig, nil
+}
+
+func NewSolutionData(taskId, userId, submissionNumber int64) *SolutionData {
+	logger := logger.NewNamedLogger("solutionData")
+
+	return &SolutionData{
+		taskId:           taskId,
+		userId:           userId,
+		submissionNumber: submissionNumber,
+		logger:           logger,
+	}
 }
