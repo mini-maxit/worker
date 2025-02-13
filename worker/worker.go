@@ -246,7 +246,7 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 		failedSolutionResult := solution.SolutionResult{
 			Success:     false,
 			StatusCode:  solution.InternalError,
-			Code:        "500",
+			Code:        solution.InternalError.String(),
 			Message:     "Failed to process the message after 3 retries: " + err.Error(),
 			TestResults: nil,
 		}
@@ -289,10 +289,10 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 	oldHeaderCount := msg.Headers["x-retry-count"]
 
-	if oldHeaderCount.(int64) >= maxRetries {
+	if oldHeaderCount.(int32) >= maxRetries {
 		return &amqp.Delivery{}
 	}
-	newHeaderCount := oldHeaderCount.(int64) + 1
+	newHeaderCount := oldHeaderCount.(int32) + 1
 
 	// Update new messege header
 	newMsg := amqp.Delivery{Body: msg.Body, Headers: amqp.Table{"x-retry-count": newHeaderCount}, ReplyTo: string(msg.ReplyTo)}

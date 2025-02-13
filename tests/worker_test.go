@@ -35,7 +35,6 @@ const (
 	Success MessageType = iota + 1
 	CompilationError
 	FailedTimeLimitExceeded
-	InternalError
 )
 
 type workerTestStruct struct {
@@ -72,7 +71,7 @@ func tearDown(worker *workerTestStruct) {
 }
 
 func createTask(taskPath string) error {
-	requestUrl := "http://localhost:8888/createTask"
+	requestUrl := "http://file-storage:8888/createTask"
 	file, err := os.Open(taskPath)
 	if err != nil {
 		return err
@@ -159,15 +158,13 @@ func publishTask(ch *amqp.Channel) error {
 }
 
 func submitSubmission(msgType MessageType, taskID, userID string) error {
-	requestUrl := "http://localhost:8888/submit"
+	requestUrl := "http://file-storage:8888/submit"
 	filePath := "../tests/mock_files/"
 	switch msgType {
 	case Success:
 		filePath += "under_limit.cpp"
 	case FailedTimeLimitExceeded:
 		filePath += "over_limit.cpp"
-	case InternalError:
-		filePath += "internal_error.cpp"
 	case CompilationError:
 		filePath += "compilation_error.cpp"
 	}
@@ -232,7 +229,7 @@ func submitSubmission(msgType MessageType, taskID, userID string) error {
 }
 
 func deleteTask(taskID string) error {
-	requestUrl := fmt.Sprintf("http://localhost:8888/deleteTask?taskID=%s", taskID)
+	requestUrl := fmt.Sprintf("http://file-storage:8888/deleteTask?taskID=%s", taskID)
 	req, err := http.NewRequest("DELETE", requestUrl, nil)
 	if err != nil {
 		return err
@@ -279,9 +276,6 @@ func generateExpectedResponseMessage(msgType MessageType) string {
 		statusCode = "3"
 		sucess = false
 		testResult = `"TestResults":null`
-	case InternalError:
-		code = "InternalError"
-		statusCode = "3"
 	case CompilationError:
 		code = "CompilationError"
 		statusCode = "2"
@@ -323,18 +317,10 @@ func TestValidExecution(t *testing.T) {
 		t.Fatalf("Failed to publish message: %s", err)
 	}
 
-	//this flag is very stupid but the linter does not allow me to unconditionally break the loop
-	flag := false
-
-	for msg := range msgs {
-		expectedResponse := generateExpectedResponseMessage(testType)
-		flag = true
-		if string(msg.Body) != expectedResponse {
-			t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(msg.Body))
-		}
-		if flag {
-			break
-		}
+	message := <-msgs
+	expectedResponse := generateExpectedResponseMessage(testType)
+	if string(message.Body) != expectedResponse {
+		t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(message.Body))
 	}
 
 	err = deleteTask("1")
@@ -369,17 +355,10 @@ func TestFailedTimeLimitExceeded(t *testing.T) {
 		t.Fatalf("Failed to publish message: %s", err)
 	}
 
-	flag := false
-
-	for msg := range msgs {
-		expectedResponse := generateExpectedResponseMessage(testType)
-		flag = true
-		if string(msg.Body) != expectedResponse {
-			t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(msg.Body))
-		}
-		if flag {
-			break
-		}
+	message := <-msgs
+	expectedResponse := generateExpectedResponseMessage(testType)
+	if string(message.Body) != expectedResponse {
+		t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(message.Body))
 	}
 
 	err = deleteTask("1")
@@ -413,17 +392,61 @@ func TestCompilationError(t *testing.T) {
 		t.Fatalf("Failed to publish message: %s", err)
 	}
 
-	flag := false
+	message := <-msgs
+	expectedResponse := generateExpectedResponseMessage(testType)
+	if string(message.Body) != expectedResponse {
+		t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(message.Body))
+	}
 
-	for msg := range msgs {
-		expectedResponse := generateExpectedResponseMessage(testType)
-		flag = true
-		if string(msg.Body) != expectedResponse {
-			t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(msg.Body))
-		}
-		if flag {
-			break
-		}
+	err = deleteTask("1")
+	if err != nil {
+		t.Fatalf("Failed to delete task: %s", err)
+	}
+	tearDown(worker)
+}
+
+func TestNotExistingTask(t *testing.T) {
+	worker := setup()
+
+	msgs, err := consumeResponse(worker.channel, worker.queueName)
+	if err != nil {
+		t.Fatalf("Failed to consume messages: %s", err)
+	}
+
+	err = publishTask(worker.channel)
+	if err != nil {
+		t.Fatalf("Failed to publish message: %s", err)
+	}
+
+	message := <-msgs
+	if !strings.Contains(string(message.Body), "input src directory does not exist") {
+		t.Fatalf("Expected response to contain 'input src directory does not exist', got: %s", string(message.Body))
+	}
+
+	tearDown(worker)
+}
+
+func TestNotExistingSolution(t *testing.T) {
+	worker := setup()
+
+	msgs, err := consumeResponse(worker.channel, worker.queueName)
+	if err != nil {
+		t.Fatalf("Failed to consume messages: %s", err)
+	}
+
+	err = createTask("../tests/mock_files/Task.zip")
+	if err != nil {
+		t.Fatalf("Failed to create task: %s", err)
+	}
+
+	err = publishTask(worker.channel)
+	if err != nil {
+		t.Fatalf("Failed to publish message: %s", err)
+	}
+
+	message := <-msgs
+	if !strings.Contains(string(message.Body), "solution file does not exist") {
+		t.Fatalf("Expected response to contain 'solution file does not exist', got: %s", string(message.Body))
 	}
 
 	err = deleteTask("1")

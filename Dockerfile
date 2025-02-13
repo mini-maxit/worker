@@ -20,6 +20,7 @@ COPY . .
 RUN chmod +x wait-for-it.sh
 RUN chmod +x app_entry_script.sh
 RUN chmod +x chroot_init_script.sh
+RUN chmod +x run_tests.sh
 
 RUN sudo ./chroot_init_script.sh
 
