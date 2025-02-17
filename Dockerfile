@@ -17,8 +17,6 @@ RUN go mod download
 COPY . .
 
 # Make necessary scripts executable
-RUN chmod +x wait-for-it.sh
-RUN chmod +x app_entry_script.sh
 RUN chmod +x chroot_init_script.sh
 RUN chmod +x run_tests.sh
 
@@ -28,4 +26,4 @@ RUN sudo ./chroot_init_script.sh
 RUN CGO_ENABLED=0 GOOS=linux go build -o ./bin/worker-service ./cmd/main.go
 
 # Set entrypoint for the container
-ENTRYPOINT ["./app_entry_script.sh"]
+ENTRYPOINT [ "./bin/worker-service" ]
