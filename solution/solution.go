@@ -21,6 +21,8 @@ const (
 	Failed
 	// Means there was an internal error while executing the solution. This implies that the solution failed to execute
 	InternalError
+	// Means there was an error while initializing the executor
+	InitializationError
 )
 
 func (ss SolutionStatus) String() string {
@@ -33,6 +35,8 @@ func (ss SolutionStatus) String() string {
 		return "InternalError"
 	case CompilationError:
 		return "CompilationError"
+	case InitializationError:
+		return "InitializationError"
 	default:
 		return "Unknown"
 	}

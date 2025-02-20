@@ -76,8 +76,8 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		r.logger.Errorf("Error occured during initialization [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success:    false,
-			StatusCode: InternalError,
-			Code:       InternalError.String(),
+			StatusCode: InitializationError,
+			Code:       InitializationError.String(),
 			Message:    err.Error(),
 		}
 	}
