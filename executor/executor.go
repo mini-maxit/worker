@@ -3,6 +3,10 @@ package executor
 import (
 	"bytes"
 	"fmt"
+	"os/exec"
+	"strconv"
+
+	"github.com/mini-maxit/worker/logger"
 )
 
 type CommandConfig struct {
@@ -27,13 +31,40 @@ const (
 	ErInternalError ExecutorStatusCode = iota
 	ErSuccess
 	ErSignalRecieved
+	ErNetworkProhibited
+	ErJailed
+	ErTimeout
+	ErMemoryLimitExceeded
 )
 
 const CompileErrorFileName = "compile-err.err"
 
+const BaseChrootDir = "../tmp/chroot"
+
 type ExecutionResult struct {
 	StatusCode ExecutorStatusCode
 	Message    string
+}
+
+func (ec ExecutorStatusCode) String() string {
+	switch ec {
+	case ErInternalError:
+		return "InternalError"
+	case ErSuccess:
+		return "Success"
+	case ErSignalRecieved:
+		return "SignalRecieved"
+	case ErNetworkProhibited:
+		return "NetworkProhibited"
+	case ErJailed:
+		return "Jailed"
+	case ErTimeout:
+		return "Timeout"
+	case ErMemoryLimitExceeded:
+		return "MemoryLimitExceeded"
+	default:
+		return "Unknown"
+	}
 }
 
 func (er *ExecutionResult) String() string {
@@ -44,4 +75,22 @@ func (er *ExecutionResult) String() string {
 	out.WriteString("}")
 
 	return out.String()
+}
+
+func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
+	logger := logger.NewNamedLogger("executor")
+	logger.Infof("Restricting command %s", executablePath)
+
+	executeCommand := fmt.Sprintf("./%s", executablePath)
+	timeLimitSecondsString := strconv.Itoa(timeLimit)
+
+	args := []string{
+		"chroot",
+		BaseChrootDir,
+		"timeout",
+		timeLimitSecondsString,
+		executeCommand,
+	}
+
+	return exec.Command(args[0], args[1:]...)
 }
