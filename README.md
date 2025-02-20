@@ -4,10 +4,6 @@
 
 The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are stored using the file storage service and sent back to the backend service.
 
-
-
-
-
 ## Message Structure
 
 ### Message Headers
@@ -92,3 +88,10 @@ In case of an error, the worker will return an error message structured as follo
 ## Error Handling
 
 The worker implements retry logic for processing messages. If a message fails to process after three attempts, it is dropped, and an error message is sent to the designated backend queue. Error messages will include relevant details to assist in troubleshooting.
+
+## Development
+
+We use pre-commit hooks together with popular linters to enchance our code. Some of them are not installed by default:
+
+- `go-imports` - golang.org/x/tools/cmd/goimports
+- `golangci-lint` - https://github.com/golangci/golangci-lint

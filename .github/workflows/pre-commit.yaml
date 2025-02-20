@@ -14,5 +14,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install dependency tools
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest | go install golang.org/x/tools/cmd/goimports@latest
+
       - name: Set up pre-commit Cache
         uses: pre-commit/action@v3.0.1
