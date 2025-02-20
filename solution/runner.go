@@ -32,7 +32,7 @@ func GetSolutionFileNameWithExtension(solutionName string, language LanguageType
 }
 
 func StringToLanguageType(s string) (LanguageType, error) {
-	if lt, ok := languageTypeMap[s]; ok {
+	if lt, ok := languageTypeMap[strings.ToUpper(s)]; ok {
 		return lt, nil
 	}
 	return 0, ErrInvalidLanguageType
