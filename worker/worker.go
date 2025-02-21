@@ -186,11 +186,14 @@ func (w *Worker) processMessage(queueMessage QueueMessage, msg *amqp.Delivery) e
 
 	solutionResult := runSolution(task, queueMessage.MessageID)
 
-	w.logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
-
-	err = w.storeSolutionResult(solutionResult, task, queueMessage, w.fileStorageUrl)
-	if err != nil {
-		return err
+	if solutionResult.StatusCode != solution.InitializationError {
+		w.logger.Infof("Storing solution result [MsgID: %s]", queueMessage.MessageID)
+		err = w.storeSolutionResult(solutionResult, task, queueMessage, w.fileStorageUrl)
+		if err != nil {
+			return err
+		}
+	} else {
+		w.logger.Infof("Initialization error occurred. Skipping storing solution result [MsgID: %s]", queueMessage.MessageID)
 	}
 
 	w.logger.Infof("Sending response message [MsgID: %s]", queueMessage.MessageID)
