@@ -290,15 +290,20 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 }
 
 func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
-	oldHeaderCount := msg.Headers["x-retry-count"]
-
-	if oldHeaderCount.(int32) >= maxRetries {
+	retryCount := int32(0)
+	if val, ok := msg.Headers["x-retry-count"].(int32); ok {
+		retryCount = val
+	}
+	if retryCount >= maxRetries {
 		return &amqp.Delivery{}
 	}
-	newHeaderCount := oldHeaderCount.(int32) + 1
+	retryCount++
 
-	// Update new messege header
-	newMsg := amqp.Delivery{Body: msg.Body, Headers: amqp.Table{"x-retry-count": newHeaderCount}, ReplyTo: string(msg.ReplyTo)}
+	newMsg := amqp.Delivery{
+		Body:    msg.Body,
+		Headers: amqp.Table{"x-retry-count": retryCount},
+		ReplyTo: msg.ReplyTo,
+	}
 
 	return &newMsg
 }

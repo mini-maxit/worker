@@ -8,10 +8,6 @@ type ExecutorConfig struct {
 	// Placeholder, maybe verifier will be stored here
 }
 
-const (
-	ExitCodeTimeout = 124
-)
-
 // Creates config with default base values
 func NewDefaultExecutorConfig() *ExecutorConfig {
 	return &ExecutorConfig{}

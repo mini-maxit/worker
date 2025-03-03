@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/mini-maxit/worker/logger"
@@ -31,8 +30,6 @@ type CppExecutor struct {
 }
 
 func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
-	e.logger.Infof("Executing command [MsgID: %s]", messageID)
-
 	id := uuid.New()
 	chrootExecPath := id.String()
 	rootToChrootExecPath := fmt.Sprintf("%s/%s", BaseChrootDir, chrootExecPath)
@@ -42,8 +39,8 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not copy executable to chroot. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			StatusCode: ErInternalError,
-			Message:    fmt.Sprintf("could not copy executable to chroot. %s", err.Error()),
+			ExitCode: -1,
+			Message:  fmt.Sprintf("could not copy executable to chroot. %s", err.Error()),
 		}
 	}
 	defer func() {
@@ -57,8 +54,8 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not change permissions of the executable. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			StatusCode: ErInternalError,
-			Message:    fmt.Sprintf("could not change permissions of the executable. %s", err.Error()),
+			ExitCode: -1,
+			Message:  fmt.Sprintf("could not change permissions of the executable. %s", err.Error()),
 		}
 	}
 
@@ -71,8 +68,8 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not open stdout file. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			StatusCode: ErInternalError,
-			Message:    fmt.Sprintf("could not open stdout file. %s", err.Error()),
+			ExitCode: InternalError,
+			Message:  fmt.Sprintf("could not open stdout file. %s", err.Error()),
 		}
 	}
 	restrictedCmd.Stdout = stdout
@@ -80,12 +77,12 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 
 	// Open stderr file
 	e.logger.Infof("Opening stderr file [MsgID: %s]", messageID)
-	stderr, err := os.OpenFile(commandConfig.StderrPath, os.O_RDWR|os.O_CREATE, 0755)
+	stderr, err := os.OpenFile(commandConfig.StderrPath, os.O_RDWR|os.O_CREATE|os.O_SYNC, 0755)
 	if err != nil {
 		e.logger.Errorf("Could not open stderr file. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			StatusCode: ErInternalError,
-			Message:    fmt.Sprintf("could not open stderr file. %s", err.Error()),
+			ExitCode: InternalError,
+			Message:  fmt.Sprintf("could not open stderr file. %s", err.Error()),
 		}
 	}
 	restrictedCmd.Stderr = stderr
@@ -100,8 +97,8 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 		if err != nil {
 			e.logger.Errorf("Could not open stdin file. %s [MsgID: %s]", err.Error(), messageID)
 			return &ExecutionResult{
-				StatusCode: ErInternalError,
-				Message:    fmt.Sprintf("could not open stdin file in chroot. %s", err.Error()),
+				ExitCode: InternalError,
+				Message:  fmt.Sprintf("could not open stdin file in chroot. %s", err.Error()),
 			}
 		}
 		restrictedCmd.Stdin = stdin
@@ -113,64 +110,18 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	runErr := restrictedCmd.Run()
 	exitCode := restrictedCmd.ProcessState.ExitCode()
 
-	if runErr == nil {
-		var statusCode ExecutorStatusCode
-		switch exitCode {
-		case -1:
-			statusCode = ErSignalRecieved
-		case 0:
-			statusCode = ErSuccess
-		default:
-			e.logger.Errorf("Command exited with unknown status code. %d [MsgID: %s]", restrictedCmd.ProcessState.ExitCode(), messageID)
-			return &ExecutionResult{
-				StatusCode: ErInternalError,
-				Message:    fmt.Sprintf("command exited with unknown status code. %d", restrictedCmd.ProcessState.ExitCode()),
-			}
+	errorMessage := ""
+	if runErr != nil {
+		errorMessage = runErr.Error()
+		e.logger.Infof("Appending error message to stderr file [MsgID: %s] %s", messageID, errorMessage)
+		if _, err := stderr.WriteString(errorMessage); err != nil {
+			e.logger.Errorf("Could not write error message to stderr file. %s [MsgID: %s]", err.Error(), messageID)
 		}
+	}
 
-		e.logger.Infof("Finished executing command with status code: %d [MsgID: %s]", statusCode, messageID)
-		return &ExecutionResult{
-			StatusCode: statusCode,
-			Message:    "Command executed successfully",
-		}
-	} else {
-		e.logger.Infof("Command exited with status code %d [MsgID: %s]", exitCode, messageID)
-		if exitCode == ExitCodeTimeout {
-			e.logger.Errorf("Command timed out [MsgID: %s]", messageID)
-			timeOutContent := fmt.Sprintf("The command timed out after %d seconds\n", commandConfig.TimeLimit)
-			fmt.Fprint(stderr, timeOutContent)
-			return &ExecutionResult{
-				StatusCode: ErTimeout,
-				Message:    "The command timed out",
-			}
-		}
-
-		// Read stderr file
-		stderrContent, err := os.ReadFile(stderr.Name())
-		if err != nil {
-			e.logger.Errorf("Could not read stderr file. %s [MsgID: %s]", err.Error(), messageID)
-			return &ExecutionResult{
-				StatusCode: ErInternalError,
-				Message:    fmt.Sprintf("could not read stderr file. %s", err.Error()),
-			}
-		}
-		errorOutput := string(stderrContent)
-		e.logger.Errorf("Error executing command. %s [MsgID: %s]", errorOutput, messageID)
-
-		// Check if the command was blocked by chroot
-		if strings.Contains(errorOutput, "chroot") {
-			e.logger.Errorf("Command blocked due to chroot restrictions [MsgID: %s]", messageID)
-			return &ExecutionResult{
-				StatusCode: ErJailed,
-				Message:    fmt.Sprintf("command blocked due to chroot restrictions. %s", errorOutput),
-			}
-		}
-
-		e.logger.Errorf("Error executing command. %s [MsgID: %s]", errorOutput, messageID)
-		return &ExecutionResult{
-			StatusCode: ErInternalError,
-			Message:    fmt.Sprintf("error executing command. %s", errorOutput),
-		}
+	return &ExecutionResult{
+		ExitCode: exitCode,
+		Message:  errorMessage,
 	}
 }
 

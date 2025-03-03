@@ -25,53 +25,40 @@ type Executor interface {
 	String() string
 }
 
-type ExecutorStatusCode int
-
-const (
-	ErInternalError ExecutorStatusCode = iota
-	ErSuccess
-	ErSignalRecieved
-	ErNetworkProhibited
-	ErJailed
-	ErTimeout
-	ErMemoryLimitExceeded
-)
-
 const CompileErrorFileName = "compile-err.err"
 
 const BaseChrootDir = "../tmp/chroot"
 
-type ExecutionResult struct {
-	StatusCode ExecutorStatusCode
-	Message    string
-}
+const (
+	Success             = 0
+	InternalError       = 1
+	TimeLimitExceeded   = 124
+	MemoryLimitExceeded = 137
+)
 
-func (ec ExecutorStatusCode) String() string {
-	switch ec {
-	case ErInternalError:
-		return "InternalError"
-	case ErSuccess:
+func ExitCodeToString(exitCode int) string {
+	switch exitCode {
+	case Success:
 		return "Success"
-	case ErSignalRecieved:
-		return "SignalRecieved"
-	case ErNetworkProhibited:
-		return "NetworkProhibited"
-	case ErJailed:
-		return "Jailed"
-	case ErTimeout:
-		return "Timeout"
-	case ErMemoryLimitExceeded:
+	case TimeLimitExceeded:
+		return "TimeLimitExceeded"
+	case MemoryLimitExceeded:
 		return "MemoryLimitExceeded"
 	default:
 		return "Unknown"
 	}
 }
 
+type ExecutionResult struct {
+	ExitCode int
+	Message  string
+}
+
 func (er *ExecutionResult) String() string {
 	var out bytes.Buffer
 
 	out.WriteString("ExecutionResult{")
-	out.WriteString(fmt.Sprintf("StatusCode: %d, ", er.StatusCode))
+	out.WriteString(fmt.Sprintf("ExitCode: %d, ", er.ExitCode))
 	out.WriteString("}")
 
 	return out.String()
@@ -88,6 +75,7 @@ func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
 		"chroot",
 		BaseChrootDir,
 		"timeout",
+		"--verbose",
 		timeLimitSecondsString,
 		executeCommand,
 	}
