@@ -8,6 +8,8 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+const numTries = 10
+
 func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	logger := logger.NewNamedLogger("rabbitmq")
 
@@ -17,11 +19,11 @@ func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	var err error
 	var conn *amqp.Connection
 
-	for v := range 5 {
+	for v := range numTries {
 		conn, err = amqp.Dial(rabbitMQURL)
 		if err != nil {
 			logger.Warnf("Failed to connect to RabbitMQ: %s", err.Error())
-			time.Sleep(2*time.Second + time.Duration(v))
+			time.Sleep(2 * time.Second * time.Duration(v))
 			continue
 		}
 	}
