@@ -272,7 +272,7 @@ func generateExpectedResponseMessage(msgType MessageType) string {
 		testResult = `"TestResults":[{"Passed":true,"ErrorMessage":"","Order":1}]`
 	case FailedTimeLimitExceeded:
 		code = "Timeout"
-		message = "The command timed out"
+		message = "Some test cases failed due to time limit exceeded"
 		statusCode = "3"
 		sucess = false
 		testResult = `"TestResults":null`
