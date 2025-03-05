@@ -20,7 +20,8 @@ services:
       - FILESTORAGE_HOST=file-storage
       - FILESTORAGE_PORT=8888
   file-storage:
-    image: maxit/file-storage
+    image: file-storage
+    pull_policy: never
     container_name: file-storage
     ports:
       - "8888:8888"

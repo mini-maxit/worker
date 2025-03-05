@@ -3,16 +3,14 @@ package utils
 import (
 	"archive/tar"
 	"compress/gzip"
-	"errors"
 	"io"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
-)
 
-var errUnknownFileType = errors.New("unknown file type")
-var errUnknownLanguageType = errors.New("unknown language type")
+	"github.com/mini-maxit/worker/internal/errors"
+)
 
 // Attemts to close the file, and panics if something goes wrong
 func CloseFile(file *os.File) {
@@ -126,7 +124,7 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 			}
 
 		default:
-			return errUnknownFileType
+			return errors.ErrUnknownFileType
 		}
 	}
 	return nil
@@ -210,7 +208,7 @@ func GetSolutionFileNameWithExtension(SolutionFileBaseName string, languageType 
 	case "CPP":
 		return SolutionFileBaseName + ".cpp", nil
 	default:
-		return "", errUnknownLanguageType
+		return "", errors.ErrInvalidLanguageType
 	}
 }
 

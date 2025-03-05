@@ -1,18 +1,17 @@
 package solution
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/mini-maxit/worker/executor"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/verifier"
 	"go.uber.org/zap"
 )
-
-var ErrInvalidLanguageType = errors.New("invalid language type")
 
 type LanguageType int
 
@@ -28,14 +27,14 @@ func GetSolutionFileNameWithExtension(solutionName string, language LanguageType
 	if extension, ok := languageExtensionMap[language]; ok {
 		return fmt.Sprintf("%s%s", solutionName, extension), nil
 	}
-	return "", ErrInvalidLanguageType
+	return "", errors.ErrInvalidLanguageType
 }
 
 func StringToLanguageType(s string) (LanguageType, error) {
 	if lt, ok := languageTypeMap[strings.ToUpper(s)]; ok {
 		return lt, nil
 	}
-	return 0, ErrInvalidLanguageType
+	return 0, errors.ErrInvalidLanguageType
 }
 
 const (
@@ -69,7 +68,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success: false,
-			Message: "invalid language type supplied",
+			Message: constants.SolutionMessageInvalidLanguageType,
 		}
 	}
 	if err != nil {
@@ -136,7 +135,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
 	solutionStatus := Success
-	solutionMessage := "solution executed successfully"
+	solutionMessage := constants.SolutionMessageSuccess
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, (i + 1)) // May be dropped in the future
@@ -150,7 +149,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 
 		execResult := exec.ExecuteCommand(filePath, messageID, commandConfig)
 		switch execResult.ExitCode {
-		case executor.Success:
+		case constants.ExitCodeSuccess:
 			r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
 			expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i + 1))
 			result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
@@ -167,26 +166,26 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 				ErrorMessage: difference,
 				Order:        (i + 1),
 			}
-		case executor.TimeLimitExceeded:
+		case constants.ExitCodeTimeLimitExceeded:
 			r.logger.Errorf("Time limit exceeded while executing solution [MsgID: %s]", messageID)
 			testCases[i] = TestResult{
 				Passed:       false,
-				ErrorMessage: "time limit exceeded",
+				ErrorMessage: constants.TestMessageTimeLimitExceeded,
 				Order:        (i + 1),
 			}
 			solutionSuccess = false
 			solutionStatus = RuntimeError
-			solutionMessage = "Some test cases failed due to time limit exceeded"
-		case executor.MemoryLimitExceeded:
+			solutionMessage = constants.SolutionMessageTimeout
+		case constants.ExitCodeMemoryLimitExceeded:
 			r.logger.Errorf("Memory limit exceeded while executing solution [MsgID: %s]", messageID)
 			testCases[i] = TestResult{
 				Passed:       false,
-				ErrorMessage: "memory limit exceeded",
+				ErrorMessage: constants.TestMessageMemoryLimitExceeded,
 				Order:        (i + 1),
 			}
 			solutionSuccess = false
 			solutionStatus = RuntimeError
-			solutionMessage = "Some test cases failed due to memory limit exceeded"
+			solutionMessage = constants.SolutionMessageMemoryLimitExceeded
 		default:
 			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
 			testCases[i] = TestResult{
@@ -196,7 +195,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 			}
 			solutionSuccess = false
 			solutionStatus = RuntimeError
-			solutionMessage = "Some test cases failed due to runtime error"
+			solutionMessage = constants.SolutionMessageRuntimeError
 		}
 	}
 

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/mini-maxit/worker/internal/config"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

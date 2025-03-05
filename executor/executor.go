@@ -6,7 +6,8 @@ import (
 	"os/exec"
 	"strconv"
 
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/logger"
 )
 
 type CommandConfig struct {
@@ -25,25 +26,16 @@ type Executor interface {
 	String() string
 }
 
-const CompileErrorFileName = "compile-err.err"
-
-const BaseChrootDir = "../tmp/chroot"
-
-const (
-	Success             = 0
-	InternalError       = 1
-	TimeLimitExceeded   = 124
-	MemoryLimitExceeded = 137
-)
-
 func ExitCodeToString(exitCode int) string {
 	switch exitCode {
-	case Success:
+	case constants.ExitCodeSuccess:
 		return "Success"
-	case TimeLimitExceeded:
+	case constants.ExitCodeTimeLimitExceeded:
 		return "TimeLimitExceeded"
-	case MemoryLimitExceeded:
+	case constants.ExitCodeMemoryLimitExceeded:
 		return "MemoryLimitExceeded"
+	case constants.ExitCodeInternalError:
+		return "InternalError"
 	default:
 		return "Unknown"
 	}
@@ -73,7 +65,7 @@ func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
 
 	args := []string{
 		"chroot",
-		BaseChrootDir,
+		constants.BaseChrootDir,
 		"timeout",
 		"--verbose",
 		timeLimitSecondsString,

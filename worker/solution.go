@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"

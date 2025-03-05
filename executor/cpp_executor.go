@@ -7,21 +7,14 @@ import (
 	"os/exec"
 
 	"github.com/google/uuid"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
-const (
-	CPP_11 = "11"
-	CPP_14 = "14"
-	CPP_17 = "17"
-	CPP_20 = "20"
-)
-
-var CPP_AVAILABLE_VERSION = []string{CPP_11, CPP_14, CPP_17, CPP_20}
-
-var ErrInvalidVersion = fmt.Errorf("invalid version supplied")
+var CPP_AVAILABLE_VERSION = []string{constants.CPP_11, constants.CPP_14, constants.CPP_17, constants.CPP_20}
 
 type CppExecutor struct {
 	version string
@@ -32,7 +25,7 @@ type CppExecutor struct {
 func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
 	id := uuid.New()
 	chrootExecPath := id.String()
-	rootToChrootExecPath := fmt.Sprintf("%s/%s", BaseChrootDir, chrootExecPath)
+	rootToChrootExecPath := fmt.Sprintf("%s/%s", constants.BaseChrootDir, chrootExecPath)
 
 	// Copy the executable to the chroot
 	err := utils.CopyFile(command, rootToChrootExecPath)
@@ -68,7 +61,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not open stdout file. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			ExitCode: InternalError,
+			ExitCode: constants.ExitCodeInternalError,
 			Message:  fmt.Sprintf("could not open stdout file. %s", err.Error()),
 		}
 	}
@@ -81,7 +74,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not open stderr file. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			ExitCode: InternalError,
+			ExitCode: constants.ExitCodeInternalError,
 			Message:  fmt.Sprintf("could not open stderr file. %s", err.Error()),
 		}
 	}
@@ -97,7 +90,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 		if err != nil {
 			e.logger.Errorf("Could not open stdin file. %s [MsgID: %s]", err.Error(), messageID)
 			return &ExecutionResult{
-				ExitCode: InternalError,
+				ExitCode: constants.ExitCodeInternalError,
 				Message:  fmt.Sprintf("could not open stdin file in chroot. %s", err.Error()),
 			}
 		}
@@ -148,17 +141,17 @@ func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, er
 	// Prepare command for execution
 	var versionFlag string
 	switch e.version {
-	case CPP_11:
+	case constants.CPP_11:
 		versionFlag = "c++11"
-	case CPP_14:
+	case constants.CPP_14:
 		versionFlag = "c++14"
-	case CPP_17:
+	case constants.CPP_17:
 		versionFlag = "c++17"
-	case CPP_20:
+	case constants.CPP_20:
 		versionFlag = "c++20"
 	default:
 		e.logger.Errorf("Invalid C++ version supplied [MsgID: %s]", messageID)
-		return "", ErrInvalidVersion
+		return "", errors.ErrInvalidVersion
 	}
 	outFilePath := fmt.Sprintf("%s/solution", dir)
 	// Correctly pass the command and its arguments as separate strings
@@ -173,7 +166,7 @@ func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, er
 		// Save stderr to a file
 		e.logger.Errorf("Error during compilation. %s [MsgID: %s]", cmdErr.Error(), messageID)
 		e.logger.Infof("Creating stderr file [MsgID: %s]", messageID)
-		errPath := fmt.Sprintf("%s/%s", dir, CompileErrorFileName)
+		errPath := fmt.Sprintf("%s/%s", dir, constants.CompileErrorFileName)
 		file, err := os.Create(errPath)
 		if err != nil {
 			e.logger.Errorf("Could not create stderr file. %s [MsgID: %s]", err.Error(), messageID)

@@ -4,12 +4,11 @@ import (
 	"os"
 	"sync"
 
+	"github.com/mini-maxit/worker/internal/constants"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
-
-const logPath = "./logger/logs/worker/log.txt"
 
 const (
 	timeKey   = "time"
@@ -29,7 +28,7 @@ func InitializeLogger() {
 		currentLevel = zap.NewAtomicLevelAt(zap.InfoLevel) // Default to InfoLevel
 
 		fileSync := zapcore.AddSync(&lumberjack.Logger{
-			Filename: logPath,
+			Filename: constants.DefaultLogPath,
 			MaxAge:   1,
 			Compress: true,
 		})
