@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/mini-maxit/worker/internal/config"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/worker"
 )
 

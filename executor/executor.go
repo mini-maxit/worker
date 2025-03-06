@@ -6,7 +6,8 @@ import (
 	"os/exec"
 	"strconv"
 
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/logger"
 )
 
 type CommandConfig struct {
@@ -25,53 +26,31 @@ type Executor interface {
 	String() string
 }
 
-type ExecutorStatusCode int
-
-const (
-	ErInternalError ExecutorStatusCode = iota
-	ErSuccess
-	ErSignalRecieved
-	ErNetworkProhibited
-	ErJailed
-	ErTimeout
-	ErMemoryLimitExceeded
-)
-
-const CompileErrorFileName = "compile-err.err"
-
-const BaseChrootDir = "../tmp/chroot"
-
-type ExecutionResult struct {
-	StatusCode ExecutorStatusCode
-	Message    string
-}
-
-func (ec ExecutorStatusCode) String() string {
-	switch ec {
-	case ErInternalError:
-		return "InternalError"
-	case ErSuccess:
+func ExitCodeToString(exitCode int) string {
+	switch exitCode {
+	case constants.ExitCodeSuccess:
 		return "Success"
-	case ErSignalRecieved:
-		return "SignalRecieved"
-	case ErNetworkProhibited:
-		return "NetworkProhibited"
-	case ErJailed:
-		return "Jailed"
-	case ErTimeout:
-		return "Timeout"
-	case ErMemoryLimitExceeded:
+	case constants.ExitCodeTimeLimitExceeded:
+		return "TimeLimitExceeded"
+	case constants.ExitCodeMemoryLimitExceeded:
 		return "MemoryLimitExceeded"
+	case constants.ExitCodeInternalError:
+		return "InternalError"
 	default:
 		return "Unknown"
 	}
+}
+
+type ExecutionResult struct {
+	ExitCode int
+	Message  string
 }
 
 func (er *ExecutionResult) String() string {
 	var out bytes.Buffer
 
 	out.WriteString("ExecutionResult{")
-	out.WriteString(fmt.Sprintf("StatusCode: %d, ", er.StatusCode))
+	out.WriteString(fmt.Sprintf("ExitCode: %d, ", er.ExitCode))
 	out.WriteString("}")
 
 	return out.String()
@@ -86,8 +65,9 @@ func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
 
 	args := []string{
 		"chroot",
-		BaseChrootDir,
+		constants.BaseChrootDir,
 		"timeout",
+		"--verbose",
 		timeLimitSecondsString,
 		executeCommand,
 	}

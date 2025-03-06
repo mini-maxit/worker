@@ -1,18 +1,17 @@
 package solution
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/mini-maxit/worker/executor"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/verifier"
 	"go.uber.org/zap"
 )
-
-var ErrInvalidLanguageType = errors.New("invalid language type")
 
 type LanguageType int
 
@@ -28,14 +27,14 @@ func GetSolutionFileNameWithExtension(solutionName string, language LanguageType
 	if extension, ok := languageExtensionMap[language]; ok {
 		return fmt.Sprintf("%s%s", solutionName, extension), nil
 	}
-	return "", ErrInvalidLanguageType
+	return "", errors.ErrInvalidLanguageType
 }
 
 func StringToLanguageType(s string) (LanguageType, error) {
 	if lt, ok := languageTypeMap[strings.ToUpper(s)]; ok {
 		return lt, nil
 	}
-	return 0, ErrInvalidLanguageType
+	return 0, errors.ErrInvalidLanguageType
 }
 
 const (
@@ -69,7 +68,7 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
 		return SolutionResult{
 			Success: false,
-			Message: "invalid language type supplied",
+			Message: constants.SolutionMessageInvalidLanguageType,
 		}
 	}
 	if err != nil {
@@ -135,6 +134,8 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]TestResult, len(inputFiles))
 	solutionSuccess := true
+	solutionStatus := Success
+	solutionMessage := constants.SolutionMessageSuccess
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, userOutputDir, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", solution.BaseDir, userOutputDir, (i + 1)) // May be dropped in the future
@@ -147,33 +148,54 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 		}
 
 		execResult := exec.ExecuteCommand(filePath, messageID, commandConfig)
-		if execResult.StatusCode != executor.ErSuccess {
-			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
-			return SolutionResult{
-				OutputDir:  userOutputDir,
-				Success:    false,
-				StatusCode: Failed,
-				Code:       execResult.StatusCode.String(),
-				Message:    execResult.Message,
+		switch execResult.ExitCode {
+		case constants.ExitCodeSuccess:
+			r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
+			expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i + 1))
+			result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
+			if err != nil {
+				r.logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
+				solutionSuccess = false
+				difference = err.Error()
 			}
-		}
-
-		// Compare output with expected output
-		r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
-		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", solution.BaseDir, solution.OutputDir, (i + 1))
-		result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
-		if err != nil {
-			r.logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
+			if !result {
+				solutionSuccess = false
+			}
+			testCases[i] = TestResult{
+				Passed:       result,
+				ErrorMessage: difference,
+				Order:        (i + 1),
+			}
+		case constants.ExitCodeTimeLimitExceeded:
+			r.logger.Errorf("Time limit exceeded while executing solution [MsgID: %s]", messageID)
+			testCases[i] = TestResult{
+				Passed:       false,
+				ErrorMessage: constants.TestMessageTimeLimitExceeded,
+				Order:        (i + 1),
+			}
 			solutionSuccess = false
-			difference = err.Error()
-		}
-		if !result {
+			solutionStatus = RuntimeError
+			solutionMessage = constants.SolutionMessageTimeout
+		case constants.ExitCodeMemoryLimitExceeded:
+			r.logger.Errorf("Memory limit exceeded while executing solution [MsgID: %s]", messageID)
+			testCases[i] = TestResult{
+				Passed:       false,
+				ErrorMessage: constants.TestMessageMemoryLimitExceeded,
+				Order:        (i + 1),
+			}
 			solutionSuccess = false
-		}
-		testCases[i] = TestResult{
-			Passed:       result,
-			ErrorMessage: difference,
-			Order:        (i + 1),
+			solutionStatus = RuntimeError
+			solutionMessage = constants.SolutionMessageMemoryLimitExceeded
+		default:
+			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
+			testCases[i] = TestResult{
+				Passed:       false,
+				ErrorMessage: execResult.Message,
+				Order:        (i + 1),
+			}
+			solutionSuccess = false
+			solutionStatus = RuntimeError
+			solutionMessage = constants.SolutionMessageRuntimeError
 		}
 	}
 
@@ -181,9 +203,9 @@ func (r *Runner) RunSolution(solution *Solution, messageID string) SolutionResul
 	return SolutionResult{
 		OutputDir:   userOutputDir,
 		Success:     solutionSuccess,
-		StatusCode:  Success,
-		Code:        Success.String(),
-		Message:     "solution executed successfully",
+		StatusCode:  solutionStatus,
+		Code:        solutionStatus.String(),
+		Message:     solutionMessage,
 		TestResults: testCases,
 	}
 }

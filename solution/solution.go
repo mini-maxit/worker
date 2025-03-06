@@ -23,6 +23,8 @@ const (
 	InternalError
 	// Means there was an error while initializing the executor
 	InitializationError
+	// Means there was an runtime error while executing the solution
+	RuntimeError
 )
 
 func (ss SolutionStatus) String() string {
@@ -37,6 +39,8 @@ func (ss SolutionStatus) String() string {
 		return "CompilationError"
 	case InitializationError:
 		return "InitializationError"
+	case RuntimeError:
+		return "RuntimeError"
 	default:
 		return "Unknown"
 	}
