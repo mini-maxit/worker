@@ -12,7 +12,8 @@ import (
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/config"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/worker"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap/zapcore"
@@ -257,7 +258,7 @@ func deleteTask(taskID string) error {
 
 func generateExpectedResponseMessage(msgType MessageType) string {
 	var expectedResponse strings.Builder
-	var statusCode string
+	var statusCode solution.SolutionStatus
 	var message string
 	var code string
 	var sucess bool
@@ -265,20 +266,20 @@ func generateExpectedResponseMessage(msgType MessageType) string {
 
 	switch msgType {
 	case Success:
-		code = "Success"
-		statusCode = "1"
+		code = solution.Success.String()
+		statusCode = solution.Success
 		message = "solution executed successfully"
 		sucess = true
 		testResult = `"TestResults":[{"Passed":true,"ErrorMessage":"","Order":1}]`
 	case FailedTimeLimitExceeded:
-		code = "Timeout"
-		message = "Some test cases failed due to time limit exceeded"
-		statusCode = "3"
+		code = solution.RuntimeError.String()
+		message = "some test cases failed due to time limit exceeded"
+		statusCode = solution.RuntimeError
 		sucess = false
-		testResult = `"TestResults":null`
+		testResult = `"TestResults":[{"Passed":false,"ErrorMessage":"time limit exceeded","Order":1}]`
 	case CompilationError:
-		code = "CompilationError"
-		statusCode = "2"
+		code = solution.CompilationError.String()
+		statusCode = solution.CompilationError
 		message = "exit status 1"
 		sucess = false
 		testResult = `"TestResults":null`
@@ -286,7 +287,7 @@ func generateExpectedResponseMessage(msgType MessageType) string {
 		code = "Unknown"
 	}
 
-	message = fmt.Sprintf(`{"message_id":"adsa","result":{"OutputDir":"user-output","Success":%t,"StatusCode":%s,"Code":"%s","Message":"%s",%s}}`, sucess, statusCode, code, message, testResult)
+	message = fmt.Sprintf(`{"message_id":"adsa","result":{"OutputDir":"user-output","Success":%t,"StatusCode":%d,"Code":"%s","Message":"%s",%s}}`, sucess, statusCode, code, message, testResult)
 
 	expectedResponse.WriteString(message)
 

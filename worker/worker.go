@@ -3,7 +3,6 @@ package worker
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -12,9 +11,10 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/config"
-	"github.com/mini-maxit/worker/logger"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/solution"
 	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -42,16 +42,6 @@ type ResponseMessage struct {
 	MessageID string                  `json:"message_id"`
 	Result    solution.SolutionResult `json:"result"`
 }
-
-const solutionFileBaseName = "solution"
-
-const inputDirName = "inputs"
-
-const outputDirName = "outputs"
-
-const maxRetries = 2
-
-var errorFailedToStore = errors.New("failed to store the solution result")
 
 func NewWorker(conn *amqp.Connection, envConfig *config.Config) *Worker {
 	ch := NewRabbitMQChannel(conn)
@@ -169,7 +159,7 @@ func (w *Worker) processMessage(queueMessage QueueMessage, msg *amqp.Delivery) e
 		return err
 	}
 
-	task.SolutionFileName, err = solution.GetSolutionFileNameWithExtension(solutionFileBaseName, task.LanguageType)
+	task.SolutionFileName, err = solution.GetSolutionFileNameWithExtension(constants.SolutionFileBaseName, task.LanguageType)
 	if err != nil {
 		return err
 	}
@@ -177,8 +167,8 @@ func (w *Worker) processMessage(queueMessage QueueMessage, msg *amqp.Delivery) e
 	task.LanguageVersion = queueMessage.LanguageVersion
 	task.TimeLimits = queueMessage.TimeLimits
 	task.MemoryLimits = queueMessage.MemoryLimits
-	task.InputDirName = inputDirName
-	task.OutputDirName = outputDirName
+	task.InputDirName = constants.InputDirName
+	task.OutputDirName = constants.OutputDirName
 
 	w.logger.Infof("Data for solution runner retrieved [MsgID: %s]", queueMessage.MessageID)
 
@@ -243,7 +233,7 @@ func (w *Worker) handleError(queueMessage QueueMessage, msg *amqp.Delivery, err 
 	w.logger.Errorf("Error processing message [MsgID: %s]: %s", queueMessage.MessageID, err)
 
 	newMsg := getNewMsg(msg)
-	if newMsg.Body == nil {
+	if newMsg == nil {
 		w.logger.Infof("Dropping message [MsgID: %s] after 3 retries", queueMessage.MessageID)
 
 		failedSolutionResult := solution.SolutionResult{
@@ -294,8 +284,8 @@ func getNewMsg(msg *amqp.Delivery) *amqp.Delivery {
 	if val, ok := msg.Headers["x-retry-count"].(int32); ok {
 		retryCount = val
 	}
-	if retryCount >= maxRetries {
-		return &amqp.Delivery{}
+	if retryCount >= constants.MaxRetries {
+		return nil
 	}
 	retryCount++
 
@@ -336,8 +326,8 @@ func (w *Worker) storeSolutionResult(solutionResult solution.SolutionResult, tas
 	outputsFolderPath := task.TaskDir + "/" + solutionResult.OutputDir
 
 	if solutionResult.StatusCode == solution.CompilationError {
-		compilationErrorPath := task.TaskDir + "/" + executor.CompileErrorFileName
-		err := os.Rename(compilationErrorPath, outputsFolderPath+"/"+executor.CompileErrorFileName)
+		compilationErrorPath := task.TaskDir + "/" + constants.CompileErrorFileName
+		err := os.Rename(compilationErrorPath, outputsFolderPath+"/"+constants.CompileErrorFileName)
 		if err != nil {
 			return err
 		}
@@ -405,7 +395,7 @@ func (w *Worker) storeSolutionResult(solutionResult solution.SolutionResult, tas
 			w.logger.Errorf("Failed to read response body: %s", err)
 		}
 		w.logger.Errorf("Failed to store the solution result: %s", bodyBytes.String())
-		return errorFailedToStore
+		return errors.ErrFailedToStoreSolution
 	}
 
 	return nil

@@ -7,16 +7,8 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
-	"github.com/mini-maxit/worker/logger"
-)
-
-const (
-	DefailtRabbitmqHost     = "localhost"
-	DefaultRabbitmqUser     = "guest"
-	DefaultRabbitmqPassword = "guest"
-	DefaultRabbitmqPort     = "5672"
-	DefaultFileStorageHost  = "file-storage"
-	DefaultFilesStoragePort = "8888"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/logger"
 )
 
 type Config struct {
@@ -44,13 +36,13 @@ func NewConfig() *Config {
 
 	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
 	if rabbitmqHost == "" {
-		rabbitmqHost = DefailtRabbitmqHost
-		logger.Warnf("RABBITMQ_HOST is not set, using default value %s", DefailtRabbitmqHost)
+		rabbitmqHost = constants.DefailtRabbitmqHost
+		logger.Warnf("RABBITMQ_HOST is not set, using default value %s", constants.DefailtRabbitmqHost)
 	}
 	rabbitmqPortStr := os.Getenv("RABBITMQ_PORT")
 	if rabbitmqPortStr == "" {
-		rabbitmqPortStr = DefaultRabbitmqPort
-		logger.Warnf("RABBITMQ_PORT is not set, using default value %s", DefaultRabbitmqPort)
+		rabbitmqPortStr = constants.DefaultRabbitmqPort
+		logger.Warnf("RABBITMQ_PORT is not set, using default value %s", constants.DefaultRabbitmqPort)
 	}
 	rabbitmqPort, err := strconv.ParseUint(rabbitmqPortStr, 10, 16)
 	if err != nil {
@@ -58,24 +50,24 @@ func NewConfig() *Config {
 	}
 	rabbitmqUser := os.Getenv("RABBITMQ_USER")
 	if rabbitmqUser == "" {
-		rabbitmqUser = DefaultRabbitmqUser
-		logger.Warnf("RABBITMQ_USER is not set, using default value %s", DefaultRabbitmqUser)
+		rabbitmqUser = constants.DefaultRabbitmqUser
+		logger.Warnf("RABBITMQ_USER is not set, using default value %s", constants.DefaultRabbitmqUser)
 	}
 	rabbitmqPassword := os.Getenv("RABBITMQ_PASSWORD")
 	if rabbitmqPassword == "" {
-		rabbitmqPassword = DefaultRabbitmqPassword
-		logger.Warnf("RABBITMQ_PASSWORD is not set, using default value %s", DefaultRabbitmqPassword)
+		rabbitmqPassword = constants.DefaultRabbitmqPassword
+		logger.Warnf("RABBITMQ_PASSWORD is not set, using default value %s", constants.DefaultRabbitmqPassword)
 	}
 
 	fileStorageHost := os.Getenv("FILESTORAGE_HOST")
 	if fileStorageHost == "" {
-		fileStorageHost = DefaultFileStorageHost
-		logger.Warnf("FILESTORAGE_HOST is not set, using default value %s", DefaultFileStorageHost)
+		fileStorageHost = constants.DefaultFileStorageHost
+		logger.Warnf("FILESTORAGE_HOST is not set, using default value %s", constants.DefaultFileStorageHost)
 	}
 	fileStoragePortStr := os.Getenv("FILESTORAGE_PORT")
 	if fileStoragePortStr == "" {
-		fileStoragePortStr = DefaultFilesStoragePort
-		logger.Warnf("FILESTORAGE_PORT is not set, using default value %s", DefaultFilesStoragePort)
+		fileStoragePortStr = constants.DefaultFilesStoragePort
+		logger.Warnf("FILESTORAGE_PORT is not set, using default value %s", constants.DefaultFilesStoragePort)
 	}
 	fileStoragePort, err := strconv.ParseUint(fileStoragePortStr, 10, 16)
 	if err != nil {
