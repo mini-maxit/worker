@@ -15,18 +15,20 @@
 
     RUN sudo ./chroot_init_script.sh
 
-    RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./cmd/main.go
+    RUN CGO_ENABLED=0 GOOS=linux go build -o /app/worker-service ./cmd/main.go
 
-    FROM debian:bookworm-slim
+    FROM golang:1.23-bookworm AS tester
 
     RUN apt-get update && \
-        apt-get install -y g++ schroot && \
+        apt-get install -y sudo debootstrap schroot g++ && \
         rm -rf /var/lib/apt/lists/*
 
     WORKDIR /app
 
-    COPY --from=builder /worker-service /app/worker-service
+    COPY --from=builder /app/worker-service /app/worker-service
+
+    COPY --from=builder /app /app
 
     COPY --from=builder /tmp/chroot /tmp/chroot
 
-    ENTRYPOINT [ "/app/worker-service" ]
+    ENTRYPOINT ["/app/worker-service"]
