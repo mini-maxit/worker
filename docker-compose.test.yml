@@ -7,18 +7,6 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-  go_app:
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-    container_name: go_app
-    environment:
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASSWORD=guest
-      - RABBITMQ_PORT=5672
-      - FILESTORAGE_HOST=file-storage
-      - FILESTORAGE_PORT=8888
   file-storage:
     image: file-storage
     pull_policy: never
