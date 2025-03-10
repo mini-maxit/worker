@@ -1,5 +1,16 @@
 package constants
 
+// Queue message types
+const (
+	QueueMessageTypeTask      = "task"
+	QueueMessageTypeHandshake = "handshake"
+)
+
+// Queue names
+const (
+	WorkerQueueName = "worker_queue"
+)
+
 // SolutionResult messages
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
@@ -21,11 +32,6 @@ const (
 	InputDirName         = "inputs"
 	OutputDirName        = "outputs"
 	MaxRetries           = 2
-)
-
-// Language types
-const (
-	CPP = "cpp"
 )
 
 // Language versions

@@ -18,7 +18,6 @@ COPY . .
 
 # Make necessary scripts executable
 RUN chmod +x chroot_init_script.sh
-RUN chmod +x run_tests.sh
 
 RUN sudo ./chroot_init_script.sh
 

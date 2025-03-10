@@ -1,15 +1,5 @@
 package solution
 
-type Solution struct {
-	Language         LanguageConfig // Language of the solution
-	TimeLimits       []int          // Time limit for the solution
-	MemoryLimits     []int          // Memory limit for the
-	BaseDir          string         // Base directory where solution file is stored
-	SolutionFileName string         // Name of the solution file
-	InputDir         string         // Directory where input files are stored
-	OutputDir        string         // Directory where expected output files are stored
-}
-
 type SolutionStatus int
 
 const (
