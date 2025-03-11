@@ -29,7 +29,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not copy executable to chroot. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			ExitCode: -1,
+			ExitCode: constants.ExitCodeInternalError,
 			Message:  fmt.Sprintf("could not copy executable to chroot. %s", err.Error()),
 		}
 	}
@@ -44,7 +44,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	if err != nil {
 		e.logger.Errorf("Could not change permissions of the executable. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
-			ExitCode: -1,
+			ExitCode: constants.ExitCodeInternalError,
 			Message:  fmt.Sprintf("could not change permissions of the executable. %s", err.Error()),
 		}
 	}
