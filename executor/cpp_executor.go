@@ -134,7 +134,6 @@ func (e *CppExecutor) IsCompiled() bool {
 // For now compile allows only one file
 func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, error) {
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
-
 	outFilePath := fmt.Sprintf("%s/solution", dir)
 	// Correctly pass the command and its arguments as separate strings
 	cmd := exec.Command("g++", "-o", outFilePath, fmt.Sprintf("-std=%s", e.version), sourceFilePath)
