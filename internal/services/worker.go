@@ -5,8 +5,9 @@ import (
 
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
-	"github.com/mini-maxit/worker/solution"
+	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
@@ -25,18 +26,22 @@ type TaskQueueMessage struct {
 	LanguageVersion  string `json:"language_version"`
 	TimeLimits       []int  `json:"time_limits"`
 	MemoryLimits     []int  `json:"memory_limits"`
+	ChrootDirPath    string `json:"chroot_dir_path,omitempty"` // Optional for test purposes
+	UseChroot        string `json:"use_chroot,omitempty"`      // Optional for test purposes
 }
 
 type TaskForRunner struct {
 	taskFilesDirPath    string
 	userSolutionDirPath string
-	languageType        LanguageType
+	languageType        languages.LanguageType
 	languageVersion     string
 	solutionFileName    string
 	inputDirName        string
 	outputDirName       string
 	timeLimits          []int
 	memoryLimits        []int
+	chrootDirPath       string
+	useChroot           bool
 }
 
 func NewWorker(fileService FileService, runnerService RunnerService) *Worker {
@@ -50,7 +55,7 @@ func NewWorker(fileService FileService, runnerService RunnerService) *Worker {
 }
 
 func (ws *Worker) ProcessMessage(queueMessage QueueMessage) (QueueMessage, error) {
-	ws.logger.Infof("Processing message %d", queueMessage.MessageID)
+	ws.logger.Infof("Processing message %s", queueMessage.MessageID)
 
 	switch queueMessage.Type {
 	case constants.QueueMessageTypeTask:
@@ -60,7 +65,6 @@ func (ws *Worker) ProcessMessage(queueMessage QueueMessage) (QueueMessage, error
 			ws.logger.Errorf("Failed to unmarshal task message: %s", err)
 			return QueueMessage{}, errors.ErrFailedToUnmarshalTaskMessage
 		}
-
 		ws.logger.Infof("Processing task %d for user %d", task.TaskID, task.UserID)
 		return ws.processTask(task, queueMessage.MessageID)
 	case constants.QueueMessageTypeHandshake:
@@ -89,16 +93,29 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 		}
 	}()
 
-	languageType, err := ParseLanguageType(task.LanguageType)
+	languageType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
 		ws.logger.Errorf("[MsgID %s]Failed to parse language type: %s", messageID, err)
 		return QueueMessage{}, errors.ErrFailedToParseLanguageType
 	}
 
-	solutionFileName, err := GetSolutionFileNameWithExtension(constants.SolutionFileBaseName, languageType)
+	solutionFileName, err := languages.GetSolutionFileNameWithExtension(constants.SolutionFileBaseName, languageType)
 	if err != nil {
 		ws.logger.Errorf("[MsgID %s] Failed to get solution file name: %s", messageID, err)
 		return QueueMessage{}, errors.ErrFailedToGetSolutionFileName
+	}
+
+	if task.ChrootDirPath == "" {
+		task.ChrootDirPath = constants.BaseChrootDir
+	}
+
+	var useChroot bool
+	if task.UseChroot == "" {
+		useChroot = true
+	} else if task.UseChroot == "true" {
+		useChroot = true
+	} else {
+		useChroot = false
 	}
 
 	taskForRunner := &TaskForRunner{
@@ -111,6 +128,8 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 		outputDirName:       constants.OutputDirName,
 		timeLimits:          task.TimeLimits,
 		memoryLimits:        task.MemoryLimits,
+		chrootDirPath:       task.ChrootDirPath,
+		useChroot:           useChroot,
 	}
 
 	solutionResult := ws.runnerService.RunSolution(taskForRunner, messageID)
@@ -140,7 +159,7 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 func (ws *Worker) processHandshake(queueMessage QueueMessage) (QueueMessage, error) {
 	ws.logger.Infof("Processing handshake message")
 
-	supportedLanguages := ws.runnerService.GetSupportedLanguages()
+	supportedLanguages := languages.GetSupportedLanguagesWithVersions()
 	payload, err := json.Marshal(supportedLanguages)
 	if err != nil {
 		ws.logger.Errorf("Failed to marshal supported languages: %s", err)

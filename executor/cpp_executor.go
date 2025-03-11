@@ -8,13 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mini-maxit/worker/internal/constants"
-	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
-
-var CPP_AVAILABLE_VERSION = []string{constants.CPP_11, constants.CPP_14, constants.CPP_17, constants.CPP_20}
 
 type CppExecutor struct {
 	version string
@@ -24,9 +22,8 @@ type CppExecutor struct {
 
 func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
 	id := uuid.New()
-	chrootExecPath := id.String()
-	rootToChrootExecPath := fmt.Sprintf("%s/%s", constants.BaseChrootDir, chrootExecPath)
-
+	chrootExecName := id.String()
+	rootToChrootExecPath := fmt.Sprintf("%s/%s", commandConfig.ChrootDirPath, chrootExecName)
 	// Copy the executable to the chroot
 	err := utils.CopyFile(command, rootToChrootExecPath)
 	if err != nil {
@@ -53,7 +50,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	}
 
 	// Restrict command to run in chroot with time limit
-	restrictedCmd := restrictCommand(chrootExecPath, commandConfig.TimeLimit)
+	restrictedCmd := restrictCommand(chrootExecName, commandConfig)
 
 	// Open stdout file
 	e.logger.Infof("Opening stdout file [MsgID: %s]", messageID)
@@ -136,26 +133,11 @@ func (e *CppExecutor) IsCompiled() bool {
 
 // For now compile allows only one file
 func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, error) {
-
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
-	// Prepare command for execution
-	var versionFlag string
-	switch e.version {
-	case constants.CPP_11:
-		versionFlag = "c++11"
-	case constants.CPP_14:
-		versionFlag = "c++14"
-	case constants.CPP_17:
-		versionFlag = "c++17"
-	case constants.CPP_20:
-		versionFlag = "c++20"
-	default:
-		e.logger.Errorf("Invalid C++ version supplied [MsgID: %s]", messageID)
-		return "", errors.ErrInvalidVersion
-	}
+
 	outFilePath := fmt.Sprintf("%s/solution", dir)
 	// Correctly pass the command and its arguments as separate strings
-	cmd := exec.Command("g++", "-o", outFilePath, fmt.Sprintf("-std=%s", versionFlag), sourceFilePath)
+	cmd := exec.Command("g++", "-o", outFilePath, fmt.Sprintf("-std=%s", e.version), sourceFilePath)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -194,11 +176,12 @@ func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, er
 
 func NewCppExecutor(version, messageID string) (*CppExecutor, error) {
 	logger := logger.NewNamedLogger("cpp-executor")
-	if !utils.Contains(CPP_AVAILABLE_VERSION, version) {
-		logger.Errorf("Invalid version supplied [MsgID: %s]", messageID)
-		return nil, fmt.Errorf("invalid version supplied. got=%s, availabe=%s", version, CPP_AVAILABLE_VERSION)
+	versionFlag, err := languages.GetVersionFlag(languages.CPP, version)
+	if err != nil {
+		logger.Errorf("Failed to get version flag. %s [MsgID: %s]", err.Error(), messageID)
+		return nil, err
 	}
 	return &CppExecutor{
-		version: version,
+		version: versionFlag,
 		logger:  logger}, nil
 }

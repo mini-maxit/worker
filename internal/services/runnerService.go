@@ -7,9 +7,9 @@ import (
 
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
-	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
-	s "github.com/mini-maxit/worker/solution"
+	s "github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/verifier"
 	"go.uber.org/zap"
 )
@@ -17,7 +17,6 @@ import (
 type RunnerService interface {
 	RunSolution(task *TaskForRunner, messageID string) s.SolutionResult
 	parseInputFiles(inputDir string) ([]string, error)
-	GetSupportedLanguages() []string
 }
 
 type runnerService struct {
@@ -32,27 +31,13 @@ func NewRunnerService() RunnerService {
 	}
 }
 
-type LanguageType int
-
-const (
-	CPP LanguageType = iota + 1
-)
-
-var languageTypeMap = map[string]LanguageType{
-	"CPP": CPP,
-}
-
-var languageExtensionMap = map[LanguageType]string{
-	CPP: ".cpp",
-}
-
 func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.SolutionResult {
 	r.logger.Infof("Initializing executor [MsgID: %s]", messageID)
 	// Init appropriate executor
 	var exec executor.Executor
 	var err error
 	switch task.languageType {
-	case CPP:
+	case languages.CPP:
 		r.logger.Infof("Initializing C++ executor [MsgID: %s]", messageID)
 		exec, err = executor.NewCppExecutor(task.languageVersion, messageID)
 	default:
@@ -121,6 +106,17 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		}
 	}
 
+	if len(inputFiles) != len(task.timeLimits) || len(inputFiles) != len(task.memoryLimits) {
+		r.logger.Errorf("Invalid number of limits, got %d input files, %d time limits and %d memory limits [MsgID: %s]", len(inputFiles), len(task.timeLimits), len(task.memoryLimits), messageID)
+		return s.SolutionResult{
+			OutputDir:  userOutputDir,
+			Success:    false,
+			StatusCode: s.Failed,
+			Code:       s.Failed.String(),
+			Message:    constants.SolutionMessageLimitsMismatch,
+		}
+	}
+
 	r.logger.Infof("Executing solution [MsgID: %s]", messageID)
 	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]s.TestResult, len(inputFiles))
@@ -130,13 +126,14 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, userOutputDir, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", task.taskFilesDirPath, userOutputDir, (i + 1))
-		r.logger.Infof("INDEX: %d", i)
 		commandConfig := executor.CommandConfig{
-			StdinPath:   inputPath,
-			StdoutPath:  outputPath,
-			StderrPath:  stderrPath,
-			TimeLimit:   task.timeLimits[i],
-			MemoryLimit: task.memoryLimits[i],
+			StdinPath:     inputPath,
+			StdoutPath:    outputPath,
+			StderrPath:    stderrPath,
+			TimeLimit:     task.timeLimits[i],
+			MemoryLimit:   task.memoryLimits[i],
+			ChrootDirPath: task.chrootDirPath,
+			UseChroot:     task.useChroot,
 		}
 
 		execResult := exec.ExecuteCommand(filePath, messageID, commandConfig)
@@ -152,6 +149,12 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			}
 			if !result {
 				solutionSuccess = false
+			}
+			err = StoreTestCaseDifferenceInErrFile((i + 1), difference, commandConfig.StderrPath)
+			if err != nil {
+				r.logger.Errorf("Error storing difference in error file [MsgID: %s]: %s", messageID, err.Error())
+				solutionSuccess = false
+				difference = err.Error()
 			}
 			testCases[i] = s.TestResult{
 				Passed:       result,
@@ -223,24 +226,24 @@ func (r *runnerService) parseInputFiles(inputDir string) ([]string, error) {
 	return result, nil
 }
 
-func (r *runnerService) GetSupportedLanguages() []string {
-	var languages []string
-	for lang := range languageTypeMap {
-		languages = append(languages, lang)
+func StoreTestCaseDifferenceInErrFile(order int, difference string, errFilePath string) error {
+	if difference == "" {
+		return nil
 	}
-	return languages
-}
+	errFile, err := os.Create(errFilePath)
+	if err != nil {
+		return err
+	}
+	defer errFile.Close()
 
-func GetSolutionFileNameWithExtension(solutionName string, language LanguageType) (string, error) {
-	if extension, ok := languageExtensionMap[language]; ok {
-		return fmt.Sprintf("%s%s", solutionName, extension), nil
+	_, err = errFile.WriteString(fmt.Sprintf("Test case %d:\n", order))
+	if err != nil {
+		return err
 	}
-	return "", errors.ErrInvalidLanguageType
-}
+	_, err = errFile.WriteString(difference)
+	if err != nil {
+		return err
+	}
 
-func ParseLanguageType(s string) (LanguageType, error) {
-	if lt, ok := languageTypeMap[strings.ToUpper(s)]; ok {
-		return lt, nil
-	}
-	return 0, errors.ErrInvalidLanguageType
+	return nil
 }

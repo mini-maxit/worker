@@ -18,6 +18,7 @@ const (
 	SolutionMessageInvalidLanguageType = "invalid language type supplied"
 	SolutionMessageTimeout             = "some test cases failed due to time limit exceeded"
 	SolutionMessageMemoryLimitExceeded = "some test cases failed due to memory limit exceeded"
+	SolutionMessageLimitsMismatch      = "time and memory limits mismatch compared to the number of test cases"
 )
 
 // TestResult messages
@@ -32,14 +33,6 @@ const (
 	InputDirName         = "inputs"
 	OutputDirName        = "outputs"
 	MaxRetries           = 2
-)
-
-// Language versions
-const (
-	CPP_11 = "11"
-	CPP_14 = "14"
-	CPP_17 = "17"
-	CPP_20 = "20"
 )
 
 // Exit codes

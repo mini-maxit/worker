@@ -4,11 +4,11 @@
 
 The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are stored using the file storage service and sent back to the backend service.
 
+The worker service can process two types of messages:
+1. **Task Message**: Contains details about the task to execute.
+2. **Handshake Message**: Used to syncronize the worker with the backend service. Returns supported languages and versions.
+
 ## Message Structure
-
-### Message Headers
-
-- `x-retry-count=0`: This header tracks the number of times a message has been retried. If a message fails to process after 3 retries, it will be dropped.
 
 ### Message Properties
 
@@ -18,18 +18,35 @@ The Worker Service is a message-driven application that listens to a RabbitMQ qu
 
 The body of the message is a JSON object with the following structure:
 
+
+#### Task Message
 ```json
 {
-  "message_id": "adsa",
-  "task_id": 123,
+"type": "task",
+"message_id": "adsa",
+"payload":
+{
+  "task_id": 3,
   "user_id": 1,
   "submission_number": 1,
   "language_type": "CPP",
   "language_version": "20",
-  "time_limits": [25],
-  "memory_limits": [512]
+  "time_limits": [25,25,25,25],
+  "memory_limits": [512,512,512,512]
+}
 }
 ```
+#### Handshake Message
+```json
+{
+"type": "handshake",
+"message_id": "adsa",
+"payload": {}
+}
+```
+
+
+
 
 ## Processing Flow
 
@@ -44,10 +61,12 @@ The body of the message is a JSON object with the following structure:
 
 Upon successful execution of the task, the worker sends a message to the specified backend queue. The response will have the following structure:
 
+#### Task Message
 ```json
 {
+  "type": "task",
   "message_id": "adsa",
-  "result": {
+  "payload": {
     "Success": true,
     "StatusCode": 1,
     "Code": "Success",
@@ -68,14 +87,39 @@ Upon successful execution of the task, the worker sends a message to the specifi
 }
 ```
 
+#### Handshake Message
+```json
+{
+  "type": "handshake",
+  "message_id": "adsa",
+  "payload": {
+    "Success": true,
+    "StatusCode": 1,
+    "Code": "Success",
+    "Message": "Handshake successful",
+    "Languages": [
+      {
+        "Name": "CPP",
+        "Versions": ["17", "20"]
+      },
+      {
+        "Name": "Python",
+        "Versions": ["3.8", "3.9"]
+      }
+    ]
+  }
+}
+```
+
 ### Error Response
 
 In case of an error, the worker will return an error message structured as follows:
 
 ```json
 {
+  "type": "task",
   "message_id": "adsa",
-  "result": {
+  "payload": {
     "Success": false,
     "StatusCode": 3,
     "Code": "500",
@@ -84,10 +128,6 @@ In case of an error, the worker will return an error message structured as follo
   }
 }
 ```
-
-## Error Handling
-
-The worker implements retry logic for processing messages. If a message fails to process after three attempts, it is dropped, and an error message is sent to the designated backend queue. Error messages will include relevant details to assist in troubleshooting.
 
 ## Development
 

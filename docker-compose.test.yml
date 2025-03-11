@@ -7,12 +7,5 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-  file-storage:
-    image: file-storage
-    pull_policy: never
-    container_name: file-storage
-    ports:
-      - "8888:8888"
-
 volumes:
   rabbitmq_data:

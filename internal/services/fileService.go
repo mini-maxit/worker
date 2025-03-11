@@ -15,7 +15,7 @@ import (
 	"github.com/mini-maxit/worker/internal/constants"
 	cutomErrors "github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/logger"
-	"github.com/mini-maxit/worker/solution"
+	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )

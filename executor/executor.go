@@ -14,9 +14,11 @@ type CommandConfig struct {
 	StdinPath  string // Path to the file to be used as stdin
 	StdoutPath string // Path to the file to be used as stdout
 	// May be dropped in the future
-	StderrPath  string // Path to the file to be used as stderr
-	TimeLimit   int    // Time limit for the execution in milliseconds
-	MemoryLimit int    // Memory limit for the execution in kbytes
+	StderrPath    string // Path to the file to be used as stderr
+	TimeLimit     int    // Time limit for the execution in milliseconds
+	MemoryLimit   int    // Memory limit for the execution in kbytes
+	ChrootDirPath string
+	UseChroot     bool // Flag to signify if the solution will be run in chroot isolation
 }
 
 type Executor interface {
@@ -56,21 +58,22 @@ func (er *ExecutionResult) String() string {
 	return out.String()
 }
 
-func restrictCommand(executablePath string, timeLimit int) *exec.Cmd {
+func restrictCommand(executableName string, commandConfig CommandConfig) *exec.Cmd {
 	logger := logger.NewNamedLogger("executor")
-	logger.Infof("Restricting command %s", executablePath)
+	logger.Infof("Restricting command %s", executableName)
 
-	executeCommand := fmt.Sprintf("./%s", executablePath)
-	timeLimitSecondsString := strconv.Itoa(timeLimit)
+	timeLimitSecondsString := strconv.Itoa(commandConfig.TimeLimit)
 
-	args := []string{
-		"chroot",
-		constants.BaseChrootDir,
-		"timeout",
-		"--verbose",
-		timeLimitSecondsString,
-		executeCommand,
+	var args []string
+	var executeCommand string
+	if commandConfig.UseChroot {
+		args = append(args, "chroot", commandConfig.ChrootDirPath)
+		executeCommand = fmt.Sprintf("./%s", executableName)
+	} else {
+		executeCommand = fmt.Sprintf("%s/%s", commandConfig.ChrootDirPath, executableName)
 	}
+
+	args = append(args, "timeout", "--verbose", timeLimitSecondsString, executeCommand)
 
 	return exec.Command(args[0], args[1:]...)
 }
