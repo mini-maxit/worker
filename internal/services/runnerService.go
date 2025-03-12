@@ -52,7 +52,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		return s.SolutionResult{
 			Success:    false,
 			StatusCode: s.InitializationError,
-			Code:       s.InitializationError.String(),
 			Message:    err.Error(),
 		}
 	}
@@ -66,7 +65,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		return s.SolutionResult{
 			Success:    false,
 			StatusCode: s.InternalError,
-			Code:       s.InternalError.String(),
 			Message:    err.Error(),
 		}
 	}
@@ -84,7 +82,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 				OutputDir:  userOutputDir,
 				Success:    false,
 				StatusCode: s.CompilationError,
-				Code:       s.CompilationError.String(),
 				Message:    err.Error(),
 			}
 		}
@@ -101,7 +98,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			OutputDir:  userOutputDir,
 			Success:    false,
 			StatusCode: s.Failed,
-			Code:       s.Failed.String(),
 			Message:    err.Error(),
 		}
 	}
@@ -112,7 +108,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			OutputDir:  userOutputDir,
 			Success:    false,
 			StatusCode: s.Failed,
-			Code:       s.Failed.String(),
 			Message:    constants.SolutionMessageLimitsMismatch,
 		}
 	}
@@ -199,7 +194,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		OutputDir:   userOutputDir,
 		Success:     solutionSuccess,
 		StatusCode:  solutionStatus,
-		Code:        solutionStatus.String(),
 		Message:     solutionMessage,
 		TestResults: testCases,
 	}

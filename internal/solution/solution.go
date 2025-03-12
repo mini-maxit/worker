@@ -40,7 +40,6 @@ type SolutionResult struct {
 	OutputDir   string         // Directory where output files are stored
 	Success     bool           // wether solution passed or failed
 	StatusCode  SolutionStatus // Status of the solution execution
-	Code        string         // any code in case of error or success depending on status code
 	Message     string         // any information message in case of error is error message
 	TestResults []TestResult   // test results in case of error or success
 }
