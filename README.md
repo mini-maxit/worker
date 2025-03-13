@@ -45,6 +45,35 @@ The body of the message is a JSON object with the following structure:
 }
 ```
 
+### Status Message
+```json
+{
+"type": "status",
+"message_id": "adsa",
+"payload": {}
+}
+```
+
+### Add worker Message
+```json
+{
+"type": "add",
+"message_id": "adsa",
+"payload": {}
+}
+```
+### Stop worker Message
+```json
+{
+"type": "stop",
+"message_id": "adsa",
+"payload":
+{
+  "worker_id": 1
+}
+}
+```
+
 
 
 
@@ -69,7 +98,6 @@ Upon successful execution of the task, the worker sends a message to the specifi
   "payload": {
     "Success": true,
     "StatusCode": 1,
-    "Code": "Success",
     "Message": "solution executed successfully",
     "TestResults": [
       {
@@ -95,7 +123,6 @@ Upon successful execution of the task, the worker sends a message to the specifi
   "payload": {
     "Success": true,
     "StatusCode": 1,
-    "Code": "Success",
     "Message": "Handshake successful",
     "Languages": [
       {
@@ -122,7 +149,6 @@ In case of an error, the worker will return an error message structured as follo
   "payload": {
     "Success": false,
     "StatusCode": 3,
-    "Code": "500",
     "Message": "Failed to process the message after 3 retries: Failed to retrieve solution package: solution file does not exist for user 1, submission 1 of task 123",
     "TestResults": null
   }

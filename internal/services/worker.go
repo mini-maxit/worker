@@ -2,17 +2,21 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/languages"
-	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/utils"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
 
 type Worker struct {
+	id            int
+	status        string
+	stopChan      chan bool
 	fileService   FileService
 	runnerService RunnerService
 	logger        *zap.SugaredLogger
@@ -44,40 +48,7 @@ type TaskForRunner struct {
 	useChroot           bool
 }
 
-func NewWorker(fileService FileService, runnerService RunnerService) *Worker {
-	logger := logger.NewNamedLogger("Worker")
-
-	return &Worker{
-		fileService:   fileService,
-		runnerService: runnerService,
-		logger:        logger,
-	}
-}
-
-func (ws *Worker) ProcessMessage(queueMessage QueueMessage) (QueueMessage, error) {
-	ws.logger.Infof("Processing message %s", queueMessage.MessageID)
-
-	switch queueMessage.Type {
-	case constants.QueueMessageTypeTask:
-		var task TaskQueueMessage
-		err := json.Unmarshal(queueMessage.Payload, &task)
-		if err != nil {
-			ws.logger.Errorf("Failed to unmarshal task message: %s", err)
-			return QueueMessage{}, errors.ErrFailedToUnmarshalTaskMessage
-		}
-		ws.logger.Infof("Processing task %d for user %d", task.TaskID, task.UserID)
-		return ws.processTask(task, queueMessage.MessageID)
-	case constants.QueueMessageTypeHandshake:
-		ws.logger.Infof("Processing handshake message")
-		return ws.processHandshake(queueMessage)
-	default:
-		ws.logger.Errorf("Unknown message type: %s", queueMessage.Type)
-		return QueueMessage{}, errors.ErrInvalidQueueMessageType
-
-	}
-}
-
-func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMessage, error) {
+func (ws *Worker) ProcessTask(task TaskQueueMessage, messageID string) (QueueMessage, error) {
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
 
 	directoryConfig, err := ws.fileService.HandleTaskPackage(task.TaskID, task.UserID, task.SubmissionNumber)
@@ -156,7 +127,7 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 	}, nil
 }
 
-func (ws *Worker) processHandshake(queueMessage QueueMessage) (QueueMessage, error) {
+func (ws *Worker) ProcessHandshake(messageID string) (QueueMessage, error) {
 	ws.logger.Infof("Processing handshake message")
 
 	supportedLanguages := languages.GetSupportedLanguagesWithVersions()
@@ -168,7 +139,99 @@ func (ws *Worker) processHandshake(queueMessage QueueMessage) (QueueMessage, err
 
 	return QueueMessage{
 		Type:      constants.QueueMessageTypeHandshake,
-		MessageID: queueMessage.MessageID,
+		MessageID: messageID,
 		Payload:   payload,
 	}, nil
+}
+
+func (ws *Worker) ProcessMessage(queueMessage QueueMessage) (QueueMessage, error) {
+	var response QueueMessage
+	var err error
+
+	switch queueMessage.Type {
+	case constants.QueueMessageTypeHandshake:
+		ws.logger.Infof("Processing handshake message")
+		response, err = ws.ProcessHandshake(queueMessage.MessageID)
+		if err != nil {
+			ws.logger.Errorf("Failed to process message: %s", err)
+			return QueueMessage{}, err
+		}
+	case constants.QueueMessageTypeTask:
+		ws.logger.Infof("Processing task message")
+		var task TaskQueueMessage
+		err = json.Unmarshal(queueMessage.Payload, &task)
+		if err != nil {
+			ws.logger.Errorf("Failed to unmarshal task message: %s", err)
+			return QueueMessage{}, err
+		}
+		response, err = ws.ProcessTask(task, queueMessage.MessageID)
+		if err != nil {
+			ws.logger.Errorf("Failed to process message: %s", err)
+			return QueueMessage{}, err
+		}
+	default:
+		ws.logger.Errorf("Unknown message type: %s", queueMessage.Type)
+		return QueueMessage{}, errors.ErrInvalidQueueMessageType
+	}
+
+	return response, nil
+
+}
+
+func (ws *Worker) Listen(channel *amqp.Channel, workerQueueName string) {
+	msgs, err := channel.Consume(workerQueueName, "", true, false, false, false, nil)
+	if err != nil {
+		ws.logger.Panicf("Failed to consume messages from queue %s: %s", workerQueueName, err)
+	}
+
+	for {
+		ws.status = constants.WorkerStatusIdle
+		select {
+		case <-ws.stopChan:
+			ws.logger.Infof("Stopping worker %s", ws.id)
+			return
+		case msg := <-msgs:
+			ws.logger.Infof("Received message")
+			ws.status = constants.WorkerStatusBusy
+
+			var queueMessage QueueMessage
+			var response QueueMessage
+			err := json.Unmarshal(msg.Body, &queueMessage)
+			if err == nil {
+				response, err = ws.ProcessMessage(queueMessage)
+				if err != nil {
+					ws.logger.Errorf("Failed to process message: %s", err)
+					response = QueueMessage{
+						Type:      queueMessage.Type,
+						MessageID: queueMessage.MessageID,
+						Payload:   []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())),
+					}
+				}
+			} else {
+				ws.logger.Errorf("Failed to unmarshal message: %s", err)
+				response = QueueMessage{
+					Type:      queueMessage.Type,
+					MessageID: queueMessage.MessageID,
+					Payload:   []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())),
+				}
+			}
+
+			responseJSON, err := json.Marshal(response)
+			if err != nil {
+				ws.logger.Errorf("Failed to marshal response: %s", err)
+				continue
+			}
+
+			ws.logger.Infof("Sending response to queue %s", msg.ReplyTo)
+
+			err = channel.Publish("", msg.ReplyTo, false, false, amqp.Publishing{
+				ContentType: "application/json",
+				Body:        responseJSON,
+			})
+			if err != nil {
+				ws.logger.Errorf("Failed to send response: %s", err)
+				continue
+			}
+		}
+	}
 }

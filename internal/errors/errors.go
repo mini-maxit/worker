@@ -13,4 +13,6 @@ var (
 	ErrFailedToHandleTaskPackage    = errors.New("failed to handle task package")
 	ErrFailedToParseLanguageType    = errors.New("failed to parse language type")
 	ErrFailedToGetSolutionFileName  = errors.New("failed to get solution file name")
+	ErrMaxWorkersReached            = errors.New("maximum number of workers reached")
+	ErrWorkerNotFound               = errors.New("worker not found")
 )
