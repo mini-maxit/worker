@@ -24,14 +24,13 @@ func main() {
 
 	defer conn.Close()
 
-	mainChannel := rabbitmq.NewRabbitMQChannel(conn)
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
 	runnerService := services.NewRunnerService()
 	fileService := services.NewFilesService(config.FileStorageUrl)
-	workerPool := services.NewWorkerPool(workerChannel, constants.WorkerQueueName, constants.MaxWorkers)
-	queueService := services.NewQueueService(mainChannel, constants.WorkerQueueName, constants.MainQueueName, fileService, runnerService, workerPool)
+	workerPool := services.NewWorkerPool(workerChannel, constants.WorkerQueueName, constants.MaxWorkers, fileService, runnerService)
+	queueService := services.NewQueueService(workerChannel, constants.WorkerQueueName, workerPool)
 
 	logger.Info("Listening for messages")
 	// Start listening for messages

@@ -12,78 +12,101 @@ import (
 )
 
 type WorkerPool struct {
-	mu            sync.Mutex
-	workers       map[int]*Worker
-	workerChannel *amqp.Channel
-	workerQueue   string
-	nextWorkerID  int
-	maxWorkers    int
-	logger        *zap.SugaredLogger
+	mu               sync.Mutex
+	busyWorkersCount int
+	workers          map[int]*Worker
+	workerChannel    *amqp.Channel
+	workerQueue      string
+	maxWorkers       int
+	logger           *zap.SugaredLogger
 }
 
-func NewWorkerPool(workerChannel *amqp.Channel, workerQueue string, maxWorkers int) *WorkerPool {
-	logger := logger.NewNamedLogger("workerPool")
+func NewWorkerPool(workerChannel *amqp.Channel, workerQueue string, maxWorkers int, fileService FileService, runnerService RunnerService) *WorkerPool {
+	workers := make(map[int]*Worker, maxWorkers)
+	for i := 0; i < maxWorkers; i++ {
+		workers[i] = &Worker{
+			id:            i,
+			status:        constants.WorkerStatusIdle,
+			channel:       workerChannel,
+			fileService:   fileService,
+			runnerService: runnerService,
+			logger:        logger.NewNamedLogger(fmt.Sprintf("worker-%d", i)),
+		}
+	}
+
+	workerPoolLogger := logger.NewNamedLogger("workerPool")
 
 	return &WorkerPool{
-		workers:       make(map[int]*Worker),
+		mu:            sync.Mutex{},
+		workers:       workers,
 		workerChannel: workerChannel,
 		workerQueue:   workerQueue,
 		maxWorkers:    maxWorkers,
-		nextWorkerID:  1,
-		logger:        logger,
+		logger:        workerPoolLogger,
 	}
 }
 
-func (wp *WorkerPool) StartWorker(fileService FileService, runnerService RunnerService) error {
-	if len(wp.workers) >= wp.maxWorkers {
-		return errors.ErrMaxWorkersReached
-	}
-
+func (wp *WorkerPool) GetWorkersStatus() map[string]interface{} {
 	wp.mu.Lock()
-	id := wp.nextWorkerID
-	wp.nextWorkerID++
+	defer wp.mu.Unlock()
 
-	logger := logger.NewNamedLogger(fmt.Sprintf("worker-%d", id))
-	worker := &Worker{
-		id:            id,
-		status:        constants.WorkerStatusIdle,
-		stopChan:      make(chan bool),
-		fileService:   fileService,
-		runnerService: runnerService,
-		logger:        logger,
+	statuses := make(map[int]string, len(wp.workers))
+
+	for id, worker := range wp.workers {
+		statuses[id] = worker.status
 	}
-	wp.workers[id] = worker
-	wp.mu.Unlock()
 
-	wp.logger.Infof("Starting worker %d", id)
+	return map[string]interface{}{
+		"busy_workers":  wp.busyWorkersCount,
+		"worker_status": statuses,
+	}
+}
 
-	go worker.Listen(wp.workerChannel, wp.workerQueue)
+func (wp *WorkerPool) getFreeWorker() (*Worker, error) {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
+	for _, worker := range wp.workers {
+		if worker.status == constants.WorkerStatusIdle {
+			worker.status = constants.WorkerStatusBusy
+			wp.busyWorkersCount++
+			return worker, nil
+		}
+	}
+
+	return nil, errors.ErrFailedToGetFreeWorker
+}
+
+func (wp *WorkerPool) ProcessTask(responseQueueName, messageID string, task TaskQueueMessage) error {
+	wp.logger.Infof("Processing task [MsgID: %s]", messageID)
+
+	worker, err := wp.getFreeWorker()
+	if err != nil {
+		wp.logger.Errorf("No available workers: %s", err)
+		return err
+	}
+
+	go func(w *Worker) {
+		defer wp.markWorkerAsIdle(w)
+		defer func() {
+			if r := recover(); r != nil {
+				wp.logger.Errorf("Worker panicked: %v", r)
+			}
+		}()
+
+		w.ProcessTask(responseQueueName, messageID, task)
+	}(worker)
 
 	return nil
 }
 
-func (wp *WorkerPool) StopWorker(workerID int) error {
+func (wp *WorkerPool) markWorkerAsIdle(worker *Worker) {
+	wp.logger.Infof("Marking worker as idle [WorkerID: %d]", worker.id)
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
-	if worker, exists := wp.workers[workerID]; exists {
-		close(worker.stopChan)
-		delete(wp.workers, workerID)
-		wp.logger.Infof("Worker %d stopped", workerID)
-		return nil
-	} else {
-		wp.logger.Errorf("Worker %d not found", workerID)
-		return errors.ErrWorkerNotFound
-	}
-}
+	worker.status = constants.WorkerStatusIdle
+	wp.busyWorkersCount--
 
-func (wp *WorkerPool) GetWorkersStatus() map[int]string {
-	wp.mu.Lock()
-	defer wp.mu.Unlock()
-
-	status := make(map[int]string)
-	for id, worker := range wp.workers {
-		status[id] = worker.status
-	}
-	return status
+	wp.logger.Infof("Worker marked as idle [WorkerID: %d]", worker.id)
 }

@@ -5,14 +5,11 @@ const (
 	QueueMessageTypeTask      = "task"
 	QueueMessageTypeHandshake = "handshake"
 	QueueMessageTypeStatus    = "status"
-	QueueMessageTypeStop      = "stop"
-	QueueMessageTypeAdd       = "add"
 )
 
 // Queue constants
 const (
 	WorkerQueueName = "worker_queue"
-	MainQueueName   = "main_queue"
 	MaxWorkers      = 10
 )
 
