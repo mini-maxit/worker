@@ -54,6 +54,7 @@ type ExpecredStatusResponse struct {
 	MessageID string `json:"message_id"`
 	Payload   struct {
 		BusyWorkers  int               `json:"busy_workers"`
+		TotalWorkers int               `json:"total_workers"`
 		WorkerStatus map[string]string `json:"worker_status"`
 	} `json:"payload"`
 }
@@ -450,7 +451,7 @@ func TestProcessStatus(t *testing.T) {
 
 			busyWorkers := 0
 			for _, status := range actualResponse.Payload.WorkerStatus {
-				if status == "busy" {
+				if strings.Contains(status, "busy") {
 					busyWorkers++
 				}
 			}

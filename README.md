@@ -7,6 +7,7 @@ The Worker Service is a message-driven application that listens to a RabbitMQ qu
 The worker service can process two types of messages:
 1. **Task Message**: Contains details about the task to execute.
 2. **Handshake Message**: Used to syncronize the worker with the backend service. Returns supported languages and versions.
+3. **Status Message**: Used to check the status of the worker.
 
 ## Message Structure
 
@@ -51,26 +52,6 @@ The body of the message is a JSON object with the following structure:
 "type": "status",
 "message_id": "adsa",
 "payload": {}
-}
-```
-
-### Add worker Message
-```json
-{
-"type": "add",
-"message_id": "adsa",
-"payload": {}
-}
-```
-### Stop worker Message
-```json
-{
-"type": "stop",
-"message_id": "adsa",
-"payload":
-{
-  "worker_id": 1
-}
 }
 ```
 
@@ -121,19 +102,23 @@ Upon successful execution of the task, the worker sends a message to the specifi
   "type": "handshake",
   "message_id": "adsa",
   "payload": {
-    "Success": true,
-    "StatusCode": 1,
-    "Message": "Handshake successful",
-    "Languages": [
-      {
-        "Name": "CPP",
-        "Versions": ["17", "20"]
-      },
-      {
-        "Name": "Python",
-        "Versions": ["3.8", "3.9"]
-      }
-    ]
+    "CPP": ["20", "17"],
+  }
+}
+```
+
+#### Status Message
+```json
+{
+  "type": "status",
+  "message_id": "adsa",
+  "payload": {
+    "busy_workers": 1,
+    "total_workers": 2,
+    "worker_status": {
+      "0": "idle",
+      "1": "busy Processing message 1",
+    }
   }
 }
 ```
