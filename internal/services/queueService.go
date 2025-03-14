@@ -200,7 +200,6 @@ func PublishSucessToResponseQueue(channel *amqp.Channel, responseQueueName, mess
 		Payload:   payload,
 	}
 
-	logger.Infof("Marshalling queue message: %v", queueMessage)
 	responseJSON, jsonErr := json.Marshal(queueMessage)
 	if jsonErr != nil {
 		return jsonErr
