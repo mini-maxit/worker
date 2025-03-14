@@ -36,6 +36,16 @@ type TaskForRunner struct {
 }
 
 func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task TaskQueueMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			ws.logger.Errorf("Worker panicked: %v", r)
+			err := PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, r.(error))
+			if err != nil {
+				ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+			}
+		}
+	}()
+
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
 	ws.processingMessageID = messageID
 	defer func() {
