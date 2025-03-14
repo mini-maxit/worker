@@ -55,9 +55,6 @@ The body of the message is a JSON object with the following structure:
 }
 ```
 
-
-
-
 ## Processing Flow
 
 1. **Message Reception**: The worker listens to the `worker_queue` for incoming messages.

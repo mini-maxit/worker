@@ -258,9 +258,9 @@ func TestProcessTask(t *testing.T) {
 					t.Fatalf("Unexpected error file content")
 				}
 
-				// if err := os.RemoveAll(taskDir); err != nil {
-				// 	t.Fatalf("Failed to remove task directory: %s", err)
-				// }
+				if err := os.RemoveAll(taskDir); err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
 
 			case <-time.After(5 * time.Second):
 				err = os.RemoveAll(taskDir)
