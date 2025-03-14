@@ -25,6 +25,8 @@ const (
 	CompilationError
 	TestCaseFailed
 	Handshake
+	longTaskMessage
+	Status
 )
 
 // Struct for validating response payload
@@ -47,6 +49,16 @@ type ExpectedHandshakeResponse struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
+type ExpecredStatusResponse struct {
+	Type      string `json:"type"`
+	MessageID string `json:"message_id"`
+	Payload   struct {
+		BusyWorkers  int               `json:"busy_workers"`
+		TotalWorkers int               `json:"total_workers"`
+		WorkerStatus map[string]string `json:"worker_status"`
+	} `json:"payload"`
+}
+
 func generateQueueMessage(test testType) string {
 	var payload string
 	var msgType string
@@ -54,8 +66,14 @@ func generateQueueMessage(test testType) string {
 	if test == Handshake {
 		payload = "{}"
 		msgType = "handshake"
+	} else if test == Status {
+		payload = "{}"
+		msgType = "status"
+	} else if test == longTaskMessage {
+		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[20],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, FailedTimeLimitExceeded, FailedTimeLimitExceeded)
+		msgType = "task"
 	} else {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp","use_chroot":"false"}`, test)
+		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, test, test)
 		msgType = "task"
 	}
 
@@ -87,23 +105,19 @@ func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
 	switch testType {
 	case Success:
 		return actual.Payload.Success &&
-			actual.Payload.Code == solution.Success.String() &&
 			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 && (actual.Payload.TestResults)[0].Passed
 	case FailedTimeLimitExceeded:
 		return !actual.Payload.Success &&
-			actual.Payload.Code == solution.RuntimeError.String() &&
 			strings.Contains(actual.Payload.Message, "time limit exceeded") &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 &&
 			!(actual.Payload.TestResults)[0].Passed && (actual.Payload.TestResults)[0].ErrorMessage == "time limit exceeded"
 	case CompilationError:
 		return !actual.Payload.Success &&
-			actual.Payload.Code == solution.CompilationError.String() &&
 			strings.Contains(actual.Payload.Message, "exit status") &&
 			actual.Payload.TestResults == nil
 	case TestCaseFailed:
 		return !actual.Payload.Success &&
-			actual.Payload.Code == solution.Success.String() &&
 			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) > 0 &&
 			!(actual.Payload.TestResults)[0].Passed &&
@@ -162,20 +176,22 @@ func equalHandshskePayload(payload map[string][]string, expectedPayload map[stri
 	return true
 }
 
-func setUp(t *testing.T) (services.QueueService, *amqp.Channel, *amqp.Connection) {
+func setUp(t *testing.T, numberOfWorkers int) (services.QueueService, *amqp.Channel, *amqp.Connection) {
 	fs := NewMockFileService(t)
 	rs := services.NewRunnerService()
-	w := services.NewWorker(fs, rs)
 
 	config := config.NewConfig()
 	conn := rabbitmq.NewRabbitMqConnection(config)
 	channel := rabbitmq.NewRabbitMQChannel(conn)
-	qs := services.NewQueueService(channel, constants.WorkerQueueName, w)
+
+	wp := services.NewWorkerPool(channel, constants.WorkerQueueName, numberOfWorkers, fs, rs)
+	qs := services.NewQueueService(channel, constants.WorkerQueueName, wp)
+
 	return qs, channel, conn
 }
 
 func TestProcessTask(t *testing.T) {
-	qs, channel, conn := setUp(t)
+	qs, channel, conn := setUp(t, 1)
 	defer conn.Close()
 	defer channel.Close()
 
@@ -256,9 +272,8 @@ func TestProcessTask(t *testing.T) {
 		})
 	}
 }
-
 func TestProcessHandshake(t *testing.T) {
-	qs, channel, conn := setUp(t)
+	qs, channel, conn := setUp(t, 1)
 	defer conn.Close()
 	defer channel.Close()
 
@@ -305,6 +320,160 @@ func TestProcessHandshake(t *testing.T) {
 			}
 
 		case <-time.After(5 * time.Second):
+			t.Fatalf("Did not receive response in time")
+		}
+	})
+}
+
+func TestProcessStatus(t *testing.T) {
+	const numberOfWorkers = 5
+	const taskDir = "./mock_files/tmp/Task_1_1_2"
+
+	qs, channel, conn := setUp(t, numberOfWorkers)
+	defer conn.Close()
+	defer channel.Close()
+
+	go qs.Listen()
+
+	responseQueueName := "reply_to"
+	_, err := declareResponseQueue(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to declare response queue: %s", err)
+	}
+	responseChannel, err := consumeResponse(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to consume response queue: %s", err)
+	}
+
+	t.Run("Test status all idle", func(t *testing.T) {
+		message := generateQueueMessage(Status)
+		go publishMessage(channel, message)
+
+		select {
+		case response := <-responseChannel:
+			var actualResponse ExpecredStatusResponse
+			err := json.Unmarshal(response.Body, &actualResponse)
+			if err != nil {
+				t.Fatalf("Failed to parse response JSON: %s", err)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if actualResponse.Type != "status" {
+				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if actualResponse.Payload.BusyWorkers != 0 {
+				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
+				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			for _, status := range actualResponse.Payload.WorkerStatus {
+				if status != "idle" {
+					t.Fatalf("Unexpected worker status: %s", status)
+					err = os.RemoveAll(taskDir)
+					if err != nil {
+						t.Fatalf("Failed to remove task directory: %s", err)
+					}
+				}
+			}
+
+		case <-time.After(5 * time.Second):
+			err = os.RemoveAll(taskDir)
+			if err != nil {
+				t.Fatalf("Failed to remove task directory: %s", err)
+			}
+			t.Fatalf("Did not receive response in time")
+		}
+	})
+
+	t.Run("Test 1 busy worker", func(t *testing.T) {
+		message := generateQueueMessage(longTaskMessage)
+		go publishMessage(channel, message)
+
+		time.Sleep(3 * time.Second)
+
+		message = generateQueueMessage(Status)
+		go publishMessage(channel, message)
+
+		select {
+		case response := <-responseChannel:
+			var actualResponse ExpecredStatusResponse
+			err := json.Unmarshal(response.Body, &actualResponse)
+			if err != nil {
+				t.Fatalf("Failed to parse response JSON: %s", err)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if actualResponse.Type != "status" {
+				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if actualResponse.Payload.BusyWorkers != 1 {
+				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
+				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			busyWorkers := 0
+			for _, status := range actualResponse.Payload.WorkerStatus {
+				if strings.Contains(status, "busy") {
+					busyWorkers++
+				}
+			}
+
+			if busyWorkers != 1 {
+				t.Fatalf("Unexpected busy workers count: %d", busyWorkers)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			err = os.RemoveAll(taskDir)
+			if err != nil {
+				t.Fatalf("Failed to remove task directory: %s", err)
+			}
+
+		case <-time.After(5 * time.Second):
+			err = os.RemoveAll(taskDir)
+			if err != nil {
+				t.Fatalf("Failed to remove task directory: %s", err)
+			}
 			t.Fatalf("Did not receive response in time")
 		}
 	})

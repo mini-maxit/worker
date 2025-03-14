@@ -4,11 +4,13 @@ package constants
 const (
 	QueueMessageTypeTask      = "task"
 	QueueMessageTypeHandshake = "handshake"
+	QueueMessageTypeStatus    = "status"
 )
 
-// Queue names
+// Queue constants
 const (
 	WorkerQueueName = "worker_queue"
+	MaxWorkers      = 10
 )
 
 // SolutionResult messages
@@ -32,7 +34,8 @@ const (
 	SolutionFileBaseName = "solution"
 	InputDirName         = "inputs"
 	OutputDirName        = "outputs"
-	MaxRetries           = 2
+	WorkerStatusIdle     = "idle"
+	WorkerStatusBusy     = "busy"
 )
 
 // Exit codes

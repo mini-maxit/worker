@@ -12,6 +12,10 @@ func main() {
 	// Initialize the logger
 	logger.InitializeLogger()
 
+	logger := logger.NewNamedLogger("main")
+
+	logger.Info("Starting worker")
+
 	// Load the configuration
 	config := config.NewConfig()
 
@@ -20,14 +24,15 @@ func main() {
 
 	defer conn.Close()
 
-	channel := rabbitmq.NewRabbitMQChannel(conn)
+	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
 	runnerService := services.NewRunnerService()
 	fileService := services.NewFilesService(config.FileStorageUrl)
-	Worker := services.NewWorker(fileService, runnerService)
-	queueService := services.NewQueueService(channel, constants.WorkerQueueName, Worker)
+	workerPool := services.NewWorkerPool(workerChannel, constants.WorkerQueueName, constants.MaxWorkers, fileService, runnerService)
+	queueService := services.NewQueueService(workerChannel, constants.WorkerQueueName, workerPool)
 
+	logger.Info("Listening for messages")
 	// Start listening for messages
 	queueService.Listen()
 }

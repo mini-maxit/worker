@@ -4,30 +4,21 @@ import (
 	"encoding/json"
 
 	"github.com/mini-maxit/worker/internal/constants"
-	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/languages"
-	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/utils"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
 
 type Worker struct {
-	fileService   FileService
-	runnerService RunnerService
-	logger        *zap.SugaredLogger
-}
-
-type TaskQueueMessage struct {
-	TaskID           int64  `json:"task_id"`
-	UserID           int64  `json:"user_id"`
-	SubmissionNumber int64  `json:"submission_number"`
-	LanguageType     string `json:"language_type"`
-	LanguageVersion  string `json:"language_version"`
-	TimeLimits       []int  `json:"time_limits"`
-	MemoryLimits     []int  `json:"memory_limits"`
-	ChrootDirPath    string `json:"chroot_dir_path,omitempty"` // Optional for test purposes
-	UseChroot        string `json:"use_chroot,omitempty"`      // Optional for test purposes
+	id                  int
+	status              string
+	processingMessageID string
+	channel             *amqp.Channel
+	fileService         FileService
+	runnerService       RunnerService
+	logger              *zap.SugaredLogger
 }
 
 type TaskForRunner struct {
@@ -44,46 +35,31 @@ type TaskForRunner struct {
 	useChroot           bool
 }
 
-func NewWorker(fileService FileService, runnerService RunnerService) *Worker {
-	logger := logger.NewNamedLogger("Worker")
-
-	return &Worker{
-		fileService:   fileService,
-		runnerService: runnerService,
-		logger:        logger,
-	}
-}
-
-func (ws *Worker) ProcessMessage(queueMessage QueueMessage) (QueueMessage, error) {
-	ws.logger.Infof("Processing message %s", queueMessage.MessageID)
-
-	switch queueMessage.Type {
-	case constants.QueueMessageTypeTask:
-		var task TaskQueueMessage
-		err := json.Unmarshal(queueMessage.Payload, &task)
-		if err != nil {
-			ws.logger.Errorf("Failed to unmarshal task message: %s", err)
-			return QueueMessage{}, errors.ErrFailedToUnmarshalTaskMessage
+func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task TaskQueueMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			ws.logger.Errorf("Worker panicked: %v", r)
+			err := PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, r.(error))
+			if err != nil {
+				ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+			}
 		}
-		ws.logger.Infof("Processing task %d for user %d", task.TaskID, task.UserID)
-		return ws.processTask(task, queueMessage.MessageID)
-	case constants.QueueMessageTypeHandshake:
-		ws.logger.Infof("Processing handshake message")
-		return ws.processHandshake(queueMessage)
-	default:
-		ws.logger.Errorf("Unknown message type: %s", queueMessage.Type)
-		return QueueMessage{}, errors.ErrInvalidQueueMessageType
+	}()
 
-	}
-}
-
-func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMessage, error) {
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
+	ws.processingMessageID = messageID
+	defer func() {
+		ws.processingMessageID = ""
+	}()
 
 	directoryConfig, err := ws.fileService.HandleTaskPackage(task.TaskID, task.UserID, task.SubmissionNumber)
 	if err != nil {
 		ws.logger.Errorf("Failed to handle task package: %s", err)
-		return QueueMessage{}, errors.ErrFailedToHandleTaskPackage
+		err = PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, err)
+		if err != nil {
+			ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+		}
+		return
 	}
 
 	defer func() {
@@ -96,13 +72,21 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 	languageType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
 		ws.logger.Errorf("[MsgID %s]Failed to parse language type: %s", messageID, err)
-		return QueueMessage{}, errors.ErrFailedToParseLanguageType
+		err = PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, err)
+		if err != nil {
+			ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+		}
+		return
 	}
 
 	solutionFileName, err := languages.GetSolutionFileNameWithExtension(constants.SolutionFileBaseName, languageType)
 	if err != nil {
 		ws.logger.Errorf("[MsgID %s] Failed to get solution file name: %s", messageID, err)
-		return QueueMessage{}, errors.ErrFailedToGetSolutionFileName
+		err = PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, err)
+		if err != nil {
+			ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+		}
+		return
 	}
 
 	if task.ChrootDirPath == "" {
@@ -137,7 +121,12 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 		ws.logger.Infof("Storing solution result [MsgID: %s]", messageID)
 		err = ws.fileService.StoreSolutionResult(solutionResult, taskForRunner.taskFilesDirPath, task.UserID, task.TaskID, task.SubmissionNumber)
 		if err != nil {
-			return QueueMessage{}, err
+			ws.logger.Errorf("Failed to store solution result: %s", err)
+			err = PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, err)
+			if err != nil {
+				ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+			}
+			return
 		}
 	} else {
 		ws.logger.Infof("Initialization error occurred. Skipping storing solution result [MsgID: %s]", messageID)
@@ -146,29 +135,21 @@ func (ws *Worker) processTask(task TaskQueueMessage, messageID string) (QueueMes
 	payload, err := json.Marshal(solutionResult)
 	if err != nil {
 		ws.logger.Errorf("Failed to marshal solution result: %s", err)
-		return QueueMessage{}, errors.ErrFailedToStoreSolution
+		err = PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, err)
+		if err != nil {
+			ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+		}
+		return
 	}
 
-	return QueueMessage{
-		Type:      constants.QueueMessageTypeTask,
-		MessageID: messageID,
-		Payload:   payload,
-	}, nil
-}
-
-func (ws *Worker) processHandshake(queueMessage QueueMessage) (QueueMessage, error) {
-	ws.logger.Infof("Processing handshake message")
-
-	supportedLanguages := languages.GetSupportedLanguagesWithVersions()
-	payload, err := json.Marshal(supportedLanguages)
+	ws.logger.Infof("Publishing solution result [MsgID: %s]", messageID)
+	err = PublishSucessToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, payload)
+	ws.logger.Infof("Published solution result [MsgID: %s]", messageID)
 	if err != nil {
-		ws.logger.Errorf("Failed to marshal supported languages: %s", err)
-		return QueueMessage{}, errors.ErrFailedToStoreSolution
+		ws.logger.Errorf("Failed to publish success to response queue: %s", err)
+		err = PublishErrorToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, err)
+		if err != nil {
+			ws.logger.Errorf("Failed to publish error to response queue: %s", err)
+		}
 	}
-
-	return QueueMessage{
-		Type:      constants.QueueMessageTypeHandshake,
-		MessageID: queueMessage.MessageID,
-		Payload:   payload,
-	}, nil
 }
