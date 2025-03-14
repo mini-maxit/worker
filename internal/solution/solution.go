@@ -1,15 +1,5 @@
 package solution
 
-type Solution struct {
-	Language         LanguageConfig // Language of the solution
-	TimeLimits       []int          // Time limit for the solution
-	MemoryLimits     []int          // Memory limit for the
-	BaseDir          string         // Base directory where solution file is stored
-	SolutionFileName string         // Name of the solution file
-	InputDir         string         // Directory where input files are stored
-	OutputDir        string         // Directory where expected output files are stored
-}
-
 type SolutionStatus int
 
 const (
@@ -50,7 +40,6 @@ type SolutionResult struct {
 	OutputDir   string         // Directory where output files are stored
 	Success     bool           // wether solution passed or failed
 	StatusCode  SolutionStatus // Status of the solution execution
-	Code        string         // any code in case of error or success depending on status code
 	Message     string         // any information message in case of error is error message
 	TestResults []TestResult   // test results in case of error or success
 }

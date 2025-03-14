@@ -1,29 +1,32 @@
-# Start from a specific version of the Go image
-FROM golang:1.23-bookworm
+    FROM golang:1.23-bookworm AS builder
 
-# Install sudo and tools needed for chroot
-RUN apt-get update && \
-    apt-get install -y sudo debootstrap schroot && \
-    rm -rf /var/lib/apt/lists/*
+    RUN apt-get update && \
+        apt-get install -y sudo debootstrap schroot g++ && \
+        rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
+    WORKDIR /app
 
-# Copy go mod files and install dependencies
-COPY go.mod go.sum ./
-RUN go mod download
+    COPY go.mod go.sum ./
+    RUN go mod download
 
-# Copy the rest of the application files
-COPY . .
+    COPY . .
 
-# Make necessary scripts executable
-RUN chmod +x chroot_init_script.sh
-RUN chmod +x run_tests.sh
+    RUN chmod +x chroot_init_script.sh
 
-RUN sudo ./chroot_init_script.sh
+    RUN sudo ./chroot_init_script.sh
 
-# Build the Go application
-RUN CGO_ENABLED=0 GOOS=linux go build -o ./bin/worker-service ./cmd/main.go
+    RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./cmd/main.go
 
-# Set entrypoint for the container
-ENTRYPOINT [ "./bin/worker-service" ]
+    FROM debian:bookworm-slim
+
+    RUN apt-get update && \
+        apt-get install -y g++ schroot && \
+        rm -rf /var/lib/apt/lists/*
+
+    WORKDIR /app
+
+    COPY --from=builder /worker-service /app/worker-service
+
+    COPY --from=builder /tmp/chroot /tmp/chroot
+
+    ENTRYPOINT [ "/app/worker-service" ]

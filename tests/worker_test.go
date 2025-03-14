@@ -1,132 +1,65 @@
 package tests
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mini-maxit/worker/internal/config"
-	"github.com/mini-maxit/worker/internal/logger"
-	"github.com/mini-maxit/worker/solution"
-	"github.com/mini-maxit/worker/worker"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/services"
+	"github.com/mini-maxit/worker/internal/solution"
+	"github.com/mini-maxit/worker/rabbitmq"
+	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/zap/zapcore"
 )
 
-const validMessage = `{
-  "message_id": "adsa",
-  "task_id": 1,
-  "user_id": 1,
-  "submission_number": 1,
-  "language_type": "CPP",
-  "language_version": "20",
-  "time_limits": [10],
-  "memory_limits": [512]
-}`
-
-type MessageType int
+type testType int
 
 const (
-	Success MessageType = iota + 1
-	CompilationError
+	Success testType = iota + 1
 	FailedTimeLimitExceeded
+	CompilationError
+	TestCaseFailed
+	Handshake
 )
 
-type workerTestStruct struct {
-	connection *amqp.Connection
-	channel    *amqp.Channel
-	queueName  string
+// Struct for validating response payload
+type ExpectedTaskResponse struct {
+	Type      string `json:"type"`
+	MessageID string `json:"message_id"`
+	Payload   struct {
+		OutputDir   string                `json:"OutputDir"`
+		Success     bool                  `json:"Success"`
+		StatusCode  int                   `json:"StatusCode"`
+		Code        string                `json:"Code"`
+		Message     string                `json:"Message"`
+		TestResults []solution.TestResult `json:"TestResults"`
+	} `json:"payload"`
 }
 
-func setup() *workerTestStruct {
-	config := config.NewConfig()
-	conn := worker.NewRabbitMqConnection(config)
-
-	ch := worker.NewRabbitMQChannel(conn)
-
-	_, err := declareResponseQueue(ch, "reply_to")
-	if err != nil {
-		return &workerTestStruct{
-			connection: nil,
-			channel:    nil,
-			queueName:  "",
-		}
-	}
-
-	return &workerTestStruct{
-		connection: conn,
-		channel:    ch,
-		queueName:  "reply_to",
-	}
+type ExpectedHandshakeResponse struct {
+	Type      string          `json:"type"`
+	MessageID string          `json:"message_id"`
+	Payload   json.RawMessage `json:"payload"`
 }
 
-func tearDown(worker *workerTestStruct) {
-	worker.channel.Close()
-	worker.connection.Close()
-}
+func generateQueueMessage(test testType) string {
+	var payload string
+	var msgType string
 
-func createTask(taskPath string) error {
-	requestUrl := "http://file-storage:8888/createTask"
-	file, err := os.Open(taskPath)
-	if err != nil {
-		return err
+	if test == Handshake {
+		payload = "{}"
+		msgType = "handshake"
+	} else {
+		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp","use_chroot":"false"}`, test)
+		msgType = "task"
 	}
 
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	if err := writer.WriteField("taskID", "1"); err != nil {
-		return err
-	}
-	if err := writer.WriteField("overwrite", "true"); err != nil {
-		return err
-	}
-
-	part, err := writer.CreateFormFile("archive", filepath.Base(taskPath))
-	if err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(part, file); err != nil {
-		return err
-	}
-
-	if err := writer.Close(); err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", requestUrl, body)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes := new(bytes.Buffer)
-		_, err := bodyBytes.ReadFrom(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("failed to create task: %s", bodyBytes.String())
-	}
-
-	return nil
+	return fmt.Sprintf(`{"type":"%s","message_id":"adsa","payload":%s}`, msgType, payload)
 }
 
 func declareResponseQueue(ch *amqp.Channel, queueName string) (amqp.Queue, error) {
@@ -137,335 +70,242 @@ func consumeResponse(ch *amqp.Channel, queueName string) (<-chan amqp.Delivery, 
 	return ch.Consume(queueName, "", true, false, false, false, nil)
 }
 
-func publishTask(ch *amqp.Channel) error {
-	err := ch.Publish(
+func publishMessage(ch *amqp.Channel, message string) error {
+	return ch.Publish(
 		"",             // exchange
 		"worker_queue", // routing key
 		false,          // mandatory
 		false,          // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
-			Body:        []byte(validMessage),
-			Headers: amqp.Table{
-				"x-retry-count": 1,
-			},
-			ReplyTo: "reply_to",
+			Body:        []byte(message),
+			ReplyTo:     "reply_to",
 		})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
-func submitSubmission(msgType MessageType, taskID, userID string) error {
-	requestUrl := "http://file-storage:8888/submit"
-	filePath := "../tests/mock_files/"
-	switch msgType {
+func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
+	switch testType {
 	case Success:
-		filePath += "under_limit.cpp"
+		return actual.Payload.Success &&
+			actual.Payload.Code == solution.Success.String() &&
+			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
+			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 && (actual.Payload.TestResults)[0].Passed
 	case FailedTimeLimitExceeded:
-		filePath += "over_limit.cpp"
+		return !actual.Payload.Success &&
+			actual.Payload.Code == solution.RuntimeError.String() &&
+			strings.Contains(actual.Payload.Message, "time limit exceeded") &&
+			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 &&
+			!(actual.Payload.TestResults)[0].Passed && (actual.Payload.TestResults)[0].ErrorMessage == "time limit exceeded"
 	case CompilationError:
-		filePath += "compilation_error.cpp"
-	}
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	if err := writer.WriteField("taskID", taskID); err != nil {
-		return err
-	}
-
-	if err := writer.WriteField("userID", userID); err != nil {
-		return err
-	}
-
-	part, err := writer.CreateFormFile("submissionFile", filepath.Base(filePath))
-	if err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(part, file); err != nil {
-		return err
-	}
-
-	if err := writer.Close(); err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", requestUrl, body)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes := new(bytes.Buffer)
-		_, err := bodyBytes.ReadFrom(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("failed to submit submission: %s", bodyBytes.String())
-	}
-
-	return nil
-}
-
-func deleteTask(taskID string) error {
-	requestUrl := fmt.Sprintf("http://file-storage:8888/deleteTask?taskID=%s", taskID)
-	req, err := http.NewRequest("DELETE", requestUrl, nil)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes := new(bytes.Buffer)
-		_, err := bodyBytes.ReadFrom(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("failed to delete task: %s", bodyBytes.String())
-	}
-
-	return nil
-}
-
-func generateExpectedResponseMessage(msgType MessageType) string {
-	var expectedResponse strings.Builder
-	var statusCode solution.SolutionStatus
-	var message string
-	var code string
-	var sucess bool
-	var testResult string
-
-	switch msgType {
-	case Success:
-		code = solution.Success.String()
-		statusCode = solution.Success
-		message = "solution executed successfully"
-		sucess = true
-		testResult = `"TestResults":[{"Passed":true,"ErrorMessage":"","Order":1}]`
-	case FailedTimeLimitExceeded:
-		code = solution.RuntimeError.String()
-		message = "some test cases failed due to time limit exceeded"
-		statusCode = solution.RuntimeError
-		sucess = false
-		testResult = `"TestResults":[{"Passed":false,"ErrorMessage":"time limit exceeded","Order":1}]`
-	case CompilationError:
-		code = solution.CompilationError.String()
-		statusCode = solution.CompilationError
-		message = "exit status 1"
-		sucess = false
-		testResult = `"TestResults":null`
+		return !actual.Payload.Success &&
+			actual.Payload.Code == solution.CompilationError.String() &&
+			strings.Contains(actual.Payload.Message, "exit status") &&
+			actual.Payload.TestResults == nil
+	case TestCaseFailed:
+		return !actual.Payload.Success &&
+			actual.Payload.Code == solution.Success.String() &&
+			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
+			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) > 0 &&
+			!(actual.Payload.TestResults)[0].Passed &&
+			strings.Contains((actual.Payload.TestResults)[0].ErrorMessage, "Difference at line 1")
 	default:
-		code = "Unknown"
+		return false
 	}
-
-	message = fmt.Sprintf(`{"message_id":"adsa","result":{"OutputDir":"user-output","Success":%t,"StatusCode":%d,"Code":"%s","Message":"%s",%s}}`, sucess, statusCode, code, message, testResult)
-
-	expectedResponse.WriteString(message)
-
-	return expectedResponse.String()
 }
 
-func TestValidExecution(t *testing.T) {
-	worker := setup()
-	testType := Success
-
-	msgs, err := consumeResponse(worker.channel, worker.queueName)
-	if err != nil {
-		t.Fatalf("Failed to consume messages: %s", err)
+func validateErrFileContent(testType testType, outputDir string) bool {
+	switch testType {
+	case Success:
+		return true
+	case FailedTimeLimitExceeded:
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
+	case CompilationError:
+		return fileExists(outputDir, "compile-err.err") && fileContains(outputDir, "compile-err.err", "undeclared identifier 'std'")
+	case TestCaseFailed:
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "Difference at line 1")
+	default:
+		return false
 	}
-
-	err = createTask("../tests/mock_files/Task.zip")
-	if err != nil {
-		t.Fatalf("Failed to create task: %s", err)
-	}
-
-	err = submitSubmission(testType, "1", "1")
-	if err != nil {
-		t.Fatalf("Failed to submit submission: %s", err)
-	}
-
-	err = publishTask(worker.channel)
-	if err != nil {
-		t.Fatalf("Failed to publish message: %s", err)
-	}
-
-	message := <-msgs
-	expectedResponse := generateExpectedResponseMessage(testType)
-	if string(message.Body) != expectedResponse {
-		t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(message.Body))
-	}
-
-	err = deleteTask("1")
-	if err != nil {
-		t.Fatalf("Failed to delete task: %s", err)
-	}
-
-	tearDown(worker)
 }
 
-func TestFailedTimeLimitExceeded(t *testing.T) {
-	worker := setup()
-	testType := FailedTimeLimitExceeded
-
-	msgs, err := consumeResponse(worker.channel, worker.queueName)
-	if err != nil {
-		t.Fatalf("Failed to consume messages: %s", err)
-	}
-
-	err = createTask("../tests/mock_files/Task.zip")
-	if err != nil {
-		t.Fatalf("Failed to create task: %s", err)
-	}
-
-	err = submitSubmission(testType, "1", "1")
-	if err != nil {
-		t.Fatalf("Failed to submit submission: %s", err)
-	}
-
-	err = publishTask(worker.channel)
-	if err != nil {
-		t.Fatalf("Failed to publish message: %s", err)
-	}
-
-	message := <-msgs
-	expectedResponse := generateExpectedResponseMessage(testType)
-	if string(message.Body) != expectedResponse {
-		t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(message.Body))
-	}
-
-	err = deleteTask("1")
-	if err != nil {
-		t.Fatalf("Failed to delete task: %s", err)
-	}
-	tearDown(worker)
+func fileExists(dir, filename string) bool {
+	_, err := os.Stat(fmt.Sprintf("%s/%s", dir, filename))
+	return err == nil
 }
 
-func TestCompilationError(t *testing.T) {
-	worker := setup()
-	testType := CompilationError
-
-	msgs, err := consumeResponse(worker.channel, worker.queueName)
+func fileContains(dir, filename, content string) bool {
+	file, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, filename))
 	if err != nil {
-		t.Fatalf("Failed to consume messages: %s", err)
+		return false
 	}
 
-	err = createTask("../tests/mock_files/Task.zip")
-	if err != nil {
-		t.Fatalf("Failed to create task: %s", err)
-	}
-
-	err = submitSubmission(testType, "1", "1")
-	if err != nil {
-		t.Fatalf("Failed to submit submission: %s", err)
-	}
-
-	err = publishTask(worker.channel)
-	if err != nil {
-		t.Fatalf("Failed to publish message: %s", err)
-	}
-
-	message := <-msgs
-	expectedResponse := generateExpectedResponseMessage(testType)
-	if string(message.Body) != expectedResponse {
-		t.Fatalf("Expected response: %s, got: %s", expectedResponse, string(message.Body))
-	}
-
-	err = deleteTask("1")
-	if err != nil {
-		t.Fatalf("Failed to delete task: %s", err)
-	}
-	tearDown(worker)
+	return strings.Contains(string(file), content)
 }
 
-func TestNotExistingTask(t *testing.T) {
-	worker := setup()
-
-	msgs, err := consumeResponse(worker.channel, worker.queueName)
-	if err != nil {
-		t.Fatalf("Failed to consume messages: %s", err)
+func equalHandshskePayload(payload map[string][]string, expectedPayload map[string][]string) bool {
+	if len(payload) != len(expectedPayload) {
+		return false
 	}
 
-	err = publishTask(worker.channel)
-	if err != nil {
-		t.Fatalf("Failed to publish message: %s", err)
-	}
+	for k, v := range payload {
+		if _, ok := expectedPayload[k]; !ok {
+			return false
+		}
 
-	message := <-msgs
-	if !strings.Contains(string(message.Body), "input src directory does not exist") {
-		t.Fatalf("Expected response to contain 'input src directory does not exist', got: %s", string(message.Body))
-	}
-
-	tearDown(worker)
-}
-
-func TestNotExistingSolution(t *testing.T) {
-	worker := setup()
-
-	msgs, err := consumeResponse(worker.channel, worker.queueName)
-	if err != nil {
-		t.Fatalf("Failed to consume messages: %s", err)
-	}
-
-	err = createTask("../tests/mock_files/Task.zip")
-	if err != nil {
-		t.Fatalf("Failed to create task: %s", err)
-	}
-
-	err = publishTask(worker.channel)
-	if err != nil {
-		t.Fatalf("Failed to publish message: %s", err)
-	}
-
-	message := <-msgs
-	if !strings.Contains(string(message.Body), "solution file does not exist") {
-		t.Fatalf("Expected response to contain 'solution file does not exist', got: %s", string(message.Body))
-	}
-
-	err = deleteTask("1")
-	if err != nil {
-		t.Fatalf("Failed to delete task: %s", err)
-	}
-	tearDown(worker)
-}
-
-func TestMain(m *testing.M) {
-	logger.SetLoggerLevel(zapcore.ErrorLevel)
-	code := m.Run()
-
-	if code != 0 {
-		err := deleteTask("1")
-		if err != nil {
-			fmt.Printf("Failed to delete task: %s", err)
+		for _, version := range v {
+			if !utils.Contains(expectedPayload[k], version) {
+				return false
+			}
 		}
 	}
-	os.Exit(code)
+
+	return true
+}
+
+func setUp(t *testing.T) (services.QueueService, *amqp.Channel, *amqp.Connection) {
+	fs := NewMockFileService(t)
+	rs := services.NewRunnerService()
+	w := services.NewWorker(fs, rs)
+
+	config := config.NewConfig()
+	conn := rabbitmq.NewRabbitMqConnection(config)
+	channel := rabbitmq.NewRabbitMQChannel(conn)
+	qs := services.NewQueueService(channel, constants.WorkerQueueName, w)
+	return qs, channel, conn
+}
+
+func TestProcessTask(t *testing.T) {
+	qs, channel, conn := setUp(t)
+	defer conn.Close()
+	defer channel.Close()
+
+	go qs.Listen()
+
+	responseQueueName := "reply_to"
+	_, err := declareResponseQueue(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to declare response queue: %s", err)
+	}
+	responseChannel, err := consumeResponse(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to consume response queue: %s", err)
+	}
+
+	tests := []struct {
+		name     string
+		testType testType
+	}{
+		{"Test valid solution", Success},
+		{"Test solution with time limit exceeded", FailedTimeLimitExceeded},
+		{"Test solution with compilation error", CompilationError},
+		{"Test solution with test case failed", TestCaseFailed},
+	}
+
+	for _, tt := range tests {
+		taskDir := fmt.Sprintf("./mock_files/tmp/Task_1_1_%d", tt.testType)
+		t.Run(tt.name, func(t *testing.T) {
+			message := generateQueueMessage(tt.testType)
+			go publishMessage(channel, message)
+
+			select {
+			case response := <-responseChannel:
+				var actualResponse ExpectedTaskResponse
+				err := json.Unmarshal(response.Body, &actualResponse)
+				if err != nil {
+					err = os.RemoveAll(taskDir)
+					if err != nil {
+						t.Fatalf("Failed to remove task directory: %s", err)
+					}
+					t.Fatalf("Failed to parse response JSON: %s", err)
+				}
+
+				if !validateResponse(tt.testType, actualResponse) {
+					err = os.RemoveAll(taskDir)
+					if err != nil {
+						t.Fatalf("Failed to remove task directory: %s", err)
+					}
+					t.Fatalf("Unexpected response: %+v", actualResponse)
+				}
+
+				var outputDir string
+				if tt.testType == CompilationError {
+					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d", tt.testType)
+				} else {
+					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d/%s", tt.testType, actualResponse.Payload.OutputDir)
+				}
+
+				if !validateErrFileContent(tt.testType, outputDir) {
+					err = os.RemoveAll(taskDir)
+					if err != nil {
+						t.Fatalf("Failed to remove task directory: %s", err)
+					}
+					t.Fatalf("Unexpected error file content")
+				}
+
+				if err := os.RemoveAll(taskDir); err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+
+			case <-time.After(5 * time.Second):
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+				t.Fatalf("Did not receive response in time")
+			}
+		})
+	}
+}
+
+func TestProcessHandshake(t *testing.T) {
+	qs, channel, conn := setUp(t)
+	defer conn.Close()
+	defer channel.Close()
+
+	go qs.Listen()
+
+	responseQueueName := "reply_to"
+	_, err := declareResponseQueue(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to declare response queue: %s", err)
+	}
+	responseChannel, err := consumeResponse(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to consume response queue: %s", err)
+	}
+
+	t.Run("Test handshake", func(t *testing.T) {
+		message := generateQueueMessage(Handshake)
+		go publishMessage(channel, message)
+
+		select {
+		case response := <-responseChannel:
+			var actualResponse ExpectedHandshakeResponse
+			err := json.Unmarshal(response.Body, &actualResponse)
+			if err != nil {
+				t.Fatalf("Failed to parse response JSON: %s", err)
+			}
+
+			if actualResponse.Type != "handshake" {
+				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
+			}
+
+			var payload map[string][]string
+			err = json.Unmarshal(actualResponse.Payload, &payload)
+			if err != nil {
+				t.Fatalf("Failed to parse response payload JSON: %s", err)
+			}
+
+			expectedPayload := map[string][]string{
+				"CPP": {"11", "14", "17", "20"},
+			}
+
+			if !equalHandshskePayload(payload, expectedPayload) {
+				t.Fatalf("Unexpected response payload: %+v", payload)
+			}
+
+		case <-time.After(5 * time.Second):
+			t.Fatalf("Did not receive response in time")
+		}
+	})
 }
