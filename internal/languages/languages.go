@@ -11,6 +11,7 @@ type LanguageType int
 
 const (
 	CPP LanguageType = iota + 1
+	Python
 )
 
 func (lt LanguageType) String() string {
@@ -23,11 +24,13 @@ func (lt LanguageType) String() string {
 }
 
 var LanguageTypeMap = map[string]LanguageType{
-	"CPP": CPP,
+	"CPP":    CPP,
+	"PYTHON": Python,
 }
 
 var LanguageExtensionMap = map[LanguageType]string{
-	CPP: ".cpp",
+	CPP:    ".cpp",
+	Python: ".py",
 }
 
 var LanguageVersionMap = map[LanguageType]map[string]string{
@@ -36,6 +39,10 @@ var LanguageVersionMap = map[LanguageType]map[string]string{
 		"14": "c++14",
 		"17": "c++17",
 		"20": "c++20",
+	},
+	Python: {
+		"2": "python2",
+		"3": "python3",
 	},
 }
 

@@ -3,23 +3,23 @@ package executor
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"os/exec"
 
 	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
-type CppExecutor struct {
+type PythonExecutor struct {
 	version string
 	config  *ExecutorConfig
 	logger  *zap.SugaredLogger
 }
 
-func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
+func (e *PythonExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
+	e.logger.Infof("COmmmand: %s", command)
 	restrictedCmd, rootToChrootExecPath, err := copyExecutableToChrootAndRestric(command, commandConfig)
 	if err != nil {
 		e.logger.Errorf("Could not copy executable to chroot and restrict. %s [MsgID: %s]", err.Error(), messageID)
@@ -28,6 +28,8 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 			Message:  fmt.Sprintf("could not copy executable to chroot and restrict. %s", err.Error()),
 		}
 	}
+
+	e.logger.Infof("Root to chroot exec path: %s", rootToChrootExecPath)
 
 	defer func() {
 		if err := utils.RemoveIO(rootToChrootExecPath, false, false); err != nil {
@@ -56,6 +58,16 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 		utils.CloseFile(ioConfig.Stderr)
 	}()
 
+	// Add shangbang to the command file
+	err = utils.AddShebangToCommandFile(rootToChrootExecPath, e.version)
+	if err != nil {
+		e.logger.Errorf("Could not add shebang to command file. %s [MsgID: %s]", err.Error(), messageID)
+		return &ExecutionResult{
+			ExitCode: constants.ExitCodeInternalError,
+			Message:  fmt.Sprintf("could not add shebang to command file. %s", err.Error()),
+		}
+	}
+
 	// Execute the command
 	e.logger.Infof("Executing command [MsgID: %s]", messageID)
 	runErr := restrictedCmd.Run()
@@ -76,72 +88,34 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	}
 }
 
-func (e *CppExecutor) String() string {
+func (e *PythonExecutor) RequiresCompilation() bool {
+	return false
+}
+
+func (e *PythonExecutor) Compile(filePath, dir, messageID string) (string, error) {
+	return "", errors.ErrDoesNotRequireCompilation
+}
+
+func (e *PythonExecutor) String() string {
 	var out bytes.Buffer
 
-	out.WriteString("CppExecutor{")
+	out.WriteString("PythonExecutor{")
 	out.WriteString("Version: " + e.version + ", ")
 	out.WriteString("Config: " + e.config.String())
 	out.WriteString("}")
 
 	return out.String()
-
 }
 
-func (e *CppExecutor) RequiresCompilation() bool {
-	return true
-}
-
-// For now compile allows only one file
-func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, error) {
-	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
-	outFilePath := fmt.Sprintf("%s/solution", dir)
-	// Correctly pass the command and its arguments as separate strings
-	cmd := exec.Command("g++", "-o", outFilePath, fmt.Sprintf("-std=%s", e.version), sourceFilePath)
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	e.logger.Infof("Running command [MsgID: %s]", messageID)
-	cmdErr := cmd.Run()
-	if cmdErr != nil {
-		// Save stderr to a file
-		e.logger.Errorf("Error during compilation. %s [MsgID: %s]", cmdErr.Error(), messageID)
-		e.logger.Infof("Creating stderr file [MsgID: %s]", messageID)
-		errPath := fmt.Sprintf("%s/%s", dir, constants.CompileErrorFileName)
-		file, err := os.Create(errPath)
-		if err != nil {
-			e.logger.Errorf("Could not create stderr file. %s [MsgID: %s]", err.Error(), messageID)
-			return "", err
-		}
-
-		e.logger.Infof("Writing error to sdterr file [MsgID: %s]", messageID)
-		_, err = file.Write(stderr.Bytes())
-		if err != nil {
-			e.logger.Errorf("Error writing to file. %s [MsgID: %s]", err.Error(), messageID)
-			return "", err
-		}
-		e.logger.Infof("Closing stderr file [MsgID: %s]", messageID)
-		err = file.Close()
-		if err != nil {
-			e.logger.Errorf("Error closing file. %s [MsgID: %s]", err.Error(), messageID)
-			return "", err
-		}
-		e.logger.Infof("Compilation error saved to %s [MsgID: %s]", errPath, messageID)
-		return errPath, cmdErr
-	}
-	e.logger.Infof("Compilation successful [MsgID: %s]", messageID)
-	return outFilePath, nil
-}
-
-func NewCppExecutor(version, messageID string) (*CppExecutor, error) {
-	logger := logger.NewNamedLogger("cpp-executor")
-	versionFlag, err := languages.GetVersionFlag(languages.CPP, version)
+func NewPythonExecutor(version, messageID string) (*PythonExecutor, error) {
+	logger := logger.NewNamedLogger("PythonExecutor")
+	versionFlag, err := languages.GetVersionFlag(languages.Python, version)
 	if err != nil {
 		logger.Errorf("Failed to get version flag. %s [MsgID: %s]", err.Error(), messageID)
 		return nil, err
 	}
-	return &CppExecutor{
+
+	return &PythonExecutor{
 		version: versionFlag,
 		logger:  logger}, nil
 }

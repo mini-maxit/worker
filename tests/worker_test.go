@@ -20,10 +20,11 @@ import (
 type testType int
 
 const (
-	Success testType = iota + 1
-	FailedTimeLimitExceeded
-	CompilationError
-	TestCaseFailed
+	CPPSuccess testType = iota + 1
+	CPPFailedTimeLimitExceeded
+	CPPCompilationError
+	CPPTestCaseFailed
+	PythonSuccess
 	Handshake
 	longTaskMessage
 	Status
@@ -59,7 +60,7 @@ type ExpecredStatusResponse struct {
 	} `json:"payload"`
 }
 
-func generateQueueMessage(test testType) string {
+func generateQueueMessage(test testType, languageType, languageVersion string) string {
 	var payload string
 	var msgType string
 
@@ -70,10 +71,10 @@ func generateQueueMessage(test testType) string {
 		payload = "{}"
 		msgType = "status"
 	} else if test == longTaskMessage {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[20],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, FailedTimeLimitExceeded, FailedTimeLimitExceeded)
+		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"%s","language_version":"%s","time_limits":[20],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, CPPFailedTimeLimitExceeded, languageType, languageVersion, CPPFailedTimeLimitExceeded)
 		msgType = "task"
 	} else {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, test, test)
+		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"%s","language_version":"%s","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, test, languageType, languageVersion, test)
 		msgType = "task"
 	}
 
@@ -103,25 +104,29 @@ func publishMessage(ch *amqp.Channel, message string) error {
 
 func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
 	switch testType {
-	case Success:
+	case CPPSuccess:
 		return actual.Payload.Success &&
 			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 && (actual.Payload.TestResults)[0].Passed
-	case FailedTimeLimitExceeded:
+	case CPPFailedTimeLimitExceeded:
 		return !actual.Payload.Success &&
 			strings.Contains(actual.Payload.Message, "time limit exceeded") &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 &&
 			!(actual.Payload.TestResults)[0].Passed && (actual.Payload.TestResults)[0].ErrorMessage == "time limit exceeded"
-	case CompilationError:
+	case CPPCompilationError:
 		return !actual.Payload.Success &&
 			strings.Contains(actual.Payload.Message, "exit status") &&
 			actual.Payload.TestResults == nil
-	case TestCaseFailed:
+	case CPPTestCaseFailed:
 		return !actual.Payload.Success &&
 			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) > 0 &&
 			!(actual.Payload.TestResults)[0].Passed &&
 			strings.Contains((actual.Payload.TestResults)[0].ErrorMessage, "Difference at line 1")
+	case PythonSuccess:
+		return actual.Payload.Success &&
+			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
+			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 && (actual.Payload.TestResults)[0].Passed
 	default:
 		return false
 	}
@@ -129,14 +134,16 @@ func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
 
 func validateErrFileContent(testType testType, outputDir string) bool {
 	switch testType {
-	case Success:
-		return true
-	case FailedTimeLimitExceeded:
+	case CPPSuccess:
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
+	case CPPFailedTimeLimitExceeded:
 		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
-	case CompilationError:
+	case CPPCompilationError:
 		return fileExists(outputDir, "compile-err.err") && fileContains(outputDir, "compile-err.err", "undeclared identifier 'std'")
-	case TestCaseFailed:
+	case CPPTestCaseFailed:
 		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "Difference at line 1")
+	case PythonSuccess:
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
 	default:
 		return false
 	}
@@ -208,19 +215,22 @@ func TestProcessTask(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		testType testType
+		name            string
+		testType        testType
+		languageType    string
+		languageVersion string
 	}{
-		{"Test valid solution", Success},
-		{"Test solution with time limit exceeded", FailedTimeLimitExceeded},
-		{"Test solution with compilation error", CompilationError},
-		{"Test solution with test case failed", TestCaseFailed},
+		{"Test valid solution CPP", CPPSuccess, "CPP", "20"},
+		{"Test solution with time limit exceeded CPP", CPPFailedTimeLimitExceeded, "CPP", "20"},
+		{"Test solution with compilation error CPP", CPPCompilationError, "CPP", "20"},
+		{"Test solution with test case failed CPP", CPPTestCaseFailed, "CPP", "20"},
+		{"Test valid solution Python", PythonSuccess, "Python", "3"},
 	}
 
 	for _, tt := range tests {
 		taskDir := fmt.Sprintf("./mock_files/tmp/Task_1_1_%d", tt.testType)
 		t.Run(tt.name, func(t *testing.T) {
-			message := generateQueueMessage(tt.testType)
+			message := generateQueueMessage(tt.testType, tt.languageType, tt.languageVersion)
 			go publishMessage(channel, message)
 
 			select {
@@ -244,7 +254,7 @@ func TestProcessTask(t *testing.T) {
 				}
 
 				var outputDir string
-				if tt.testType == CompilationError {
+				if tt.testType == CPPCompilationError {
 					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d", tt.testType)
 				} else {
 					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d/%s", tt.testType, actualResponse.Payload.OutputDir)
@@ -290,7 +300,7 @@ func TestProcessHandshake(t *testing.T) {
 	}
 
 	t.Run("Test handshake", func(t *testing.T) {
-		message := generateQueueMessage(Handshake)
+		message := generateQueueMessage(Handshake, "", "")
 		go publishMessage(channel, message)
 
 		select {
@@ -346,7 +356,7 @@ func TestProcessStatus(t *testing.T) {
 	}
 
 	t.Run("Test status all idle", func(t *testing.T) {
-		message := generateQueueMessage(Status)
+		message := generateQueueMessage(Status, "", "")
 		go publishMessage(channel, message)
 
 		select {
@@ -405,12 +415,12 @@ func TestProcessStatus(t *testing.T) {
 	})
 
 	t.Run("Test 1 busy worker", func(t *testing.T) {
-		message := generateQueueMessage(longTaskMessage)
+		message := generateQueueMessage(longTaskMessage, "CPP", "20")
 		go publishMessage(channel, message)
 
 		time.Sleep(3 * time.Second)
 
-		message = generateQueueMessage(Status)
+		message = generateQueueMessage(Status, "", "")
 		go publishMessage(channel, message)
 
 		select {

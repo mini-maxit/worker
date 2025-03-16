@@ -40,6 +40,9 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 	case languages.CPP:
 		r.logger.Infof("Initializing C++ executor [MsgID: %s]", messageID)
 		exec, err = executor.NewCppExecutor(task.languageVersion, messageID)
+	case languages.Python:
+		r.logger.Infof("Initializing Python executor [MsgID: %s]", messageID)
+		exec, err = executor.NewPythonExecutor(task.languageVersion, messageID)
 	default:
 		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
 		return s.SolutionResult{
@@ -72,8 +75,8 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 	r.logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
 
 	var filePath string
-	if exec.IsCompiled() {
-		solutionFilePath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.solutionFileName)
+	solutionFilePath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.solutionFileName)
+	if exec.RequiresCompilation() {
 		r.logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
 		filePath, err = exec.Compile(solutionFilePath, task.taskFilesDirPath, messageID)
 		if err != nil {
@@ -86,7 +89,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			}
 		}
 	} else {
-		filePath = task.solutionFileName
+		filePath = solutionFilePath
 	}
 
 	inputPath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.inputDirName)

@@ -3,11 +3,15 @@ package executor
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/utils"
 )
 
 type CommandConfig struct {
@@ -23,7 +27,7 @@ type CommandConfig struct {
 
 type Executor interface {
 	ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult
-	IsCompiled() bool // Indicate whether the program should be compiled before execution
+	RequiresCompilation() bool // Indicate whether the program should be compiled before execution
 	Compile(filePath, dir, messageID string) (string, error)
 	String() string
 }
@@ -46,6 +50,12 @@ func ExitCodeToString(exitCode int) string {
 type ExecutionResult struct {
 	ExitCode int
 	Message  string
+}
+
+type IOConfig struct {
+	Stdin  *os.File
+	Stdout *os.File
+	Stderr *os.File
 }
 
 func (er *ExecutionResult) String() string {
@@ -76,4 +86,60 @@ func restrictCommand(executableName string, commandConfig CommandConfig) *exec.C
 	args = append(args, "timeout", "--verbose", timeLimitSecondsString, executeCommand)
 
 	return exec.Command(args[0], args[1:]...)
+}
+
+func copyExecutableToChrootAndRestric(executablePath string, commandConfig CommandConfig) (*exec.Cmd, string, error) {
+	fmt.Printf("Copying executable to chroot and restricting command %s\n", executablePath)
+	id := uuid.New()
+
+	executableName := filepath.Base(executablePath)
+	chrootExecName := fmt.Sprintf("%s_%s", id.String(), executableName)
+	rootToChrootExecPath := fmt.Sprintf("%s/%s", commandConfig.ChrootDirPath, chrootExecName)
+	// Copy the executable to the chroot
+	err := utils.CopyFile(executablePath, rootToChrootExecPath)
+	if err != nil {
+		return nil, rootToChrootExecPath, err
+	}
+
+	// Change the permissions of the executable
+	err = os.Chmod(rootToChrootExecPath, 0755)
+	if err != nil {
+		return nil, rootToChrootExecPath, err
+	}
+
+	// Restrict command to run in chroot with time limit
+	restrictedCmd := restrictCommand(chrootExecName, commandConfig)
+
+	return restrictedCmd, rootToChrootExecPath, nil
+}
+
+func setupIOFiles(stdinFilePath, stdoutFilePath, stderrFilePath string) (IOConfig, error) {
+	ioConfig := IOConfig{}
+	// Open stdout file
+	stdout, err := os.OpenFile(stdoutFilePath, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		return IOConfig{}, fmt.Errorf("could not open stdout file. %s", err.Error())
+	}
+
+	ioConfig.Stdout = stdout
+
+	// Open stderr file
+	stderr, err := os.OpenFile(stderrFilePath, os.O_RDWR|os.O_CREATE|os.O_SYNC, 0755)
+	if err != nil {
+		return IOConfig{}, fmt.Errorf("could not open stderr file. %s", err.Error())
+	}
+
+	ioConfig.Stderr = stderr
+
+	// Handle stdin if supplied
+	if len(stdinFilePath) > 0 {
+		// Open stdin
+		stdin, err := os.OpenFile(stdinFilePath, os.O_RDWR|os.O_CREATE, 0755)
+		if err != nil {
+			return IOConfig{}, fmt.Errorf("could not open stdin file. %s", err.Error())
+		}
+		ioConfig.Stdin = stdin
+	}
+
+	return ioConfig, nil
 }

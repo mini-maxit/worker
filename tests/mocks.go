@@ -58,8 +58,17 @@ func (mfs *MockFileService) HandleTaskPackage(taskId, userId, submissionNumber i
 		return services.TaskDirConfig{}, fmt.Errorf("failed to copy task files: %w", err)
 	}
 
-	userSolution := filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".cpp")
-	destSolution := filepath.Join(dirPath, "solution.cpp")
+	var userSolution string
+	var destSolution string
+
+	if submissionNumber < 5 {
+		userSolution = filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".cpp")
+		destSolution = filepath.Join(dirPath, "solution.cpp")
+	} else {
+		fmt.Printf("submissionNumber: %d\n", submissionNumber)
+		userSolution = filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".py")
+		destSolution = filepath.Join(dirPath, "solution.py")
+	}
 
 	if _, err := os.Stat(userSolution); os.IsNotExist(err) {
 		return services.TaskDirConfig{}, fmt.Errorf("user solution file does not exist: %s", userSolution)
