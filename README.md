@@ -101,7 +101,16 @@ Upon successful execution of the task, the worker sends a message to the specifi
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "CPP": ["20", "17"],
+    "languages": [
+      {
+        "name": "CPP",
+        "versions": ["20", "17"]
+      },
+      {
+        "name": "Python",
+        "versions": ["3", "2"]
+      }
+    ]
   }
 }
 ```

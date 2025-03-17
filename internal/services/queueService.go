@@ -246,7 +246,18 @@ func (qs *queueService) handleHandshakeMessage(queueMessage QueueMessage, replyT
 	qs.logger.Infof("Processing handshake message")
 
 	supportedLanguages := languages.GetSupportedLanguagesWithVersions()
-	payload, err := json.Marshal(supportedLanguages)
+
+	var languagesList []map[string]interface{}
+	for name, versions := range supportedLanguages {
+		languagesList = append(languagesList, map[string]interface{}{
+			"name":     name,
+			"versions": versions,
+		})
+	}
+
+	payload, err := json.Marshal(map[string]interface{}{
+		"languages": languagesList,
+	})
 	if err != nil {
 		qs.logger.Errorf("Failed to marshal supported languages: %s", err)
 		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)

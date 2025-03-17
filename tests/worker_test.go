@@ -13,7 +13,6 @@ import (
 	"github.com/mini-maxit/worker/internal/services"
 	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/rabbitmq"
-	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -44,9 +43,16 @@ type ExpectedTaskResponse struct {
 }
 
 type ExpectedHandshakeResponse struct {
-	Type      string          `json:"type"`
-	MessageID string          `json:"message_id"`
-	Payload   json.RawMessage `json:"payload"`
+	Type      string `json:"type"`
+	MessageID string `json:"message_id"`
+	Payload   struct {
+		Languages []LanguageConfig `json:"languages"`
+	} `json:"payload"`
+}
+
+type LanguageConfig struct {
+	Name     string   `json:"name"`
+	Versions []string `json:"versions"`
 }
 
 type ExpecredStatusResponse struct {
@@ -187,20 +193,37 @@ func fileContains(dir, filename, content string) bool {
 	return strings.Contains(string(file), content)
 }
 
-func equalHandshskePayload(payload map[string][]string, expectedPayload map[string][]string) bool {
-	if len(payload) != len(expectedPayload) {
+func equalHandshskePayload(actualResponse []LanguageConfig, expectedPayload []LanguageConfig) bool {
+	if len(actualResponse) != len(expectedPayload) {
 		return false
 	}
 
-	for k, v := range payload {
-		if _, ok := expectedPayload[k]; !ok {
-			return false
-		}
+	for _, lang := range actualResponse {
+		foundLang := false
+		for _, expectedLang := range expectedPayload {
+			if lang.Name == expectedLang.Name {
+				foundLang = true
+				if len(lang.Versions) != len(expectedLang.Versions) {
+					return false
+				}
 
-		for _, version := range v {
-			if !utils.Contains(expectedPayload[k], version) {
-				return false
+				for _, version := range lang.Versions {
+					foundVersion := false
+					for _, expectedVersion := range expectedLang.Versions {
+						if version == expectedVersion {
+							foundVersion = true
+							break
+						}
+					}
+
+					if !foundVersion {
+						return false
+					}
+				}
 			}
+		}
+		if !foundLang {
+			return false
 		}
 	}
 
@@ -348,18 +371,15 @@ func TestProcessHandshake(t *testing.T) {
 				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
 			}
 
-			var payload map[string][]string
-			err = json.Unmarshal(actualResponse.Payload, &payload)
-			if err != nil {
-				t.Fatalf("Failed to parse response payload JSON: %s", err)
+			expectedPayload := []LanguageConfig{
+				{
+					Name:     "CPP",
+					Versions: []string{"20", "17", "14", "11"},
+				},
 			}
 
-			expectedPayload := map[string][]string{
-				"CPP": {"11", "14", "17", "20"},
-			}
-
-			if !equalHandshskePayload(payload, expectedPayload) {
-				t.Fatalf("Unexpected response payload: %+v", payload)
+			if !equalHandshskePayload(actualResponse.Payload.Languages, expectedPayload) {
+				t.Fatalf("Unexpected response payload: %+v", actualResponse.Payload.Languages)
 			}
 
 		case <-time.After(5 * time.Second):
