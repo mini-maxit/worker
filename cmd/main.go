@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/mini-maxit/worker/internal/config"
-	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/services"
 	"github.com/mini-maxit/worker/rabbitmq"
@@ -29,8 +28,8 @@ func main() {
 	// Initialize the services
 	runnerService := services.NewRunnerService()
 	fileService := services.NewFilesService(config.FileStorageUrl)
-	workerPool := services.NewWorkerPool(workerChannel, constants.WorkerQueueName, constants.MaxWorkers, fileService, runnerService)
-	queueService := services.NewQueueService(workerChannel, constants.WorkerQueueName, workerPool)
+	workerPool := services.NewWorkerPool(workerChannel, config.WorkerQueueName, config.MaxWorkers, fileService, runnerService)
+	queueService := services.NewQueueService(workerChannel, config.WorkerQueueName, workerPool)
 
 	logger.Info("Listening for messages")
 	// Start listening for messages

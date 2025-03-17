@@ -60,24 +60,49 @@ type ExpecredStatusResponse struct {
 }
 
 func generateQueueMessage(test testType) string {
-	var payload string
+	var payload map[string]interface{}
 	var msgType string
 
 	if test == Handshake {
-		payload = "{}"
+		payload = map[string]interface{}{}
 		msgType = "handshake"
 	} else if test == Status {
-		payload = "{}"
+		payload = map[string]interface{}{}
 		msgType = "status"
 	} else if test == longTaskMessage {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[20],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, FailedTimeLimitExceeded, FailedTimeLimitExceeded)
+		payload = map[string]interface{}{
+			"task_id":           1,
+			"user_id":           1,
+			"submission_number": FailedTimeLimitExceeded,
+			"language_type":     "CPP",
+			"language_version":  "20",
+			"time_limits":       []int{20},
+			"memory_limits":     []int{512},
+			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, FailedTimeLimitExceeded),
+			"use_chroot":        "false",
+		}
 		msgType = "task"
 	} else {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"CPP","language_version":"20","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, test, test)
+		payload = map[string]interface{}{
+			"task_id":           1,
+			"user_id":           1,
+			"submission_number": test,
+			"language_type":     "CPP",
+			"language_version":  "20",
+			"time_limits":       []int{2},
+			"memory_limits":     []int{512},
+			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, FailedTimeLimitExceeded),
+			"use_chroot":        "false",
+		}
 		msgType = "task"
 	}
 
-	return fmt.Sprintf(`{"type":"%s","message_id":"adsa","payload":%s}`, msgType, payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+
+	return fmt.Sprintf(`{"type":"%s","message_id":"adsa","payload":%s}`, msgType, string(payloadBytes))
 }
 
 func declareResponseQueue(ch *amqp.Channel, queueName string) (amqp.Queue, error) {
@@ -184,8 +209,15 @@ func setUp(t *testing.T, numberOfWorkers int) (services.QueueService, *amqp.Chan
 	conn := rabbitmq.NewRabbitMqConnection(config)
 	channel := rabbitmq.NewRabbitMQChannel(conn)
 
-	wp := services.NewWorkerPool(channel, constants.WorkerQueueName, numberOfWorkers, fs, rs)
-	qs := services.NewQueueService(channel, constants.WorkerQueueName, wp)
+	wp := services.NewWorkerPool(channel, constants.DefaultWorkerQueueName, numberOfWorkers, fs, rs)
+	qs := services.NewQueueService(channel, constants.DefaultWorkerQueueName, wp)
+
+	if _, err := os.Stat(mockTmpDir); os.IsNotExist(err) {
+		err := os.Mkdir(mockTmpDir, 0755)
+		if err != nil {
+			t.Fatalf("Failed to create tmp directory: %s", err)
+		}
+	}
 
 	return qs, channel, conn
 }
@@ -271,6 +303,11 @@ func TestProcessTask(t *testing.T) {
 			}
 		})
 	}
+
+	err = os.RemoveAll(mockTmpDir)
+	if err != nil {
+		t.Fatalf("Failed to remove tmp directory: %s", err)
+	}
 }
 func TestProcessHandshake(t *testing.T) {
 	qs, channel, conn := setUp(t, 1)
@@ -323,6 +360,11 @@ func TestProcessHandshake(t *testing.T) {
 			t.Fatalf("Did not receive response in time")
 		}
 	})
+
+	err = os.RemoveAll(mockTmpDir)
+	if err != nil {
+		t.Fatalf("Failed to remove tmp directory: %s", err)
+	}
 }
 
 func TestProcessStatus(t *testing.T) {
@@ -477,4 +519,9 @@ func TestProcessStatus(t *testing.T) {
 			t.Fatalf("Did not receive response in time")
 		}
 	})
+
+	err = os.RemoveAll(mockTmpDir)
+	if err != nil {
+		t.Fatalf("Failed to remove tmp directory: %s", err)
+	}
 }

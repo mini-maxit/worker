@@ -73,6 +73,7 @@ Upon successful execution of the task, the worker sends a message to the specifi
 {
   "type": "task",
   "message_id": "adsa",
+  "ok": true,
   "payload": {
     "Success": true,
     "StatusCode": 1,
@@ -98,6 +99,7 @@ Upon successful execution of the task, the worker sends a message to the specifi
 {
   "type": "handshake",
   "message_id": "adsa",
+  "ok": true,
   "payload": {
     "CPP": ["20", "17"],
   }
@@ -109,6 +111,7 @@ Upon successful execution of the task, the worker sends a message to the specifi
 {
   "type": "status",
   "message_id": "adsa",
+  "ok": true,
   "payload": {
     "busy_workers": 1,
     "total_workers": 2,
@@ -128,11 +131,9 @@ In case of an error, the worker will return an error message structured as follo
 {
   "type": "task",
   "message_id": "adsa",
+  "ok": false,
   "payload": {
-    "Success": false,
-    "StatusCode": 3,
-    "Message": "Failed to process the message after 3 retries: Failed to retrieve solution package: solution file does not exist for user 1, submission 1 of task 123",
-    "TestResults": null
+    "error": "error message"
   }
 }
 ```
