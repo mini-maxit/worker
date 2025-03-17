@@ -58,15 +58,10 @@ func (e *PythonExecutor) ExecuteCommand(command, messageID string, commandConfig
 		utils.CloseFile(ioConfig.Stderr)
 	}()
 
-	// Add shangbang to the command file
-	err = utils.AddShebangToCommandFile(rootToChrootExecPath, e.version)
-	if err != nil {
-		e.logger.Errorf("Could not add shebang to command file. %s [MsgID: %s]", err.Error(), messageID)
-		return &ExecutionResult{
-			ExitCode: constants.ExitCodeInternalError,
-			Message:  fmt.Sprintf("could not add shebang to command file. %s", err.Error()),
-		}
-	}
+	// Append the version flag to the command
+	args := restrictedCmd.Args
+	args = append(args[:len(args)-1], e.version, args[len(args)-1])
+	restrictedCmd.Args = args
 
 	// Execute the command
 	e.logger.Infof("Executing command [MsgID: %s]", messageID)

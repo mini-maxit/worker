@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/mini-maxit/worker/executor"
@@ -10,7 +11,6 @@ import (
 	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	s "github.com/mini-maxit/worker/internal/solution"
-	"github.com/mini-maxit/worker/verifier"
 	"go.uber.org/zap"
 )
 
@@ -32,28 +32,27 @@ func NewRunnerService() RunnerService {
 }
 
 func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.SolutionResult {
-	r.logger.Infof("Initializing executor [MsgID: %s]", messageID)
-	// Init appropriate executor
-	var exec executor.Executor
+	r.logger.Infof("Initializing solutionExecutor [MsgID: %s]", messageID)
+	// Init appropriate solutionExecutor
+	var solutionExecutor executor.Executor
 	var err error
 	switch task.languageType {
 	case languages.CPP:
-		r.logger.Infof("Initializing C++ executor [MsgID: %s]", messageID)
-		exec, err = executor.NewCppExecutor(task.languageVersion, messageID)
+		r.logger.Infof("Initializing C++ solutionExecutor [MsgID: %s]", messageID)
+		solutionExecutor, err = executor.NewCppExecutor(task.languageVersion, messageID)
 	case languages.Python:
-		r.logger.Infof("Initializing Python executor [MsgID: %s]", messageID)
-		exec, err = executor.NewPythonExecutor(task.languageVersion, messageID)
+		r.logger.Infof("Initializing Python solutionExecutor [MsgID: %s]", messageID)
+		solutionExecutor, err = executor.NewPythonExecutor(task.languageVersion, messageID)
 	default:
 		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
 		return s.SolutionResult{
-			Success: false,
-			Message: constants.SolutionMessageInvalidLanguageType,
+			StatusCode: s.InitializationError,
+			Message:    constants.SolutionMessageInvalidLanguageType,
 		}
 	}
 	if err != nil {
 		r.logger.Errorf("Error occured during initialization [MsgID: %s]", messageID)
 		return s.SolutionResult{
-			Success:    false,
 			StatusCode: s.InitializationError,
 			Message:    err.Error(),
 		}
@@ -66,7 +65,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 	if err != nil {
 		r.logger.Errorf("Error creating user output directory [MsgID: %s]: %s", messageID, err.Error())
 		return s.SolutionResult{
-			Success:    false,
 			StatusCode: s.InternalError,
 			Message:    err.Error(),
 		}
@@ -76,14 +74,13 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 
 	var filePath string
 	solutionFilePath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.solutionFileName)
-	if exec.RequiresCompilation() {
+	if solutionExecutor.RequiresCompilation() {
 		r.logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
-		filePath, err = exec.Compile(solutionFilePath, task.taskFilesDirPath, messageID)
+		filePath, err = solutionExecutor.Compile(solutionFilePath, task.taskFilesDirPath, messageID)
 		if err != nil {
 			r.logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
 			return s.SolutionResult{
 				OutputDir:  userOutputDir,
-				Success:    false,
 				StatusCode: s.CompilationError,
 				Message:    err.Error(),
 			}
@@ -99,8 +96,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		r.logger.Errorf("Error reading input files from %s [MsgID: %s]: %s", inputPath, messageID, err.Error())
 		return s.SolutionResult{
 			OutputDir:  userOutputDir,
-			Success:    false,
-			StatusCode: s.Failed,
+			StatusCode: s.InternalError,
 			Message:    err.Error(),
 		}
 	}
@@ -109,16 +105,13 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		r.logger.Errorf("Invalid number of limits, got %d input files, %d time limits and %d memory limits [MsgID: %s]", len(inputFiles), len(task.timeLimits), len(task.memoryLimits), messageID)
 		return s.SolutionResult{
 			OutputDir:  userOutputDir,
-			Success:    false,
-			StatusCode: s.Failed,
+			StatusCode: s.InternalError,
 			Message:    constants.SolutionMessageLimitsMismatch,
 		}
 	}
 
 	r.logger.Infof("Executing solution [MsgID: %s]", messageID)
-	verifier := verifier.NewDefaultVerifier()
 	testCases := make([]s.TestResult, len(inputFiles))
-	solutionSuccess := true
 	solutionStatus := s.Success
 	solutionMessage := constants.SolutionMessageSuccess
 	for i, inputPath := range inputFiles {
@@ -134,30 +127,54 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			UseChroot:     task.useChroot,
 		}
 
-		execResult := exec.ExecuteCommand(filePath, messageID, commandConfig)
+		execResult := solutionExecutor.ExecuteCommand(filePath, messageID, commandConfig)
 		switch execResult.ExitCode {
 		case constants.ExitCodeSuccess:
 			r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
 			expectedFilePath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.outputDirName, (i + 1))
-			result, difference, err := verifier.CompareOutput(outputPath, expectedFilePath)
+
+			diffCmd := exec.Command("diff", "-w", expectedFilePath, outputPath)
+			diffCmdOutput, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				r.logger.Errorf("Error comparing output %s with expected output [MsgID: %s]: %s", outputPath, messageID, err.Error())
-				solutionSuccess = false
-				difference = err.Error()
+				r.logger.Errorf("Error opening output file %s [MsgID: %s]: %s", outputPath, messageID, err.Error())
+				testCases[i] = s.TestResult{
+					Passed:       false,
+					ErrorMessage: err.Error(),
+					Order:        (i + 1),
+				}
+				solutionStatus = s.InternalError
+				solutionMessage = constants.SolutionMessageInternalError
+				continue
 			}
-			if !result {
-				solutionSuccess = false
-			}
-			err = StoreTestCaseDifferenceInErrFile((i + 1), difference, commandConfig.StderrPath)
+			defer diffCmdOutput.Close()
+
+			diffCmd.Stdout = diffCmdOutput
+			err = diffCmd.Run()
+			diffExitCode := diffCmd.ProcessState.ExitCode()
 			if err != nil {
-				r.logger.Errorf("Error storing difference in error file [MsgID: %s]: %s", messageID, err.Error())
-				solutionSuccess = false
-				difference = err.Error()
+				if diffExitCode == constants.ExitCodeDifference {
+					testCases[i] = s.TestResult{
+						Passed: false,
+						Order:  (i + 1),
+					}
+					solutionStatus = s.TestFailed
+					solutionMessage = constants.SolutionMessageTestFailed
+				} else {
+					r.logger.Errorf("Error running diff command [MsgID: %s]: %s", messageID, err.Error())
+					testCases[i] = s.TestResult{
+						Passed:       false,
+						ErrorMessage: err.Error(),
+						Order:        (i + 1),
+					}
+					solutionStatus = s.InternalError
+					solutionMessage = constants.SolutionMessageInternalError
+				}
+				continue
 			}
+
 			testCases[i] = s.TestResult{
-				Passed:       result,
-				ErrorMessage: difference,
-				Order:        (i + 1),
+				Passed: true,
+				Order:  (i + 1),
 			}
 		case constants.ExitCodeTimeLimitExceeded:
 			r.logger.Errorf("Time limit exceeded while executing solution [MsgID: %s]", messageID)
@@ -166,8 +183,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 				ErrorMessage: constants.TestMessageTimeLimitExceeded,
 				Order:        (i + 1),
 			}
-			solutionSuccess = false
-			solutionStatus = s.RuntimeError
+			solutionStatus = s.TimeLimitExceeded
 			solutionMessage = constants.SolutionMessageTimeout
 		case constants.ExitCodeMemoryLimitExceeded:
 			r.logger.Errorf("Memory limit exceeded while executing solution [MsgID: %s]", messageID)
@@ -176,8 +192,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 				ErrorMessage: constants.TestMessageMemoryLimitExceeded,
 				Order:        (i + 1),
 			}
-			solutionSuccess = false
-			solutionStatus = s.RuntimeError
+			solutionStatus = s.MemoryLimitExceeded
 			solutionMessage = constants.SolutionMessageMemoryLimitExceeded
 		default:
 			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
@@ -186,7 +201,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 				ErrorMessage: execResult.Message,
 				Order:        (i + 1),
 			}
-			solutionSuccess = false
 			solutionStatus = s.RuntimeError
 			solutionMessage = constants.SolutionMessageRuntimeError
 		}
@@ -195,7 +209,6 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 	r.logger.Infof("Solution executed successfully [MsgID: %s]", messageID)
 	return s.SolutionResult{
 		OutputDir:   userOutputDir,
-		Success:     solutionSuccess,
 		StatusCode:  solutionStatus,
 		Message:     solutionMessage,
 		TestResults: testCases,

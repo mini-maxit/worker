@@ -89,7 +89,6 @@ func restrictCommand(executableName string, commandConfig CommandConfig) *exec.C
 }
 
 func copyExecutableToChrootAndRestric(executablePath string, commandConfig CommandConfig) (*exec.Cmd, string, error) {
-	fmt.Printf("Copying executable to chroot and restricting command %s\n", executablePath)
 	id := uuid.New()
 
 	executableName := filepath.Base(executablePath)

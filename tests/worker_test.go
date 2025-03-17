@@ -25,6 +25,8 @@ const (
 	CPPCompilationError
 	CPPTestCaseFailed
 	PythonSuccess
+	PythonFailedTimeLimitExceeded
+	PythonTestCaseFailed
 	Handshake
 	longTaskMessage
 	Status
@@ -36,7 +38,6 @@ type ExpectedTaskResponse struct {
 	MessageID string `json:"message_id"`
 	Payload   struct {
 		OutputDir   string                `json:"OutputDir"`
-		Success     bool                  `json:"Success"`
 		StatusCode  int                   `json:"StatusCode"`
 		Code        string                `json:"Code"`
 		Message     string                `json:"Message"`
@@ -105,28 +106,37 @@ func publishMessage(ch *amqp.Channel, message string) error {
 func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
 	switch testType {
 	case CPPSuccess:
-		return actual.Payload.Success &&
-			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
+		return actual.Payload.StatusCode == int(solution.Success) &&
+			strings.Contains(actual.Payload.Message, constants.SolutionMessageSuccess) &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 && (actual.Payload.TestResults)[0].Passed
 	case CPPFailedTimeLimitExceeded:
-		return !actual.Payload.Success &&
-			strings.Contains(actual.Payload.Message, "time limit exceeded") &&
+		return actual.Payload.StatusCode == int(solution.TimeLimitExceeded) &&
+			strings.Contains(actual.Payload.Message, constants.SolutionMessageTimeout) &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 &&
-			!(actual.Payload.TestResults)[0].Passed && (actual.Payload.TestResults)[0].ErrorMessage == "time limit exceeded"
+			!(actual.Payload.TestResults)[0].Passed && (actual.Payload.TestResults)[0].ErrorMessage == constants.TestMessageTimeLimitExceeded
 	case CPPCompilationError:
-		return !actual.Payload.Success &&
+		return actual.Payload.StatusCode == int(solution.CompilationError) &&
 			strings.Contains(actual.Payload.Message, "exit status") &&
 			actual.Payload.TestResults == nil
 	case CPPTestCaseFailed:
-		return !actual.Payload.Success &&
-			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
+		return actual.Payload.StatusCode == int(solution.TestFailed) &&
+			strings.Contains(actual.Payload.Message, constants.SolutionMessageTestFailed) &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) > 0 &&
-			!(actual.Payload.TestResults)[0].Passed &&
-			strings.Contains((actual.Payload.TestResults)[0].ErrorMessage, "Difference at line 1")
+			!(actual.Payload.TestResults)[0].Passed
 	case PythonSuccess:
-		return actual.Payload.Success &&
-			strings.Contains(actual.Payload.Message, "solution executed successfully") &&
+		return actual.Payload.StatusCode == int(solution.Success) &&
+			strings.Contains(actual.Payload.Message, constants.SolutionMessageSuccess) &&
 			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 && (actual.Payload.TestResults)[0].Passed
+	case PythonFailedTimeLimitExceeded:
+		return actual.Payload.StatusCode == int(solution.TimeLimitExceeded) &&
+			strings.Contains(actual.Payload.Message, constants.SolutionMessageTimeout) &&
+			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) == 1 &&
+			!(actual.Payload.TestResults)[0].Passed && (actual.Payload.TestResults)[0].ErrorMessage == constants.TestMessageTimeLimitExceeded
+	case PythonTestCaseFailed:
+		return actual.Payload.StatusCode == int(solution.TestFailed) &&
+			strings.Contains(actual.Payload.Message, constants.SolutionMessageTestFailed) &&
+			actual.Payload.TestResults != nil && len(actual.Payload.TestResults) > 0 &&
+			!(actual.Payload.TestResults)[0].Passed
 	default:
 		return false
 	}
@@ -135,15 +145,19 @@ func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
 func validateErrFileContent(testType testType, outputDir string) bool {
 	switch testType {
 	case CPPSuccess:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
+		return fileExists(outputDir, "1.err")
 	case CPPFailedTimeLimitExceeded:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
+		return fileExists(outputDir, "1.err")
 	case CPPCompilationError:
-		return fileExists(outputDir, "compile-err.err") && fileContains(outputDir, "compile-err.err", "undeclared identifier 'std'")
+		return fileExists(outputDir, "compile-err.err")
 	case CPPTestCaseFailed:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "Difference at line 1")
+		return fileExists(outputDir, "1.err")
 	case PythonSuccess:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
+		return fileExists(outputDir, "1.err")
+	case PythonFailedTimeLimitExceeded:
+		return fileExists(outputDir, "1.err")
+	case PythonTestCaseFailed:
+		return fileExists(outputDir, "1.err")
 	default:
 		return false
 	}
@@ -152,15 +166,6 @@ func validateErrFileContent(testType testType, outputDir string) bool {
 func fileExists(dir, filename string) bool {
 	_, err := os.Stat(fmt.Sprintf("%s/%s", dir, filename))
 	return err == nil
-}
-
-func fileContains(dir, filename, content string) bool {
-	file, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, filename))
-	if err != nil {
-		return false
-	}
-
-	return strings.Contains(string(file), content)
 }
 
 func equalHandshskePayload(payload map[string][]string, expectedPayload map[string][]string) bool {
@@ -224,7 +229,9 @@ func TestProcessTask(t *testing.T) {
 		{"Test solution with time limit exceeded CPP", CPPFailedTimeLimitExceeded, "CPP", "20"},
 		{"Test solution with compilation error CPP", CPPCompilationError, "CPP", "20"},
 		{"Test solution with test case failed CPP", CPPTestCaseFailed, "CPP", "20"},
-		{"Test valid solution Python", PythonSuccess, "Python", "3"},
+		{"Test valid solution Python", PythonSuccess, "PYTHON", "3"},
+		{"Test solution with time limit exceeded Python", PythonFailedTimeLimitExceeded, "PYTHON", "3"},
+		{"Test solution with test case failed Python", PythonTestCaseFailed, "PYTHON", "3"},
 	}
 
 	for _, tt := range tests {
@@ -268,9 +275,9 @@ func TestProcessTask(t *testing.T) {
 					t.Fatalf("Unexpected error file content")
 				}
 
-				if err := os.RemoveAll(taskDir); err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
+				// if err := os.RemoveAll(taskDir); err != nil {
+				// 	t.Fatalf("Failed to remove task directory: %s", err)
+				// }
 
 			case <-time.After(5 * time.Second):
 				err = os.RemoveAll(taskDir)

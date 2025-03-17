@@ -3,7 +3,6 @@ package utils
 import (
 	"archive/tar"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -240,45 +239,6 @@ func RemoveEmptyErrFiles(dir string) error {
 				return err
 			}
 		}
-	}
-
-	return nil
-}
-
-// add shebang to the top of the file
-func AddShebangToCommandFile(filePath, version string) error {
-	file, err := os.OpenFile(filePath, os.O_RDWR, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// read the file
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return err
-	}
-
-	fileSize := fileInfo.Size()
-	fileContent := make([]byte, fileSize)
-	_, err = file.Read(fileContent)
-	if err != nil {
-		return err
-	}
-
-	shebang := fmt.Sprintf("#!/usr/bin/env %s\n", version)
-
-	fileContent = append([]byte(shebang), fileContent...)
-
-	// write the file
-	_, err = file.Seek(0, 0)
-	if err != nil {
-		return err
-	}
-
-	_, err = file.Write(fileContent)
-	if err != nil {
-		return err
 	}
 
 	return nil

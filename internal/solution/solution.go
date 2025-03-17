@@ -5,46 +5,30 @@ type SolutionStatus int
 const (
 	// Means the solution executed successfully without any errors. Does not mean that all tests passed
 	Success SolutionStatus = iota + 1
-	// Means there was a compilation error while compiling the solution
+	// Means that some test casses did not pass
+	TestFailed
+	// Means that the solution timed out
+	TimeLimitExceeded
+	// Means that the solution exceeded the memory limit
+	MemoryLimitExceeded
+	// Means that the solution failed to compile
 	CompilationError
-	// Means the solution failed to execute
-	Failed
-	// Means there was an internal error while executing the solution. This implies that the solution failed to execute
-	InternalError
-	// Means there was an error while initializing the executor
+	// Means that the solution failed to initialize wrong language, version etc
 	InitializationError
-	// Means there was an runtime error while executing the solution
+	// Means that some internal error occurred
+	InternalError
+	// Means that some runtime error occurred
 	RuntimeError
 )
 
-func (ss SolutionStatus) String() string {
-	switch ss {
-	case Success:
-		return "Success"
-	case Failed:
-		return "Failed"
-	case InternalError:
-		return "InternalError"
-	case CompilationError:
-		return "CompilationError"
-	case InitializationError:
-		return "InitializationError"
-	case RuntimeError:
-		return "RuntimeError"
-	default:
-		return "Unknown"
-	}
-}
-
 type SolutionResult struct {
 	OutputDir   string         // Directory where output files are stored
-	Success     bool           // wether solution passed or failed
 	StatusCode  SolutionStatus // Status of the solution execution
 	Message     string         // any information message in case of error is error message
 	TestResults []TestResult   // test results in case of error or success
 }
 type TestResult struct {
 	Passed       bool   // Whether the test passed or failed
-	ErrorMessage string // Error message in case of failure (if any)
+	ErrorMessage string // Error message in case of failure (if any). Will not contin if there is a difference in output
 	Order        int    // Order to input output pair for ex 1 mean in1.in and out1.out was used
 }

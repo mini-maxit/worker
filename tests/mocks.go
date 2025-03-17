@@ -65,7 +65,6 @@ func (mfs *MockFileService) HandleTaskPackage(taskId, userId, submissionNumber i
 		userSolution = filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".cpp")
 		destSolution = filepath.Join(dirPath, "solution.cpp")
 	} else {
-		fmt.Printf("submissionNumber: %d\n", submissionNumber)
 		userSolution = filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".py")
 		destSolution = filepath.Join(dirPath, "solution.py")
 	}
