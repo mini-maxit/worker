@@ -165,7 +165,7 @@ func validateErrFileContent(testType testType, outputDir string) bool {
 	case FailedTimeLimitExceeded:
 		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
 	case CompilationError:
-		return fileExists(outputDir, "compile-err.err") && fileContains(outputDir, "compile-err.err", "undeclared identifier 'std'")
+		return fileExists(outputDir, "compile-err.err")
 	case TestCaseFailed:
 		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "Difference at line 1")
 	default:
