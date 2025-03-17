@@ -59,7 +59,7 @@ type ExpecredStatusResponse struct {
 	} `json:"payload"`
 }
 
-func generateQueueMessage(test testType) string {
+func generateQueueMessage(test testType) []byte {
 	var payload map[string]interface{}
 	var msgType string
 
@@ -91,18 +91,24 @@ func generateQueueMessage(test testType) string {
 			"language_version":  "20",
 			"time_limits":       []int{2},
 			"memory_limits":     []int{512},
-			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, FailedTimeLimitExceeded),
+			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, test),
 			"use_chroot":        "false",
 		}
 		msgType = "task"
 	}
 
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		panic(err)
+	message := map[string]interface{}{
+		"type":       msgType,
+		"message_id": "adsa",
+		"payload":    payload,
 	}
 
-	return fmt.Sprintf(`{"type":"%s","message_id":"adsa","payload":%s}`, msgType, string(payloadBytes))
+	messageBytes, err := json.Marshal(message)
+	if err != nil {
+		return nil
+	}
+
+	return messageBytes
 }
 
 func declareResponseQueue(ch *amqp.Channel, queueName string) (amqp.Queue, error) {
@@ -113,7 +119,7 @@ func consumeResponse(ch *amqp.Channel, queueName string) (<-chan amqp.Delivery, 
 	return ch.Consume(queueName, "", true, false, false, false, nil)
 }
 
-func publishMessage(ch *amqp.Channel, message string) error {
+func publishMessage(ch *amqp.Channel, message []byte) error {
 	return ch.Publish(
 		"",             // exchange
 		"worker_queue", // routing key
@@ -121,7 +127,7 @@ func publishMessage(ch *amqp.Channel, message string) error {
 		false,          // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
-			Body:        []byte(message),
+			Body:        message,
 			ReplyTo:     "reply_to",
 		})
 }
