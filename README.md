@@ -113,8 +113,8 @@ Upon successful execution of the task, the worker sends a message to the specifi
     "busy_workers": 1,
     "total_workers": 2,
     "worker_status": {
-      "0": "idle",
-      "1": "busy Processing message 1",
+      0: "idle",
+      1: "busy Processing message 1",
     }
   }
 }
