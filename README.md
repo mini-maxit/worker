@@ -7,6 +7,7 @@ The Worker Service is a message-driven application that listens to a RabbitMQ qu
 The worker service can process two types of messages:
 1. **Task Message**: Contains details about the task to execute.
 2. **Handshake Message**: Used to syncronize the worker with the backend service. Returns supported languages and versions.
+3. **Status Message**: Used to check the status of the worker.
 
 ## Message Structure
 
@@ -45,8 +46,14 @@ The body of the message is a JSON object with the following structure:
 }
 ```
 
-
-
+### Status Message
+```json
+{
+"type": "status",
+"message_id": "adsa",
+"payload": {}
+}
+```
 
 ## Processing Flow
 
@@ -66,10 +73,10 @@ Upon successful execution of the task, the worker sends a message to the specifi
 {
   "type": "task",
   "message_id": "adsa",
+  "ok": true,
   "payload": {
     "Success": true,
     "StatusCode": 1,
-    "Code": "Success",
     "Message": "solution executed successfully",
     "TestResults": [
       {
@@ -92,21 +99,35 @@ Upon successful execution of the task, the worker sends a message to the specifi
 {
   "type": "handshake",
   "message_id": "adsa",
+  "ok": true,
   "payload": {
-    "Success": true,
-    "StatusCode": 1,
-    "Code": "Success",
-    "Message": "Handshake successful",
-    "Languages": [
+    "languages": [
       {
-        "Name": "CPP",
-        "Versions": ["17", "20"]
+        "name": "CPP",
+        "versions": ["20", "17"]
       },
       {
-        "Name": "Python",
-        "Versions": ["3.8", "3.9"]
+        "name": "Python",
+        "versions": ["3", "2"]
       }
     ]
+  }
+}
+```
+
+#### Status Message
+```json
+{
+  "type": "status",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "busy_workers": 1,
+    "total_workers": 2,
+    "worker_status": {
+      0: "idle",
+      1: "busy Processing message 1",
+    }
   }
 }
 ```
@@ -119,12 +140,9 @@ In case of an error, the worker will return an error message structured as follo
 {
   "type": "task",
   "message_id": "adsa",
+  "ok": false,
   "payload": {
-    "Success": false,
-    "StatusCode": 3,
-    "Code": "500",
-    "Message": "Failed to process the message after 3 retries: Failed to retrieve solution package: solution file does not exist for user 1, submission 1 of task 123",
-    "TestResults": null
+    "error": "error message"
   }
 }
 ```

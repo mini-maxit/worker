@@ -4,11 +4,7 @@ package constants
 const (
 	QueueMessageTypeTask      = "task"
 	QueueMessageTypeHandshake = "handshake"
-)
-
-// Queue names
-const (
-	WorkerQueueName = "worker_queue"
+	QueueMessageTypeStatus    = "status"
 )
 
 // SolutionResult messages
@@ -32,7 +28,8 @@ const (
 	SolutionFileBaseName = "solution"
 	InputDirName         = "inputs"
 	OutputDirName        = "outputs"
-	MaxRetries           = 2
+	WorkerStatusIdle     = "idle"
+	WorkerStatusBusy     = "busy"
 )
 
 // Exit codes
@@ -54,4 +51,6 @@ const (
 	DefaultLogPath          = "./internal/logger/logs/log.txt"
 	CompileErrorFileName    = "compile-err.err"
 	BaseChrootDir           = "../tmp/chroot"
+	DefaultWorkerQueueName  = "worker_queue"
+	DefaultMaxWorkersStr    = "10"
 )
