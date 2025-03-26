@@ -253,10 +253,10 @@ func TestProcessTask(t *testing.T) {
 				}
 
 				if !validateResponse(tt.testType, actualResponse) {
-					err = os.RemoveAll(taskDir)
-					if err != nil {
-						t.Fatalf("Failed to remove task directory: %s", err)
-					}
+					// err = os.RemoveAll(taskDir)
+					// if err != nil {
+					// 	t.Fatalf("Failed to remove task directory: %s", err)
+					// }
 					t.Fatalf("Unexpected response: %+v", actualResponse)
 				}
 
@@ -275,9 +275,9 @@ func TestProcessTask(t *testing.T) {
 					t.Fatalf("Unexpected error file content")
 				}
 
-				// if err := os.RemoveAll(taskDir); err != nil {
-				// 	t.Fatalf("Failed to remove task directory: %s", err)
-				// }
+				if err := os.RemoveAll(taskDir); err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
 
 			case <-time.After(5 * time.Second):
 				err = os.RemoveAll(taskDir)
@@ -329,7 +329,8 @@ func TestProcessHandshake(t *testing.T) {
 			}
 
 			expectedPayload := map[string][]string{
-				"CPP": {"11", "14", "17", "20"},
+				"CPP":    {"11", "14", "17", "20"},
+				"PYTHON": {"2", "3"},
 			}
 
 			if !equalHandshskePayload(payload, expectedPayload) {
