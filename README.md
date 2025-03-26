@@ -81,11 +81,13 @@ Upon successful execution of the task, the worker sends a message to the specifi
     "TestResults": [
       {
         "Passed": false,
+        "ExecutionTime": 0.000000,
         "ErrorMessage": "Difference at line 1:\nOutput:   Hello, World!\nExpected: Hello World!\n\n",
         "Order": 1
       },
       {
         "Passed": true,
+        "ExecutionTime": 0.000000,
         "ErrorMessage": "",
         "Order": 2
       }

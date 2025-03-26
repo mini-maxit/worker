@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
@@ -131,7 +132,11 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			UseChroot:     task.useChroot,
 		}
 
+		execTimeStart := time.Now()
 		execResult := exec.ExecuteCommand(filePath, messageID, commandConfig)
+		execTimeEnd := time.Now()
+
+		execTime := execTimeEnd.Sub(execTimeStart).Seconds()
 		switch execResult.ExitCode {
 		case constants.ExitCodeSuccess:
 			r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
@@ -152,16 +157,18 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 				difference = err.Error()
 			}
 			testCases[i] = s.TestResult{
-				Passed:       result,
-				ErrorMessage: difference,
-				Order:        (i + 1),
+				Passed:        result,
+				ExecutionTime: execTime,
+				ErrorMessage:  difference,
+				Order:         (i + 1),
 			}
 		case constants.ExitCodeTimeLimitExceeded:
 			r.logger.Errorf("Time limit exceeded while executing solution [MsgID: %s]", messageID)
 			testCases[i] = s.TestResult{
-				Passed:       false,
-				ErrorMessage: constants.TestMessageTimeLimitExceeded,
-				Order:        (i + 1),
+				Passed:        false,
+				ExecutionTime: execTime,
+				ErrorMessage:  constants.TestMessageTimeLimitExceeded,
+				Order:         (i + 1),
 			}
 			solutionSuccess = false
 			solutionStatus = s.RuntimeError
@@ -169,9 +176,10 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		case constants.ExitCodeMemoryLimitExceeded:
 			r.logger.Errorf("Memory limit exceeded while executing solution [MsgID: %s]", messageID)
 			testCases[i] = s.TestResult{
-				Passed:       false,
-				ErrorMessage: constants.TestMessageMemoryLimitExceeded,
-				Order:        (i + 1),
+				Passed:        false,
+				ExecutionTime: execTime,
+				ErrorMessage:  constants.TestMessageMemoryLimitExceeded,
+				Order:         (i + 1),
 			}
 			solutionSuccess = false
 			solutionStatus = s.RuntimeError
@@ -179,9 +187,10 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		default:
 			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
 			testCases[i] = s.TestResult{
-				Passed:       false,
-				ErrorMessage: execResult.Message,
-				Order:        (i + 1),
+				Passed:        false,
+				ExecutionTime: execTime,
+				ErrorMessage:  execResult.Message,
+				Order:         (i + 1),
 			}
 			solutionSuccess = false
 			solutionStatus = s.RuntimeError

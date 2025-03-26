@@ -44,7 +44,8 @@ type SolutionResult struct {
 	TestResults []TestResult   // test results in case of error or success
 }
 type TestResult struct {
-	Passed       bool   // Whether the test passed or failed
-	ErrorMessage string // Error message in case of failure (if any)
-	Order        int    // Order to input output pair for ex 1 mean in1.in and out1.out was used
+	Passed        bool    // Whether the test passed or failed
+	ExecutionTime float64 // Execution time of the test
+	ErrorMessage  string  // Error message in case of failure (if any)
+	Order         int     // Order to input output pair for ex 1 mean in1.in and out1.out was used
 }
