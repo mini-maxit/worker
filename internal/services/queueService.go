@@ -274,47 +274,4 @@ func (qs *queueService) handleHandshakeMessage(queueMessage QueueMessage, replyT
 			qs.logger.Errorf("Failed to publish error message: %s", err)
 		}
 	}
-
-	responseJSON, jsonErr := json.Marshal(queueMessage)
-	if jsonErr != nil {
-		return jsonErr
-	}
-
-	logger.Infof("Publishing response to queue: %s", responseQueueName)
-	err := channel.Publish("", responseQueueName, false, false, amqp.Publishing{
-		ContentType: "application/json",
-		Body:        responseJSON,
-	})
-
-	logger.Infof("Published response to queue: %s", responseQueueName)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (qs *queueService) RequeueTaskWithHigherPriority(queueMessage QueueMessage) error {
-	priority := 2
-
-	queueMessageJSON, err := json.Marshal(queueMessage)
-	if err != nil {
-		qs.logger.Errorf("Failed to marshal queue message: %s", err)
-		return err
-	}
-
-	err = qs.channel.Publish("", qs.workerQueueName, false, false, amqp.Publishing{
-		ContentType:   "application/json",
-		CorrelationId: queueMessage.MessageID,
-		Body:          queueMessageJSON,
-		Priority:      uint8(priority),
-	})
-
-	if err != nil {
-		qs.logger.Errorf("Failed to requeue task with higher priority: %s", err)
-		return err
-	}
-
-	return nil
 }

@@ -67,7 +67,7 @@ type ExpecredStatusResponse struct {
 	} `json:"payload"`
 }
 
-func generateQueueMessage(test testType) []byte {
+func generateQueueMessage(test testType, language, version string) []byte {
 	var payload map[string]interface{}
 	var msgType string
 
@@ -81,12 +81,12 @@ func generateQueueMessage(test testType) []byte {
 		payload = map[string]interface{}{
 			"task_id":           1,
 			"user_id":           1,
-			"submission_number": FailedTimeLimitExceeded,
+			"submission_number": CPPFailedTimeLimitExceeded,
 			"language_type":     "CPP",
 			"language_version":  "20",
 			"time_limits":       []int{20},
 			"memory_limits":     []int{512},
-			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, FailedTimeLimitExceeded),
+			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, CPPFailedTimeLimitExceeded),
 			"use_chroot":        "false",
 		}
 		msgType = "task"
@@ -95,8 +95,8 @@ func generateQueueMessage(test testType) []byte {
 			"task_id":           1,
 			"user_id":           1,
 			"submission_number": test,
-			"language_type":     "CPP",
-			"language_version":  "20",
+			"language_type":     language,
+			"language_version":  version,
 			"time_limits":       []int{2},
 			"memory_limits":     []int{512},
 			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, test),
@@ -182,19 +182,19 @@ func validateResponse(testType testType, actual ExpectedTaskResponse) bool {
 func validateErrFileContent(testType testType, outputDir string) bool {
 	switch testType {
 	case CPPSuccess:
-		return fileExists(outputDir, "1.err")
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
 	case CPPFailedTimeLimitExceeded:
-		return fileExists(outputDir, "1.err")
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
 	case CPPCompilationError:
-		return fileExists(outputDir, "compile-err.err")
+		return fileExists(outputDir, "compile-err.err") && fileContains(outputDir, "compile-err.err", "errors")
 	case CPPTestCaseFailed:
-		return fileExists(outputDir, "1.err")
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "1c1")
 	case PythonSuccess:
-		return fileExists(outputDir, "1.err")
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
 	case PythonFailedTimeLimitExceeded:
-		return fileExists(outputDir, "1.err")
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
 	case PythonTestCaseFailed:
-		return fileExists(outputDir, "1.err")
+		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "1c1")
 	default:
 		return false
 	}
@@ -204,7 +204,6 @@ func fileExists(dir, filename string) bool {
 	_, err := os.Stat(fmt.Sprintf("%s/%s", dir, filename))
 	return err == nil
 }
-
 
 func fileContains(dir, filename, content string) bool {
 	file, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, filename))
@@ -273,10 +272,25 @@ func setUp(t *testing.T, numberOfWorkers int) (services.QueueService, *amqp.Chan
 	return qs, channel, conn
 }
 
+func tearDown() {
+	// remove temporary directory
+	err := os.RemoveAll(mockTmpDir)
+	if err != nil {
+		fmt.Printf("Failed to remove tmp directory: %s", err)
+	}
+
+	// remove logs directory
+	err = os.RemoveAll("./internal/logger/logs")
+	if err != nil {
+		fmt.Printf("Failed to remove logs directory: %s", err)
+	}
+}
+
 func TestProcessTask(t *testing.T) {
 	qs, channel, conn := setUp(t, 1)
 	defer conn.Close()
 	defer channel.Close()
+	defer tearDown()
 
 	go qs.Listen()
 
@@ -306,7 +320,6 @@ func TestProcessTask(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		taskDir := fmt.Sprintf("./mock_files/tmp/Task_1_1_%d", tt.testType)
 		t.Run(tt.name, func(t *testing.T) {
 			message := generateQueueMessage(tt.testType, tt.languageType, tt.languageVersion)
 			go publishMessage(channel, message)
@@ -316,18 +329,10 @@ func TestProcessTask(t *testing.T) {
 				var actualResponse ExpectedTaskResponse
 				err := json.Unmarshal(response.Body, &actualResponse)
 				if err != nil {
-					err = os.RemoveAll(taskDir)
-					if err != nil {
-						t.Fatalf("Failed to remove task directory: %s", err)
-					}
 					t.Fatalf("Failed to parse response JSON: %s", err)
 				}
 
 				if !validateResponse(tt.testType, actualResponse) {
-					err = os.RemoveAll(taskDir)
-					if err != nil {
-						t.Fatalf("Failed to remove task directory: %s", err)
-					}
 					t.Fatalf("Unexpected response: %+v", actualResponse)
 				}
 
@@ -339,36 +344,20 @@ func TestProcessTask(t *testing.T) {
 				}
 
 				if !validateErrFileContent(tt.testType, outputDir) {
-					err = os.RemoveAll(taskDir)
-					if err != nil {
-						t.Fatalf("Failed to remove task directory: %s", err)
-					}
 					t.Fatalf("Unexpected error file content")
 				}
 
-				if err := os.RemoveAll(taskDir); err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-
 			case <-time.After(5 * time.Second):
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 				t.Fatalf("Did not receive response in time")
 			}
 		})
-	}
-
-	err = os.RemoveAll(mockTmpDir)
-	if err != nil {
-		t.Fatalf("Failed to remove tmp directory: %s", err)
 	}
 }
 func TestProcessHandshake(t *testing.T) {
 	qs, channel, conn := setUp(t, 1)
 	defer conn.Close()
 	defer channel.Close()
+	defer tearDown()
 
 	go qs.Listen()
 
@@ -403,6 +392,10 @@ func TestProcessHandshake(t *testing.T) {
 					Name:     "CPP",
 					Versions: []string{"20", "17", "14", "11"},
 				},
+				{
+					Name:     "PYTHON",
+					Versions: []string{"3", "2", "2.7"},
+				},
 			}
 
 			if !equalHandshskePayload(actualResponse.Payload.Languages, expectedPayload) {
@@ -413,164 +406,15 @@ func TestProcessHandshake(t *testing.T) {
 			t.Fatalf("Did not receive response in time")
 		}
 	})
-
-	err = os.RemoveAll(mockTmpDir)
-	if err != nil {
-		t.Fatalf("Failed to remove tmp directory: %s", err)
-	}
 }
 
 func TestProcessStatus(t *testing.T) {
 	const numberOfWorkers = 5
-	const taskDir = "./mock_files/tmp/Task_1_1_2"
 
 	qs, channel, conn := setUp(t, numberOfWorkers)
 	defer conn.Close()
 	defer channel.Close()
-
-	go qs.Listen()
-
-	responseQueueName := "reply_to"
-	_, err := declareResponseQueue(channel, responseQueueName)
-	if err != nil {
-		t.Fatalf("Failed to declare response queue: %s", err)
-	}
-	responseChannel, err := consumeResponse(channel, responseQueueName)
-	if err != nil {
-		t.Fatalf("Failed to consume response queue: %s", err)
-	}
-
-	t.Run("Test status all idle", func(t *testing.T) {
-		message := generateQueueMessage(Status)
-		go publishMessage(channel, message)
-
-		select {
-		case response := <-responseChannel:
-			var actualResponse ExpecredStatusResponse
-			err := json.Unmarshal(response.Body, &actualResponse)
-			if err != nil {
-				t.Fatalf("Failed to parse response JSON: %s", err)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			if actualResponse.Type != "status" {
-				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			if actualResponse.Payload.BusyWorkers != 0 {
-				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
-				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			for _, status := range actualResponse.Payload.WorkerStatus {
-				if status != "idle" {
-					t.Fatalf("Unexpected worker status: %s", status)
-					err = os.RemoveAll(taskDir)
-					if err != nil {
-						t.Fatalf("Failed to remove task directory: %s", err)
-					}
-				}
-			}
-
-		case <-time.After(5 * time.Second):
-			err = os.RemoveAll(taskDir)
-			if err != nil {
-				t.Fatalf("Failed to remove task directory: %s", err)
-			}
-			t.Fatalf("Did not receive response in time")
-		}
-	})
-
-	t.Run("Test 1 busy worker", func(t *testing.T) {
-		message := generateQueueMessage(longTaskMessage)
-		go publishMessage(channel, message)
-
-		time.Sleep(3 * time.Second)
-
-		message = generateQueueMessage(Status)
-		go publishMessage(channel, message)
-
-			expectedPayload := map[string][]string{
-				"CPP":    {"11", "14", "17", "20"},
-				"PYTHON": {"2", "3"},
-			}
-
-			if actualResponse.Payload.BusyWorkers != 1 {
-				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
-				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			busyWorkers := 0
-			for _, status := range actualResponse.Payload.WorkerStatus {
-				if strings.Contains(status, "busy") {
-					busyWorkers++
-				}
-			}
-
-			if busyWorkers != 1 {
-				t.Fatalf("Unexpected busy workers count: %d", busyWorkers)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			err = os.RemoveAll(taskDir)
-			if err != nil {
-				t.Fatalf("Failed to remove task directory: %s", err)
-			}
-
-		case <-time.After(5 * time.Second):
-			err = os.RemoveAll(taskDir)
-			if err != nil {
-				t.Fatalf("Failed to remove task directory: %s", err)
-			}
-			t.Fatalf("Did not receive response in time")
-		}
-	})
-
-	err = os.RemoveAll(mockTmpDir)
-	if err != nil {
-		t.Fatalf("Failed to remove tmp directory: %s", err)
-	}
-}
-
-func TestProcessStatus(t *testing.T) {
-	const numberOfWorkers = 5
-	const taskDir = "./mock_files/tmp/Task_1_1_2"
-
-	qs, channel, conn := setUp(t, numberOfWorkers)
-	defer conn.Close()
-	defer channel.Close()
+	defer tearDown()
 
 	go qs.Listen()
 
@@ -594,51 +438,27 @@ func TestProcessStatus(t *testing.T) {
 			err := json.Unmarshal(response.Body, &actualResponse)
 			if err != nil {
 				t.Fatalf("Failed to parse response JSON: %s", err)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			if actualResponse.Type != "status" {
 				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			if actualResponse.Payload.BusyWorkers != 0 {
 				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
 				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			for _, status := range actualResponse.Payload.WorkerStatus {
 				if status != "idle" {
 					t.Fatalf("Unexpected worker status: %s", status)
-					err = os.RemoveAll(taskDir)
-					if err != nil {
-						t.Fatalf("Failed to remove task directory: %s", err)
-					}
 				}
 			}
 
 		case <-time.After(5 * time.Second):
-			err = os.RemoveAll(taskDir)
-			if err != nil {
-				t.Fatalf("Failed to remove task directory: %s", err)
-			}
 			t.Fatalf("Did not receive response in time")
 		}
 	})
@@ -658,34 +478,14 @@ func TestProcessStatus(t *testing.T) {
 			err := json.Unmarshal(response.Body, &actualResponse)
 			if err != nil {
 				t.Fatalf("Failed to parse response JSON: %s", err)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			if actualResponse.Type != "status" {
-				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			if actualResponse.Payload.BusyWorkers != 1 {
 				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
 				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
 			}
 
 			busyWorkers := 0
@@ -697,22 +497,9 @@ func TestProcessStatus(t *testing.T) {
 
 			if busyWorkers != 1 {
 				t.Fatalf("Unexpected busy workers count: %d", busyWorkers)
-				err = os.RemoveAll(taskDir)
-				if err != nil {
-					t.Fatalf("Failed to remove task directory: %s", err)
-				}
-			}
-
-			err = os.RemoveAll(taskDir)
-			if err != nil {
-				t.Fatalf("Failed to remove task directory: %s", err)
 			}
 
 		case <-time.After(5 * time.Second):
-			err = os.RemoveAll(taskDir)
-			if err != nil {
-				t.Fatalf("Failed to remove task directory: %s", err)
-			}
 			t.Fatalf("Did not receive response in time")
 		}
 	})
