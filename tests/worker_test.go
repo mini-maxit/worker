@@ -16,21 +16,6 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type testType int
-
-const (
-	CPPSuccess testType = iota + 1
-	CPPFailedTimeLimitExceeded
-	CPPCompilationError
-	CPPTestCaseFailed
-	PythonSuccess
-	PythonFailedTimeLimitExceeded
-	PythonTestCaseFailed
-	Handshake
-	longTaskMessage
-	Status
-)
-
 // Struct for validating response payload
 type ExpectedTaskResponse struct {
 	Type      string `json:"type"`

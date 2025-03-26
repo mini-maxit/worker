@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/services"
@@ -20,6 +19,32 @@ const (
 	mockUserSolutionDir = mockFilesDir + "solutions/"
 	mockTmpDir          = mockFilesDir + "tmp"
 )
+
+type testType int
+
+const (
+	CPPSuccess testType = iota + 1
+	CPPFailedTimeLimitExceeded
+	CPPCompilationError
+	CPPTestCaseFailed
+	PythonSuccess
+	PythonFailedTimeLimitExceeded
+	PythonTestCaseFailed
+	Handshake
+	longTaskMessage
+	Status
+)
+
+var testTypeSolutionMap = map[testType]string{
+	CPPSuccess:                    "CPPSuccessSolution.cpp",
+	CPPFailedTimeLimitExceeded:    "CPPFailedTimeLimitExceededSolution.cpp",
+	CPPCompilationError:           "CPPCompilationErrorSolution.cpp",
+	CPPTestCaseFailed:             "CPPTestCaseFailedSolution.cpp",
+	PythonSuccess:                 "PythonSuccessSolution.py",
+	PythonFailedTimeLimitExceeded: "PythonFailedTimeLimitExceededSolution.py",
+	PythonTestCaseFailed:          "PythonTestCaseFailedSolution.py",
+	longTaskMessage:               "CPPFailedTimeLimitExceededSolution.cpp",
+}
 
 type MockFileService struct {
 	t *testing.T
@@ -58,16 +83,13 @@ func (mfs *MockFileService) HandleTaskPackage(taskId, userId, submissionNumber i
 		return services.TaskDirConfig{}, fmt.Errorf("failed to copy task files: %w", err)
 	}
 
-	var userSolution string
-	var destSolution string
-
-	if submissionNumber < 5 {
-		userSolution = filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".cpp")
-		destSolution = filepath.Join(dirPath, "solution.cpp")
-	} else {
-		userSolution = filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".py")
-		destSolution = filepath.Join(dirPath, "solution.py")
+	solutionFile, ok := testTypeSolutionMap[testType(submissionNumber)]
+	if !ok {
+		return services.TaskDirConfig{}, fmt.Errorf("invalid submission number: %d", submissionNumber)
 	}
+	userSolution := filepath.Join(mockUserSolutionDir, solutionFile)
+	solutionName := fmt.Sprintf("solution%s", filepath.Ext(userSolution))
+	destSolution := filepath.Join(dirPath, solutionName)
 
 	if _, err := os.Stat(userSolution); os.IsNotExist(err) {
 		return services.TaskDirConfig{}, fmt.Errorf("user solution file does not exist: %s", userSolution)

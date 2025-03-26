@@ -29,6 +29,6 @@ type SolutionResult struct {
 }
 type TestResult struct {
 	Passed       bool   // Whether the test passed or failed
-	ErrorMessage string // Error message in case of failure (if any). Will not contin if there is a difference in output
+	ErrorMessage string // Error message in case of failure (if any). Does not include information about difference in expected and actual output
 	Order        int    // Order to input output pair for ex 1 mean in1.in and out1.out was used
 }
