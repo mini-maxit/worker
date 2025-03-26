@@ -12,8 +12,10 @@ import (
 )
 
 type Config struct {
-	RabbitMQUrl    string
-	FileStorageUrl string
+	RabbitMQUrl     string
+	FileStorageUrl  string
+	WorkerQueueName string
+	MaxWorkers      int
 }
 
 func NewConfig() *Config {
@@ -73,12 +75,28 @@ func NewConfig() *Config {
 	if err != nil {
 		logger.Fatalf("failed to parse FILESTORAGE_PORT with error: %v", err)
 	}
+	workerQueueName := os.Getenv("WORKER_QUEUE_NAME")
+	if workerQueueName == "" {
+		workerQueueName = constants.DefaultWorkerQueueName
+		logger.Warnf("WORKER_QUEUE_NAME is not set, using default value %s", constants.DefaultWorkerQueueName)
+	}
+	maxWorkersStr := os.Getenv("MAX_WORKERS")
+	if maxWorkersStr == "" {
+		maxWorkersStr = constants.DefaultMaxWorkersStr
+		logger.Warnf("MAX_WORKERS is not set, using default value %d", constants.DefaultMaxWorkersStr)
+	}
+	maxWorkers, err := strconv.ParseInt(maxWorkersStr, 10, 32)
+	if err != nil {
+		logger.Fatalf("failed to parse MAX_WORKERS with error: %v", err)
+	}
 
 	rabbitmqUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/", rabbitmqUser, rabbitmqPassword, rabbitmqHost, rabbitmqPort)
 	fileStorageUrl := fmt.Sprintf("http://%s:%d", fileStorageHost, fileStoragePort)
 
 	return &Config{
-		RabbitMQUrl:    rabbitmqUrl,
-		FileStorageUrl: fileStorageUrl,
+		RabbitMQUrl:     rabbitmqUrl,
+		FileStorageUrl:  fileStorageUrl,
+		WorkerQueueName: workerQueueName,
+		MaxWorkers:      int(maxWorkers),
 	}
 }

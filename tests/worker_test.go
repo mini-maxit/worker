@@ -13,7 +13,6 @@ import (
 	"github.com/mini-maxit/worker/internal/services"
 	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/rabbitmq"
-	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -46,9 +45,16 @@ type ExpectedTaskResponse struct {
 }
 
 type ExpectedHandshakeResponse struct {
-	Type      string          `json:"type"`
-	MessageID string          `json:"message_id"`
-	Payload   json.RawMessage `json:"payload"`
+	Type      string `json:"type"`
+	MessageID string `json:"message_id"`
+	Payload   struct {
+		Languages []LanguageConfig `json:"languages"`
+	} `json:"payload"`
+}
+
+type LanguageConfig struct {
+	Name     string   `json:"name"`
+	Versions []string `json:"versions"`
 }
 
 type ExpecredStatusResponse struct {
@@ -61,25 +67,56 @@ type ExpecredStatusResponse struct {
 	} `json:"payload"`
 }
 
-func generateQueueMessage(test testType, languageType, languageVersion string) string {
-	var payload string
+func generateQueueMessage(test testType) []byte {
+	var payload map[string]interface{}
 	var msgType string
 
 	if test == Handshake {
-		payload = "{}"
+		payload = map[string]interface{}{}
 		msgType = "handshake"
 	} else if test == Status {
-		payload = "{}"
+		payload = map[string]interface{}{}
 		msgType = "status"
 	} else if test == longTaskMessage {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"%s","language_version":"%s","time_limits":[20],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, CPPFailedTimeLimitExceeded, languageType, languageVersion, CPPFailedTimeLimitExceeded)
+		payload = map[string]interface{}{
+			"task_id":           1,
+			"user_id":           1,
+			"submission_number": FailedTimeLimitExceeded,
+			"language_type":     "CPP",
+			"language_version":  "20",
+			"time_limits":       []int{20},
+			"memory_limits":     []int{512},
+			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, FailedTimeLimitExceeded),
+			"use_chroot":        "false",
+		}
 		msgType = "task"
 	} else {
-		payload = fmt.Sprintf(`{"task_id":1,"user_id":1,"submission_number":%d,"language_type":"%s","language_version":"%s","time_limits":[2],"memory_limits":[512],"chroot_dir_path":"./mock_files/tmp/Task_1_1_%d","use_chroot":"false"}`, test, languageType, languageVersion, test)
+		payload = map[string]interface{}{
+			"task_id":           1,
+			"user_id":           1,
+			"submission_number": test,
+			"language_type":     "CPP",
+			"language_version":  "20",
+			"time_limits":       []int{2},
+			"memory_limits":     []int{512},
+			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", mockTmpDir, test),
+			"use_chroot":        "false",
+		}
 		msgType = "task"
 	}
 
-	return fmt.Sprintf(`{"type":"%s","message_id":"adsa","payload":%s}`, msgType, payload)
+	message := map[string]interface{}{
+		"type":       msgType,
+		"message_id": "adsa",
+		"payload":    payload,
+	}
+
+	messageBytes, err := json.Marshal(message)
+	if err != nil {
+		return nil
+	}
+
+	return messageBytes
 }
 
 func declareResponseQueue(ch *amqp.Channel, queueName string) (amqp.Queue, error) {
@@ -90,7 +127,7 @@ func consumeResponse(ch *amqp.Channel, queueName string) (<-chan amqp.Delivery, 
 	return ch.Consume(queueName, "", true, false, false, false, nil)
 }
 
-func publishMessage(ch *amqp.Channel, message string) error {
+func publishMessage(ch *amqp.Channel, message []byte) error {
 	return ch.Publish(
 		"",             // exchange
 		"worker_queue", // routing key
@@ -98,7 +135,7 @@ func publishMessage(ch *amqp.Channel, message string) error {
 		false,          // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
-			Body:        []byte(message),
+			Body:        message,
 			ReplyTo:     "reply_to",
 		})
 }
@@ -168,20 +205,47 @@ func fileExists(dir, filename string) bool {
 	return err == nil
 }
 
-func equalHandshskePayload(payload map[string][]string, expectedPayload map[string][]string) bool {
-	if len(payload) != len(expectedPayload) {
+
+func fileContains(dir, filename, content string) bool {
+	file, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, filename))
+	if err != nil {
 		return false
 	}
 
-	for k, v := range payload {
-		if _, ok := expectedPayload[k]; !ok {
-			return false
-		}
+	return strings.Contains(string(file), content)
+}
 
-		for _, version := range v {
-			if !utils.Contains(expectedPayload[k], version) {
-				return false
+func equalHandshskePayload(actualResponse []LanguageConfig, expectedPayload []LanguageConfig) bool {
+	if len(actualResponse) != len(expectedPayload) {
+		return false
+	}
+
+	for _, lang := range actualResponse {
+		foundLang := false
+		for _, expectedLang := range expectedPayload {
+			if lang.Name == expectedLang.Name {
+				foundLang = true
+				if len(lang.Versions) != len(expectedLang.Versions) {
+					return false
+				}
+
+				for _, version := range lang.Versions {
+					foundVersion := false
+					for _, expectedVersion := range expectedLang.Versions {
+						if version == expectedVersion {
+							foundVersion = true
+							break
+						}
+					}
+
+					if !foundVersion {
+						return false
+					}
+				}
 			}
+		}
+		if !foundLang {
+			return false
 		}
 	}
 
@@ -196,8 +260,15 @@ func setUp(t *testing.T, numberOfWorkers int) (services.QueueService, *amqp.Chan
 	conn := rabbitmq.NewRabbitMqConnection(config)
 	channel := rabbitmq.NewRabbitMQChannel(conn)
 
-	wp := services.NewWorkerPool(channel, constants.WorkerQueueName, numberOfWorkers, fs, rs)
-	qs := services.NewQueueService(channel, constants.WorkerQueueName, wp)
+	wp := services.NewWorkerPool(channel, constants.DefaultWorkerQueueName, numberOfWorkers, fs, rs)
+	qs := services.NewQueueService(channel, constants.DefaultWorkerQueueName, wp)
+
+	if _, err := os.Stat(mockTmpDir); os.IsNotExist(err) {
+		err := os.Mkdir(mockTmpDir, 0755)
+		if err != nil {
+			t.Fatalf("Failed to create tmp directory: %s", err)
+		}
+	}
 
 	return qs, channel, conn
 }
@@ -253,10 +324,10 @@ func TestProcessTask(t *testing.T) {
 				}
 
 				if !validateResponse(tt.testType, actualResponse) {
-					// err = os.RemoveAll(taskDir)
-					// if err != nil {
-					// 	t.Fatalf("Failed to remove task directory: %s", err)
-					// }
+					err = os.RemoveAll(taskDir)
+					if err != nil {
+						t.Fatalf("Failed to remove task directory: %s", err)
+					}
 					t.Fatalf("Unexpected response: %+v", actualResponse)
 				}
 
@@ -287,6 +358,11 @@ func TestProcessTask(t *testing.T) {
 				t.Fatalf("Did not receive response in time")
 			}
 		})
+	}
+
+	err = os.RemoveAll(mockTmpDir)
+	if err != nil {
+		t.Fatalf("Failed to remove tmp directory: %s", err)
 	}
 }
 func TestProcessHandshake(t *testing.T) {
@@ -322,25 +398,170 @@ func TestProcessHandshake(t *testing.T) {
 				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
 			}
 
-			var payload map[string][]string
-			err = json.Unmarshal(actualResponse.Payload, &payload)
-			if err != nil {
-				t.Fatalf("Failed to parse response payload JSON: %s", err)
+			expectedPayload := []LanguageConfig{
+				{
+					Name:     "CPP",
+					Versions: []string{"20", "17", "14", "11"},
+				},
 			}
 
-			expectedPayload := map[string][]string{
-				"CPP":    {"11", "14", "17", "20"},
-				"PYTHON": {"2", "3"},
-			}
-
-			if !equalHandshskePayload(payload, expectedPayload) {
-				t.Fatalf("Unexpected response payload: %+v", payload)
+			if !equalHandshskePayload(actualResponse.Payload.Languages, expectedPayload) {
+				t.Fatalf("Unexpected response payload: %+v", actualResponse.Payload.Languages)
 			}
 
 		case <-time.After(5 * time.Second):
 			t.Fatalf("Did not receive response in time")
 		}
 	})
+
+	err = os.RemoveAll(mockTmpDir)
+	if err != nil {
+		t.Fatalf("Failed to remove tmp directory: %s", err)
+	}
+}
+
+func TestProcessStatus(t *testing.T) {
+	const numberOfWorkers = 5
+	const taskDir = "./mock_files/tmp/Task_1_1_2"
+
+	qs, channel, conn := setUp(t, numberOfWorkers)
+	defer conn.Close()
+	defer channel.Close()
+
+	go qs.Listen()
+
+	responseQueueName := "reply_to"
+	_, err := declareResponseQueue(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to declare response queue: %s", err)
+	}
+	responseChannel, err := consumeResponse(channel, responseQueueName)
+	if err != nil {
+		t.Fatalf("Failed to consume response queue: %s", err)
+	}
+
+	t.Run("Test status all idle", func(t *testing.T) {
+		message := generateQueueMessage(Status)
+		go publishMessage(channel, message)
+
+		select {
+		case response := <-responseChannel:
+			var actualResponse ExpecredStatusResponse
+			err := json.Unmarshal(response.Body, &actualResponse)
+			if err != nil {
+				t.Fatalf("Failed to parse response JSON: %s", err)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if actualResponse.Type != "status" {
+				t.Fatalf("Unexpected response type: %s", actualResponse.Type)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if actualResponse.Payload.BusyWorkers != 0 {
+				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
+				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			for _, status := range actualResponse.Payload.WorkerStatus {
+				if status != "idle" {
+					t.Fatalf("Unexpected worker status: %s", status)
+					err = os.RemoveAll(taskDir)
+					if err != nil {
+						t.Fatalf("Failed to remove task directory: %s", err)
+					}
+				}
+			}
+
+		case <-time.After(5 * time.Second):
+			err = os.RemoveAll(taskDir)
+			if err != nil {
+				t.Fatalf("Failed to remove task directory: %s", err)
+			}
+			t.Fatalf("Did not receive response in time")
+		}
+	})
+
+	t.Run("Test 1 busy worker", func(t *testing.T) {
+		message := generateQueueMessage(longTaskMessage)
+		go publishMessage(channel, message)
+
+		time.Sleep(3 * time.Second)
+
+		message = generateQueueMessage(Status)
+		go publishMessage(channel, message)
+
+			expectedPayload := map[string][]string{
+				"CPP":    {"11", "14", "17", "20"},
+				"PYTHON": {"2", "3"},
+			}
+
+			if actualResponse.Payload.BusyWorkers != 1 {
+				t.Fatalf("Unexpected busy workers count: %d", actualResponse.Payload.BusyWorkers)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			if len(actualResponse.Payload.WorkerStatus) != numberOfWorkers {
+				t.Fatalf("Unexpected worker status count: %d", len(actualResponse.Payload.WorkerStatus))
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			busyWorkers := 0
+			for _, status := range actualResponse.Payload.WorkerStatus {
+				if strings.Contains(status, "busy") {
+					busyWorkers++
+				}
+			}
+
+			if busyWorkers != 1 {
+				t.Fatalf("Unexpected busy workers count: %d", busyWorkers)
+				err = os.RemoveAll(taskDir)
+				if err != nil {
+					t.Fatalf("Failed to remove task directory: %s", err)
+				}
+			}
+
+			err = os.RemoveAll(taskDir)
+			if err != nil {
+				t.Fatalf("Failed to remove task directory: %s", err)
+			}
+
+		case <-time.After(5 * time.Second):
+			err = os.RemoveAll(taskDir)
+			if err != nil {
+				t.Fatalf("Failed to remove task directory: %s", err)
+			}
+			t.Fatalf("Did not receive response in time")
+		}
+	})
+
+	err = os.RemoveAll(mockTmpDir)
+	if err != nil {
+		t.Fatalf("Failed to remove tmp directory: %s", err)
+	}
 }
 
 func TestProcessStatus(t *testing.T) {

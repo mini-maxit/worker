@@ -7,12 +7,6 @@ const (
 	QueueMessageTypeStatus    = "status"
 )
 
-// Queue constants
-const (
-	WorkerQueueName = "worker_queue"
-	MaxWorkers      = 10
-)
-
 // SolutionResult messages
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
@@ -63,4 +57,6 @@ const (
 	DefaultLogPath          = "./internal/logger/logs/log.txt"
 	CompileErrorFileName    = "compile-err.err"
 	BaseChrootDir           = "../tmp/chroot"
+	DefaultWorkerQueueName  = "worker_queue"
+	DefaultMaxWorkersStr    = "10"
 )

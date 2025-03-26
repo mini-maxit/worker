@@ -28,6 +28,13 @@ type QueueMessage struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
+type ResponseQueueMessage struct {
+	Type      string          `json:"type"`
+	MessageID string          `json:"message_id"`
+	Ok        bool            `json:"ok"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
 type TaskQueueMessage struct {
 	TaskID           int64  `json:"task_id"`
 	UserID           int64  `json:"user_id"`
@@ -79,80 +86,18 @@ func (qs *queueService) Listen() {
 			}
 			continue
 		}
-
 		if queueMessage.Type == constants.QueueMessageTypeTask {
-			qs.logger.Infof("Processing task message")
-			var task TaskQueueMessage
-			err := json.Unmarshal(queueMessage.Payload, &task)
-			if err != nil {
-				qs.logger.Errorf("Failed to unmarshal task message: %s", err)
-				err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
-				if err != nil {
-					qs.logger.Errorf("Failed to publish error message: %s", err)
-				}
-				continue
-			}
-
-			err = qs.workerPool.ProcessTask(msg.ReplyTo, queueMessage.MessageID, task)
-			if err != nil {
-				qs.logger.Errorf("Failed to process task message: %s", err)
-				if err == errors.ErrFailedToGetFreeWorker {
-					err = qs.RequeueTaskWithHigherPriority(queueMessage)
-					if err != nil {
-						qs.logger.Errorf("Failed to requeue task with higher priority: %s", err)
-					}
-				} else {
-					err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
-					if err != nil {
-						qs.logger.Errorf("Failed to publish error message: %s", err)
-					}
-				}
-				continue
-			}
+			qs.handleTaskMessage(queueMessage, msg.ReplyTo)
 
 		} else if queueMessage.Type == constants.QueueMessageTypeStatus {
-			qs.logger.Infof("Processing status message")
-			status := qs.workerPool.GetWorkersStatus()
-			payload, err := json.Marshal(status)
-			if err != nil {
-				qs.logger.Errorf("Failed to marshal status message: %s", err)
-				err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
-				if err != nil {
-					qs.logger.Errorf("Failed to publish error message: %s", err)
-				}
-				continue
-			}
-
-			err = PublishSucessToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, payload)
-			if err != nil {
-				qs.logger.Errorf("Failed to publish status message: %s", err)
-				err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
-				if err != nil {
-					qs.logger.Errorf("Failed to publish error message: %s", err)
-				}
-			}
-
+			qs.handleStatusMessage(queueMessage, msg.ReplyTo)
 		} else if queueMessage.Type == constants.QueueMessageTypeHandshake {
-			qs.logger.Infof("Processing handshake message")
-
-			supportedLanguages := languages.GetSupportedLanguagesWithVersions()
-			payload, err := json.Marshal(supportedLanguages)
+			qs.handleHandshakeMessage(queueMessage, msg.ReplyTo)
+		} else {
+			qs.logger.Errorf("Failed to handle message: %s", err)
+			err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, errors.ErrUnknownMessageType)
 			if err != nil {
-				qs.logger.Errorf("Failed to marshal supported languages: %s", err)
-				err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
-				if err != nil {
-					qs.logger.Errorf("Failed to publish error message: %s", err)
-				}
-				continue
-			}
-
-			err = PublishSucessToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, payload)
-			if err != nil {
-				qs.logger.Errorf("Failed to publish supported languages: %s", err)
-				err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
-				if err != nil {
-					qs.logger.Errorf("Failed to publish error message: %s", err)
-				}
+				qs.logger.Errorf("Failed to publish error message: %s", err)
 			}
 		}
 	}
@@ -167,9 +112,10 @@ func PublishErrorToResponseQueue(channel *amqp.Channel, responseQueueName, messa
 		return jsonErr
 	}
 
-	queueMessage := QueueMessage{
+	queueMessage := ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
+		Ok:        false,
 		Payload:   payload,
 	}
 
@@ -194,10 +140,139 @@ func PublishErrorToResponseQueue(channel *amqp.Channel, responseQueueName, messa
 func PublishSucessToResponseQueue(channel *amqp.Channel, responseQueueName, messageType, messageID string, payload []byte) error {
 	logger := logger.NewNamedLogger("queueService")
 
-	queueMessage := QueueMessage{
+	queueMessage := ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
+		Ok:        true,
 		Payload:   payload,
+	}
+
+	responseJSON, jsonErr := json.Marshal(queueMessage)
+	if jsonErr != nil {
+		return jsonErr
+	}
+
+	logger.Infof("Publishing response to queue: %s", responseQueueName)
+	err := channel.Publish("", responseQueueName, false, false, amqp.Publishing{
+		ContentType: "application/json",
+		Body:        responseJSON,
+	})
+
+	logger.Infof("Published response to queue: %s", responseQueueName)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (qs *queueService) requeueTaskWithPriority2(queueMessage QueueMessage) error {
+	priority := 2
+
+	queueMessageJSON, err := json.Marshal(queueMessage)
+	if err != nil {
+		qs.logger.Errorf("Failed to marshal queue message: %s", err)
+		return err
+	}
+
+	err = qs.channel.Publish("", qs.workerQueueName, false, false, amqp.Publishing{
+		ContentType:   "application/json",
+		CorrelationId: queueMessage.MessageID,
+		Body:          queueMessageJSON,
+		Priority:      uint8(priority),
+	})
+
+	if err != nil {
+		qs.logger.Errorf("Failed to requeue task with higher priority: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+func (qs *queueService) handleTaskMessage(queueMessage QueueMessage, replyTo string) {
+	qs.logger.Infof("Processing task message")
+	var task TaskQueueMessage
+	err := json.Unmarshal(queueMessage.Payload, &task)
+	if err != nil {
+		qs.logger.Errorf("Failed to unmarshal task message: %s", err)
+		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		if err != nil {
+			qs.logger.Errorf("Failed to publish error message: %s", err)
+		}
+	}
+
+	err = qs.workerPool.ProcessTask(replyTo, queueMessage.MessageID, task)
+	if err != nil {
+		qs.logger.Errorf("Failed to process task message: %s", err)
+		if err == errors.ErrFailedToGetFreeWorker {
+			err = qs.requeueTaskWithPriority2(queueMessage)
+			if err != nil {
+				qs.logger.Errorf("Failed to requeue task with higher priority: %s", err)
+			}
+		} else {
+			err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+			if err != nil {
+				qs.logger.Errorf("Failed to publish error message: %s", err)
+			}
+		}
+	}
+}
+
+func (qs *queueService) handleStatusMessage(queueMessage QueueMessage, replyTo string) {
+	qs.logger.Infof("Processing status message")
+	status := qs.workerPool.GetWorkersStatus()
+	payload, err := json.Marshal(status)
+	if err != nil {
+		qs.logger.Errorf("Failed to marshal status message: %s", err)
+		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		if err != nil {
+			qs.logger.Errorf("Failed to publish error message: %s", err)
+		}
+	}
+
+	err = PublishSucessToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, payload)
+	if err != nil {
+		qs.logger.Errorf("Failed to publish status message: %s", err)
+		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		if err != nil {
+			qs.logger.Errorf("Failed to publish error message: %s", err)
+		}
+	}
+}
+
+func (qs *queueService) handleHandshakeMessage(queueMessage QueueMessage, replyTo string) {
+	qs.logger.Infof("Processing handshake message")
+
+	supportedLanguages := languages.GetSupportedLanguagesWithVersions()
+
+	var languagesList []map[string]interface{}
+	for name, versions := range supportedLanguages {
+		languagesList = append(languagesList, map[string]interface{}{
+			"name":     name,
+			"versions": versions,
+		})
+	}
+
+	payload, err := json.Marshal(map[string]interface{}{
+		"languages": languagesList,
+	})
+	if err != nil {
+		qs.logger.Errorf("Failed to marshal supported languages: %s", err)
+		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		if err != nil {
+			qs.logger.Errorf("Failed to publish error message: %s", err)
+		}
+	}
+
+	err = PublishSucessToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, payload)
+	if err != nil {
+		qs.logger.Errorf("Failed to publish supported languages: %s", err)
+		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		if err != nil {
+			qs.logger.Errorf("Failed to publish error message: %s", err)
+		}
 	}
 
 	responseJSON, jsonErr := json.Marshal(queueMessage)
