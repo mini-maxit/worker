@@ -3,7 +3,6 @@ package services
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/mini-maxit/worker/executor"
@@ -11,6 +10,7 @@ import (
 	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	s "github.com/mini-maxit/worker/internal/solution"
+	"github.com/mini-maxit/worker/verifier"
 	"go.uber.org/zap"
 )
 
@@ -111,6 +111,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 	}
 
 	r.logger.Infof("Executing solution [MsgID: %s]", messageID)
+	verifier := verifier.NewDefaultVerifier("-w")
 	testCases := make([]s.TestResult, len(inputFiles))
 	solutionStatus := s.Success
 	solutionMessage := constants.SolutionMessageSuccess
@@ -133,10 +134,9 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 			r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
 			expectedFilePath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.outputDirName, (i + 1))
 
-			diffCmd := exec.Command("diff", "-w", expectedFilePath, outputPath)
-			diffCmdOutput, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY, 0644)
+			passed, err := verifier.CompareOutput(outputPath, expectedFilePath, stderrPath)
 			if err != nil {
-				r.logger.Errorf("Error opening output file %s [MsgID: %s]: %s", outputPath, messageID, err.Error())
+				r.logger.Errorf("Error comparing output %s with expected output %s [MsgID: %s]: %s", outputPath, expectedFilePath, messageID, err.Error())
 				testCases[i] = s.TestResult{
 					Passed:       false,
 					ErrorMessage: err.Error(),
@@ -146,34 +146,14 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 				solutionMessage = constants.SolutionMessageInternalError
 				continue
 			}
-			defer diffCmdOutput.Close()
 
-			diffCmd.Stdout = diffCmdOutput
-			err = diffCmd.Run()
-			diffExitCode := diffCmd.ProcessState.ExitCode()
-			if err != nil {
-				if diffExitCode == constants.ExitCodeDifference {
-					testCases[i] = s.TestResult{
-						Passed: false,
-						Order:  (i + 1),
-					}
-					solutionStatus = s.TestFailed
-					solutionMessage = constants.SolutionMessageTestFailed
-				} else {
-					r.logger.Errorf("Error running diff command [MsgID: %s]: %s", messageID, err.Error())
-					testCases[i] = s.TestResult{
-						Passed:       false,
-						ErrorMessage: err.Error(),
-						Order:        (i + 1),
-					}
-					solutionStatus = s.InternalError
-					solutionMessage = constants.SolutionMessageInternalError
-				}
-				continue
+			if !passed {
+				solutionStatus = s.TestFailed
+				solutionMessage = constants.SolutionMessageTestFailed
 			}
 
 			testCases[i] = s.TestResult{
-				Passed: true,
+				Passed: passed,
 				Order:  (i + 1),
 			}
 		case constants.ExitCodeTimeLimitExceeded:
@@ -234,26 +214,4 @@ func (r *runnerService) parseInputFiles(inputDir string) ([]string, error) {
 	}
 
 	return result, nil
-}
-
-func StoreTestCaseDifferenceInErrFile(order int, difference string, errFilePath string) error {
-	if difference == "" {
-		return nil
-	}
-	errFile, err := os.Create(errFilePath)
-	if err != nil {
-		return err
-	}
-	defer errFile.Close()
-
-	_, err = errFile.WriteString(fmt.Sprintf("Test case %d:\n", order))
-	if err != nil {
-		return err
-	}
-	_, err = errFile.WriteString(difference)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
