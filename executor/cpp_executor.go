@@ -15,17 +15,17 @@ import (
 
 type CppExecutor struct {
 	version string
-	config  *ExecutorConfig
+	config  *Config
 	logger  *zap.SugaredLogger
 }
 
 func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
-	restrictedCmd, rootToChrootExecPath, err := copyExecutableToChrootAndRestric(command, commandConfig)
+	restrictedCmd, rootToChrootExecPath, err := CopyExecutableToChrootAndRestric(command, commandConfig)
 	if err != nil {
 		e.logger.Errorf("Could not copy executable to chroot and restrict. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
 			ExitCode: constants.ExitCodeInternalError,
-			Message:  fmt.Sprintf("could not copy executable to chroot and restrict. %s", err.Error()),
+			Message:  err.Error(),
 		}
 	}
 
@@ -36,12 +36,12 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 	}()
 
 	// Open io files
-	ioConfig, err := setupIOFiles(commandConfig.StdinPath, commandConfig.StdoutPath, commandConfig.StderrPath)
+	ioConfig, err := SetupIOFiles(commandConfig.StdinPath, commandConfig.StdoutPath, commandConfig.StderrPath)
 	if err != nil {
 		e.logger.Errorf("Could not open io files. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
 			ExitCode: constants.ExitCodeInternalError,
-			Message:  fmt.Sprintf("could not open io files. %s", err.Error()),
+			Message:  err.Error(),
 		}
 	}
 
@@ -85,19 +85,19 @@ func (e *CppExecutor) String() string {
 	out.WriteString("}")
 
 	return out.String()
-
 }
 
 func (e *CppExecutor) RequiresCompilation() bool {
 	return true
 }
 
-// For now compile allows only one file
+// For now compile allows only one file.
 func (e *CppExecutor) Compile(sourceFilePath, dir, messageID string) (string, error) {
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
-	outFilePath := fmt.Sprintf("%s/solution", dir)
-	// Correctly pass the command and its arguments as separate strings
-	cmd := exec.Command("g++", "-o", outFilePath, fmt.Sprintf("-std=%s", e.version), sourceFilePath)
+	outFilePath := dir + "/solution"
+	// Correctly pass the command and its arguments as separate strings.\
+	versionFlag := "-std=" + e.version
+	cmd := exec.Command("g++", "-o", outFilePath, versionFlag, sourceFilePath)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

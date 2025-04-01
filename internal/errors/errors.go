@@ -2,7 +2,7 @@ package errors
 
 import "errors"
 
-// Error messages
+// Error messages.
 var (
 	ErrFailedToUnmarshalTaskMessage = errors.New("failed to unmarshal task message")
 	ErrFailedToHandleTaskPackage    = errors.New("failed to handle task package")
@@ -15,4 +15,6 @@ var (
 	ErrFailedToStoreSolution        = errors.New("failed to store the solution result")
 	ErrFailedToGetFreeWorker        = errors.New("failed to get free worker")
 	ErrUnknownMessageType           = errors.New("unknown message type")
+	ErrInvalidFilePath              = errors.New("invalid file path")
+	ErrEmptyInputDirectory          = errors.New("empty input directory")
 )

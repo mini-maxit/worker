@@ -4,19 +4,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/mini-maxit/worker/internal/constants"
 )
 
-// Returns true if the output and expected output are the same
-// Returns false otherwise
-// Returns an error if an error occurs
+// Returns true if the output and expected output are the same.
+// Returns false otherwise.
+// Returns an error if an error occurs.
 type Verifier interface {
 	CompareOutput(outputPath, expectedOutputPath, stderrPath string) (bool, error)
 }
 
 type DefaultVerifier struct {
-	flags string
+	flags []string
 }
 
 // CompareOutput compares the output file with the expected output file.
@@ -24,7 +25,14 @@ type DefaultVerifier struct {
 // It returns a string of differences if there are any.
 // It returns an error if any issue occurs during the comparison.
 func (dv *DefaultVerifier) CompareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
-	diffCmd := exec.Command("diff", dv.flags, outputPath, expectedFilePath)
+	outputPath = filepath.Clean(outputPath)
+	expectedFilePath = filepath.Clean(expectedFilePath)
+
+	args := dv.flags
+
+	args = append(args, outputPath, expectedFilePath)
+	diffCmd := exec.Command("diff", args...)
+
 	diffCmdOutput, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return false, fmt.Errorf("error opening output file %s: %w", outputPath, err)
@@ -44,7 +52,7 @@ func (dv *DefaultVerifier) CompareOutput(outputPath, expectedFilePath, stderrPat
 	return true, nil
 }
 
-func NewDefaultVerifier(flags string) Verifier {
+func NewDefaultVerifier(flags []string) Verifier {
 	return &DefaultVerifier{
 		flags: flags,
 	}

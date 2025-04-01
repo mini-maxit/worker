@@ -7,6 +7,7 @@ import (
 
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	s "github.com/mini-maxit/worker/internal/solution"
@@ -15,7 +16,7 @@ import (
 )
 
 type RunnerService interface {
-	RunSolution(task *TaskForRunner, messageID string) s.SolutionResult
+	RunSolution(task *TaskForRunner, messageID string) s.Result
 	parseInputFiles(inputDir string) ([]string, error)
 }
 
@@ -31,40 +32,24 @@ func NewRunnerService() RunnerService {
 	}
 }
 
-func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.SolutionResult {
+func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Result {
 	r.logger.Infof("Initializing solutionExecutor [MsgID: %s]", messageID)
 	// Init appropriate solutionExecutor
-	var solutionExecutor executor.Executor
-	var err error
-	switch task.languageType {
-	case languages.CPP:
-		r.logger.Infof("Initializing C++ solutionExecutor [MsgID: %s]", messageID)
-		solutionExecutor, err = executor.NewCppExecutor(task.languageVersion, messageID)
-	case languages.Python:
-		r.logger.Infof("Initializing Python solutionExecutor [MsgID: %s]", messageID)
-		solutionExecutor, err = executor.NewPythonExecutor(task.languageVersion, messageID)
-	default:
-		r.logger.Errorf("Invalid language type supplied [MsgID: %s]", messageID)
-		return s.SolutionResult{
-			StatusCode: s.InitializationError,
-			Message:    constants.SolutionMessageInvalidLanguageType,
-		}
-	}
+	solutionExecutor, err := initializeSolutionExecutor(task.languageType, task.languageVersion, messageID)
 	if err != nil {
-		r.logger.Errorf("Error occured during initialization [MsgID: %s]", messageID)
-		return s.SolutionResult{
-			StatusCode: s.InitializationError,
+		r.logger.Errorf("Error initializing solutionExecutor [MsgID: %s]: %s", messageID, err.Error())
+		return s.Result{
+			StatusCode: s.InternalError,
 			Message:    err.Error(),
 		}
 	}
 
 	r.logger.Infof("Creating user output directory [MsgID: %s]", messageID)
 
-	userOutputDir := "user-output"
-	err = os.Mkdir(fmt.Sprintf("%s/%s", task.taskFilesDirPath, userOutputDir), os.ModePerm)
+	err = os.Mkdir(fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.userOutputDirName), os.ModePerm)
 	if err != nil {
 		r.logger.Errorf("Error creating user output directory [MsgID: %s]: %s", messageID, err.Error())
-		return s.SolutionResult{
+		return s.Result{
 			StatusCode: s.InternalError,
 			Message:    err.Error(),
 		}
@@ -72,52 +57,74 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 
 	r.logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
 
+	filePath, err := r.prepareSolutionFilePath(task, solutionExecutor, messageID)
+	if err != nil {
+		r.logger.Errorf("Error preparing solution file path [MsgID: %s]: %s", messageID, err.Error())
+		return s.Result{
+			OutputDir:  task.userOutputDirName,
+			StatusCode: s.CompilationError,
+			Message:    err.Error(),
+		}
+	}
+
+	r.logger.Infof("Running and evaluating test cases [MsgID: %s]", messageID)
+	solutionResult := r.runAndEvaluateTestCases(solutionExecutor, task, filePath, messageID)
+	return solutionResult
+}
+
+func (r *runnerService) prepareSolutionFilePath(
+	task *TaskForRunner,
+	solutionExecutor executor.Executor,
+	messageID string,
+) (string, error) {
 	var filePath string
+	var err error
 	solutionFilePath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.solutionFileName)
 	if solutionExecutor.RequiresCompilation() {
 		r.logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
 		filePath, err = solutionExecutor.Compile(solutionFilePath, task.taskFilesDirPath, messageID)
 		if err != nil {
 			r.logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
-			return s.SolutionResult{
-				OutputDir:  userOutputDir,
-				StatusCode: s.CompilationError,
-				Message:    err.Error(),
-			}
+			return "", err
 		}
 	} else {
 		filePath = solutionFilePath
 	}
 
+	return filePath, nil
+}
+
+func (r *runnerService) runAndEvaluateTestCases(
+	solutionExecutor executor.Executor,
+	task *TaskForRunner,
+	filePath, messageID string,
+) s.Result {
 	inputPath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.inputDirName)
 	r.logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
 	inputFiles, err := r.parseInputFiles(inputPath)
 	if err != nil {
-		r.logger.Errorf("Error reading input files from %s [MsgID: %s]: %s", inputPath, messageID, err.Error())
-		return s.SolutionResult{
-			OutputDir:  userOutputDir,
+		return s.Result{
+			OutputDir:  task.userOutputDirName,
 			StatusCode: s.InternalError,
 			Message:    err.Error(),
 		}
 	}
 
 	if len(inputFiles) != len(task.timeLimits) || len(inputFiles) != len(task.memoryLimits) {
-		r.logger.Errorf("Invalid number of limits, got %d input files, %d time limits and %d memory limits [MsgID: %s]", len(inputFiles), len(task.timeLimits), len(task.memoryLimits), messageID)
-		return s.SolutionResult{
-			OutputDir:  userOutputDir,
+		return s.Result{
+			OutputDir:  task.userOutputDirName,
 			StatusCode: s.InternalError,
 			Message:    constants.SolutionMessageLimitsMismatch,
 		}
 	}
 
-	r.logger.Infof("Executing solution [MsgID: %s]", messageID)
-	verifier := verifier.NewDefaultVerifier("-w")
+	verifier := verifier.NewDefaultVerifier([]string{"-w"})
 	testCases := make([]s.TestResult, len(inputFiles))
 	solutionStatus := s.Success
 	solutionMessage := constants.SolutionMessageSuccess
 	for i, inputPath := range inputFiles {
-		outputPath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, userOutputDir, (i + 1))
-		stderrPath := fmt.Sprintf("%s/%s/%d.err", task.taskFilesDirPath, userOutputDir, (i + 1))
+		outputPath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
+		stderrPath := fmt.Sprintf("%s/%s/%d.err", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
 		commandConfig := executor.CommandConfig{
 			StdinPath:     inputPath,
 			StdoutPath:    outputPath,
@@ -129,69 +136,93 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Sol
 		}
 
 		execResult := solutionExecutor.ExecuteCommand(filePath, messageID, commandConfig)
-		switch execResult.ExitCode {
-		case constants.ExitCodeSuccess:
-			r.logger.Infof("Comparing output %s with expected output [MsgID: %s]", outputPath, messageID)
-			expectedFilePath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.outputDirName, (i + 1))
-
-			passed, err := verifier.CompareOutput(outputPath, expectedFilePath, stderrPath)
-			if err != nil {
-				r.logger.Errorf("Error comparing output %s with expected output %s [MsgID: %s]: %s", outputPath, expectedFilePath, messageID, err.Error())
-				testCases[i] = s.TestResult{
-					Passed:       false,
-					ErrorMessage: err.Error(),
-					Order:        (i + 1),
-				}
-				solutionStatus = s.InternalError
-				solutionMessage = constants.SolutionMessageInternalError
-				continue
-			}
-
-			if !passed {
-				solutionStatus = s.TestFailed
-				solutionMessage = constants.SolutionMessageTestFailed
-			}
-
-			testCases[i] = s.TestResult{
-				Passed: passed,
-				Order:  (i + 1),
-			}
-		case constants.ExitCodeTimeLimitExceeded:
-			r.logger.Errorf("Time limit exceeded while executing solution [MsgID: %s]", messageID)
-			testCases[i] = s.TestResult{
-				Passed:       false,
-				ErrorMessage: constants.TestMessageTimeLimitExceeded,
-				Order:        (i + 1),
-			}
-			solutionStatus = s.TimeLimitExceeded
-			solutionMessage = constants.SolutionMessageTimeout
-		case constants.ExitCodeMemoryLimitExceeded:
-			r.logger.Errorf("Memory limit exceeded while executing solution [MsgID: %s]", messageID)
-			testCases[i] = s.TestResult{
-				Passed:       false,
-				ErrorMessage: constants.TestMessageMemoryLimitExceeded,
-				Order:        (i + 1),
-			}
-			solutionStatus = s.MemoryLimitExceeded
-			solutionMessage = constants.SolutionMessageMemoryLimitExceeded
-		default:
-			r.logger.Errorf("Error executing solution [MsgID: %s]: %s", messageID, execResult.Message)
-			testCases[i] = s.TestResult{
-				Passed:       false,
-				ErrorMessage: execResult.Message,
-				Order:        (i + 1),
-			}
-			solutionStatus = s.RuntimeError
-			solutionMessage = constants.SolutionMessageRuntimeError
-		}
+		testCases[i], solutionStatus, solutionMessage = r.evaluateTestCase(
+			execResult,
+			verifier,
+			task,
+			outputPath,
+			stderrPath,
+			(i + 1),
+		)
 	}
 
-	r.logger.Infof("Solution executed successfully [MsgID: %s]", messageID)
-	return s.SolutionResult{
-		OutputDir:   userOutputDir,
+	return s.Result{
+		OutputDir:   task.userOutputDirName,
 		StatusCode:  solutionStatus,
 		Message:     solutionMessage,
 		TestResults: testCases,
+	}
+}
+
+func (r *runnerService) evaluateTestCase(
+	execResult *executor.ExecutionResult,
+	verifier verifier.Verifier,
+	task *TaskForRunner,
+	outputPath, stderrPath string,
+	testCase int,
+) (s.TestResult, s.Status, string) {
+	solutionStatus := s.Success
+	solutionMessage := constants.SolutionMessageSuccess
+
+	switch execResult.ExitCode {
+	case constants.ExitCodeSuccess:
+		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.outputDirName, testCase)
+
+		passed, err := verifier.CompareOutput(outputPath, expectedFilePath, stderrPath)
+		if err != nil {
+			return s.TestResult{
+				Passed:       false,
+				ErrorMessage: err.Error(),
+				Order:        testCase,
+			}, s.InternalError, constants.SolutionMessageInternalError
+		}
+
+		if !passed {
+			solutionStatus = s.TestFailed
+			solutionMessage = constants.SolutionMessageTestFailed
+		}
+
+		return s.TestResult{
+			Passed:       passed,
+			ErrorMessage: "",
+			Order:        testCase,
+		}, solutionStatus, solutionMessage
+
+	case constants.ExitCodeTimeLimitExceeded:
+		return s.TestResult{
+			Passed:       false,
+			ErrorMessage: constants.TestMessageTimeLimitExceeded,
+			Order:        testCase,
+		}, s.TimeLimitExceeded, constants.SolutionMessageTimeout
+
+	case constants.ExitCodeMemoryLimitExceeded:
+		return s.TestResult{
+			Passed:       false,
+			ErrorMessage: constants.TestMessageMemoryLimitExceeded,
+			Order:        testCase,
+		}, s.MemoryLimitExceeded, constants.SolutionMessageMemoryLimitExceeded
+
+	default:
+		return s.TestResult{
+			Passed:       false,
+			ErrorMessage: execResult.Message,
+			Order:        testCase,
+		}, s.RuntimeError, constants.SolutionMessageRuntimeError
+	}
+}
+
+func initializeSolutionExecutor(
+	languageType languages.LanguageType,
+	languageVersion,
+	messageID string,
+) (executor.Executor, error) {
+	switch languageType {
+	case languages.CPP:
+		return executor.NewCppExecutor(languageVersion, messageID)
+	case languages.Python:
+		return executor.NewPythonExecutor(languageVersion, messageID)
+	default:
+		return nil, errors.ErrInvalidLanguageType
 	}
 }
 
@@ -210,7 +241,7 @@ func (r *runnerService) parseInputFiles(inputDir string) ([]string, error) {
 		}
 	}
 	if len(result) == 0 {
-		return nil, fmt.Errorf("empty input directory, verify task files")
+		return nil, errors.ErrEmptyInputDirectory
 	}
 
 	return result, nil

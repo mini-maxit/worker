@@ -1,13 +1,13 @@
 package constants
 
-// Queue message types
+// Queue message types.
 const (
 	QueueMessageTypeTask      = "task"
 	QueueMessageTypeHandshake = "handshake"
 	QueueMessageTypeStatus    = "status"
 )
 
-// SolutionResult messages
+// SolutionResult messages.
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
 	SolutionMessageRuntimeError        = "solution execution failed"
@@ -19,7 +19,7 @@ const (
 	SolutionMessageInternalError       = "internal error occurred"
 )
 
-// TestResult messages
+// TestResult messages.
 const (
 	TestMessageTimeLimitExceeded   = "time limit exceeded"
 	TestMessageMemoryLimitExceeded = "memory limit exceeded"
@@ -29,7 +29,7 @@ const (
 	ExitCodeDifference = 1
 )
 
-// Worker specific constants
+// Worker specific constants.
 const (
 	SolutionFileBaseName = "solution"
 	InputDirName         = "inputs"
@@ -38,7 +38,7 @@ const (
 	WorkerStatusBusy     = "busy"
 )
 
-// Exit codes
+// Exit codes.
 const (
 	ExitCodeSuccess             = 0
 	ExitCodeInternalError       = 1
@@ -46,7 +46,7 @@ const (
 	ExitCodeMemoryLimitExceeded = 137
 )
 
-// Configuratioin constants
+// Configuratioin constants.
 const (
 	DefailtRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
@@ -59,4 +59,10 @@ const (
 	BaseChrootDir           = "../tmp/chroot"
 	DefaultWorkerQueueName  = "worker_queue"
 	DefaultMaxWorkersStr    = "10"
+	UserOutputDirName       = "user-output"
+)
+
+// Utility constants.
+const (
+	MaxFileSize = 10 * 1024 * 1024 // 10 MB
 )

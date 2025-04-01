@@ -3,21 +3,29 @@ package utils
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
-	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/constants"
+	e "github.com/mini-maxit/worker/internal/errors"
 )
 
-// Attemts to close the file, and panics if something goes wrong
+// Attemts to close the file, and panics if something goes wrong.
 func CloseFile(file *os.File) {
 	err := file.Close()
 	if err != nil {
-		err := err.(*os.PathError)
-		log.Panicf("error during closing file %s. %s", err.Path, err.Error())
+		// Check if the error is a PathError
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) {
+			log.Panicf("error during closing file %s. %s", pathErr.Path, pathErr.Error())
+		}
+		log.Panicf("unexpected error during closing file: %s", err.Error())
 	}
 }
 
@@ -48,7 +56,7 @@ func CopyFile(src, dst string) error {
 	return nil
 }
 
-// Checks if given elements is contained in given array
+// Checks if given elements is contained in given array.
 func Contains[V string](array []V, value V) bool {
 	for _, el := range array {
 		if el == value {
@@ -59,8 +67,8 @@ func Contains[V string](array []V, value V) bool {
 	return false
 }
 
-// attempts to remove dir and optionaly its content. Can ignore error, for example if folder does not exist
-func RemoveIO(dir string, recursive, ignore_error bool) error {
+// attempts to remove dir and optionaly its content. Can ignore error, for example if folder does not exist.
+func RemoveIO(dir string, recursive, ignoreError bool) error {
 	var err error
 	if recursive {
 		err = os.RemoveAll(dir)
@@ -68,7 +76,7 @@ func RemoveIO(dir string, recursive, ignore_error bool) error {
 		err = os.Remove(dir)
 	}
 
-	if ignore_error {
+	if ignoreError {
 		return nil
 	}
 	return err
@@ -76,7 +84,6 @@ func RemoveIO(dir string, recursive, ignore_error bool) error {
 
 // ExtractTarGz extracts a tar.gz archive to a given directory.
 func ExtractTarGz(filePath string, baseFilePath string) error {
-
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -100,33 +107,45 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 			return err
 		}
 
+		// Clean and validate the path
+		cleanName := filepath.Clean(header.Name)
+		if strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
+			return fmt.Errorf("invalid file path in archive: %s", cleanName)
+		}
+
+		targetPath := filepath.Join(baseFilePath, cleanName)
+
 		switch header.Typeflag {
-		case tar.TypeDir:
-			dirPath := path.Join(baseFilePath, header.Name)
-			if err := os.MkdirAll(dirPath, 0755); err != nil {
-				return err
-			}
-
 		case tar.TypeReg:
-			filePath := path.Join(baseFilePath, header.Name)
-			if err := os.MkdirAll(path.Dir(filePath), 0755); err != nil {
-				return err
+			if header.Size > constants.MaxFileSize {
+				return fmt.Errorf("file too large: %s (%d bytes)", cleanName, header.Size)
 			}
-
-			outFile, err := os.Create(filePath)
+			err := handleRegularFileDecompression(tarReader, targetPath, header.Size)
 			if err != nil {
 				return err
 			}
-			defer outFile.Close()
 
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				return err
-			}
-
+		case tar.TypeSymlink, tar.TypeLink:
+			return fmt.Errorf("symlinks not allowed: %s", cleanName)
 		default:
-			return errors.ErrUnknownFileType
+			return fmt.Errorf("unsupported file type: %c", header.Typeflag)
 		}
 	}
+	return nil
+}
+
+func handleRegularFileDecompression(tarReader *tar.Reader, targetPath string, size int64) error {
+	outFile, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	limitedReader := io.LimitReader(tarReader, size)
+	if _, err := io.Copy(outFile, limitedReader); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -151,42 +170,7 @@ func TarGzFolder(srcDir string) (string, error) {
 	tarWriter := tar.NewWriter(gzWriter)
 	defer tarWriter.Close()
 
-	err = filepath.Walk(absSrcDir, func(file string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		header, err := tar.FileInfoHeader(fi, file)
-		if err != nil {
-			return err
-		}
-
-		relPath, err := filepath.Rel(parentDir, file)
-		if err != nil {
-			return err
-		}
-		header.Name = relPath
-
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-
-		if fi.IsDir() {
-			return nil
-		}
-
-		f, err := os.Open(file)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		if _, err := io.Copy(tarWriter, f); err != nil {
-			return err
-		}
-
-		return nil
-	})
+	err = walkAndWriteToTar(absSrcDir, parentDir, tarWriter)
 	if err != nil {
 		return "", err
 	}
@@ -201,18 +185,70 @@ func TarGzFolder(srcDir string) (string, error) {
 	return outputFilePath, nil
 }
 
-func GetSolutionFileNameWithExtension(SolutionFileBaseName string, languageType string) (string, error) {
+func walkAndWriteToTar(absSrcDir, parentDir string, tarWriter *tar.Writer) error {
+	return filepath.Walk(absSrcDir, func(file string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		header, err := createTarHeader(fi, file, parentDir)
+		if err != nil {
+			return err
+		}
+
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		return writeFileToTar(file, tarWriter)
+	})
+}
+
+func createTarHeader(fi os.FileInfo, file, parentDir string) (*tar.Header, error) {
+	header, err := tar.FileInfoHeader(fi, file)
+	if err != nil {
+		return nil, err
+	}
+
+	relPath, err := filepath.Rel(parentDir, file)
+	if err != nil {
+		return nil, err
+	}
+	header.Name = relPath
+
+	return header, nil
+}
+
+func writeFileToTar(file string, tarWriter *tar.Writer) error {
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(tarWriter, f); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetSolutionFileNameWithExtension(solutionFileBaseName string, languageType string) (string, error) {
 	switch languageType {
 	case "PYTHON":
-		return SolutionFileBaseName + ".py", nil
+		return solutionFileBaseName + ".py", nil
 	case "CPP":
-		return SolutionFileBaseName + ".cpp", nil
+		return solutionFileBaseName + ".cpp", nil
 	default:
-		return "", errors.ErrInvalidLanguageType
+		return "", e.ErrInvalidLanguageType
 	}
 }
 
-// RemoveEmptyErrFiles removes empty .err files from the given directory
+// RemoveEmptyErrFiles removes empty .err files from the given directory.
 func RemoveEmptyErrFiles(dir string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {

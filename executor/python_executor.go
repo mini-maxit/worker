@@ -2,7 +2,6 @@ package executor
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
@@ -14,18 +13,18 @@ import (
 
 type PythonExecutor struct {
 	version string
-	config  *ExecutorConfig
+	config  *Config
 	logger  *zap.SugaredLogger
 }
 
 func (e *PythonExecutor) ExecuteCommand(command, messageID string, commandConfig CommandConfig) *ExecutionResult {
 	e.logger.Infof("COmmmand: %s", command)
-	restrictedCmd, rootToChrootExecPath, err := copyExecutableToChrootAndRestric(command, commandConfig)
+	restrictedCmd, rootToChrootExecPath, err := CopyExecutableToChrootAndRestric(command, commandConfig)
 	if err != nil {
 		e.logger.Errorf("Could not copy executable to chroot and restrict. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
 			ExitCode: constants.ExitCodeInternalError,
-			Message:  fmt.Sprintf("could not copy executable to chroot and restrict. %s", err.Error()),
+			Message:  err.Error(),
 		}
 	}
 
@@ -38,12 +37,12 @@ func (e *PythonExecutor) ExecuteCommand(command, messageID string, commandConfig
 	}()
 
 	// Open io files
-	ioConfig, err := setupIOFiles(commandConfig.StdinPath, commandConfig.StdoutPath, commandConfig.StderrPath)
+	ioConfig, err := SetupIOFiles(commandConfig.StdinPath, commandConfig.StdoutPath, commandConfig.StderrPath)
 	if err != nil {
 		e.logger.Errorf("Could not open io files. %s [MsgID: %s]", err.Error(), messageID)
 		return &ExecutionResult{
 			ExitCode: constants.ExitCodeInternalError,
-			Message:  fmt.Sprintf("could not open io files. %s", err.Error()),
+			Message:  err.Error(),
 		}
 	}
 
@@ -87,7 +86,7 @@ func (e *PythonExecutor) RequiresCompilation() bool {
 	return false
 }
 
-func (e *PythonExecutor) Compile(filePath, dir, messageID string) (string, error) {
+func (e *PythonExecutor) Compile(_, _, _ string) (string, error) {
 	return "", errors.ErrDoesNotRequireCompilation
 }
 

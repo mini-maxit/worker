@@ -68,27 +68,31 @@ func (er *ExecutionResult) String() string {
 	return out.String()
 }
 
-func restrictCommand(executableName string, commandConfig CommandConfig) *exec.Cmd {
+func RestrictCommand(executableName string, commandConfig CommandConfig) *exec.Cmd {
 	logger := logger.NewNamedLogger("executor")
 	logger.Infof("Restricting command %s", executableName)
 
 	timeLimitSecondsString := strconv.Itoa(commandConfig.TimeLimit)
 
+	commandConfig.ChrootDirPath = filepath.Clean(commandConfig.ChrootDirPath)
+	executableName = filepath.Base(executableName)
+
 	var args []string
 	var executeCommand string
 	if commandConfig.UseChroot {
 		args = append(args, "chroot", commandConfig.ChrootDirPath)
-		executeCommand = fmt.Sprintf("./%s", executableName)
+		executeCommand = "./" + executableName
 	} else {
 		executeCommand = fmt.Sprintf("%s/%s", commandConfig.ChrootDirPath, executableName)
 	}
 
 	args = append(args, "timeout", "--verbose", timeLimitSecondsString, executeCommand)
 
+	// #nosec G204 -- executable name and arguments are sanitized with filepath.Base and filepath.Clean
 	return exec.Command(args[0], args[1:]...)
 }
 
-func copyExecutableToChrootAndRestric(executablePath string, commandConfig CommandConfig) (*exec.Cmd, string, error) {
+func CopyExecutableToChrootAndRestric(executablePath string, commandConfig CommandConfig) (*exec.Cmd, string, error) {
 	id := uuid.New()
 
 	executableName := filepath.Base(executablePath)
@@ -107,12 +111,12 @@ func copyExecutableToChrootAndRestric(executablePath string, commandConfig Comma
 	}
 
 	// Restrict command to run in chroot with time limit
-	restrictedCmd := restrictCommand(chrootExecName, commandConfig)
+	restrictedCmd := RestrictCommand(chrootExecName, commandConfig)
 
 	return restrictedCmd, rootToChrootExecPath, nil
 }
 
-func setupIOFiles(stdinFilePath, stdoutFilePath, stderrFilePath string) (IOConfig, error) {
+func SetupIOFiles(stdinFilePath, stdoutFilePath, stderrFilePath string) (IOConfig, error) {
 	ioConfig := IOConfig{}
 	// Open stdout file
 	stdout, err := os.OpenFile(stdoutFilePath, os.O_RDWR|os.O_CREATE, 0755)
