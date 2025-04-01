@@ -219,8 +219,6 @@ func initializeSolutionExecutor(
 	switch languageType {
 	case languages.CPP:
 		return executor.NewCppExecutor(languageVersion, messageID)
-	case languages.Python:
-		return executor.NewPythonExecutor(languageVersion, messageID)
 	default:
 		return nil, errors.ErrInvalidLanguageType
 	}

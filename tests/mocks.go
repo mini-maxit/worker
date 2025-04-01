@@ -27,23 +27,17 @@ const (
 	CPPFailedTimeLimitExceeded
 	CPPCompilationError
 	CPPTestCaseFailed
-	PythonSuccess
-	PythonFailedTimeLimitExceeded
-	PythonTestCaseFailed
 	Handshake
 	LongTaskMessage
 	Status
 )
 
 var testTypeSolutionMap = map[TestType]string{
-	CPPSuccess:                    "CPPSuccessSolution.cpp",
-	CPPFailedTimeLimitExceeded:    "CPPFailedTimeLimitExceededSolution.cpp",
-	CPPCompilationError:           "CPPCompilationErrorSolution.cpp",
-	CPPTestCaseFailed:             "CPPTestCaseFailedSolution.cpp",
-	PythonSuccess:                 "PythonSuccessSolution.py",
-	PythonFailedTimeLimitExceeded: "PythonFailedTimeLimitExceededSolution.py",
-	PythonTestCaseFailed:          "PythonTestCaseFailedSolution.py",
-	LongTaskMessage:               "CPPFailedTimeLimitExceededSolution.cpp",
+	CPPSuccess:                 "CPPSuccessSolution.cpp",
+	CPPFailedTimeLimitExceeded: "CPPFailedTimeLimitExceededSolution.cpp",
+	CPPCompilationError:        "CPPCompilationErrorSolution.cpp",
+	CPPTestCaseFailed:          "CPPTestCaseFailedSolution.cpp",
+	LongTaskMessage:            "CPPFailedTimeLimitExceededSolution.cpp",
 }
 
 type MockFileService struct {

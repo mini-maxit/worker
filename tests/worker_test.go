@@ -164,13 +164,10 @@ func isTestCaseFailed(actual ExpectedTaskResponse) bool {
 }
 
 var validators = map[tests.TestType]func(ExpectedTaskResponse) bool{
-	tests.CPPSuccess:                    isSuccess,
-	tests.PythonSuccess:                 isSuccess,
-	tests.CPPFailedTimeLimitExceeded:    isTimeLimitExceeded,
-	tests.PythonFailedTimeLimitExceeded: isTimeLimitExceeded,
-	tests.CPPCompilationError:           isCompilationError,
-	tests.CPPTestCaseFailed:             isTestCaseFailed,
-	tests.PythonTestCaseFailed:          isTestCaseFailed,
+	tests.CPPSuccess:                 isSuccess,
+	tests.CPPFailedTimeLimitExceeded: isTimeLimitExceeded,
+	tests.CPPCompilationError:        isCompilationError,
+	tests.CPPTestCaseFailed:          isTestCaseFailed,
 }
 
 var testCases = []struct {
@@ -183,9 +180,6 @@ var testCases = []struct {
 	{"Test solution with time limit exceeded CPP", tests.CPPFailedTimeLimitExceeded, "CPP", "20"},
 	{"Test solution with compilation error CPP", tests.CPPCompilationError, "CPP", "20"},
 	{"Test solution with test case failed CPP", tests.CPPTestCaseFailed, "CPP", "20"},
-	{"Test valid solution Python", tests.PythonSuccess, "PYTHON", "3"},
-	{"Test solution with time limit exceeded Python", tests.PythonFailedTimeLimitExceeded, "PYTHON", "3"},
-	{"Test solution with test case failed Python", tests.PythonTestCaseFailed, "PYTHON", "3"},
 }
 
 func validateResponse(testType tests.TestType, actual ExpectedTaskResponse) bool {
@@ -205,12 +199,6 @@ func validateErrFileContent(testType tests.TestType, outputDir string) bool {
 	case tests.CPPCompilationError:
 		return fileExists(outputDir, "compile-err.err") && fileContains(outputDir, "compile-err.err", "errors")
 	case tests.CPPTestCaseFailed:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "1c1")
-	case tests.PythonSuccess:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "")
-	case tests.PythonFailedTimeLimitExceeded:
-		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "timeout")
-	case tests.PythonTestCaseFailed:
 		return fileExists(outputDir, "1.err") && fileContains(outputDir, "1.err", "1c1")
 	case tests.Handshake: // to make revive linter happy
 		return false
@@ -411,10 +399,6 @@ func TestProcessHandshake(t *testing.T) {
 				{
 					Name:     "CPP",
 					Versions: []string{"20", "17", "14", "11"},
-				},
-				{
-					Name:     "PYTHON",
-					Versions: []string{"3", "2"},
 				},
 			}
 
