@@ -125,10 +125,10 @@ func (fs *fileService) UnconpressPackage(zipFilePath string) (TaskDirConfig, err
 	err = utils.ExtractTarGz(path+"/file.tar.gz", path)
 	if err != nil {
 		fs.logger.Errorf("Failed to extract file. %s", err)
-		errRemove := utils.RemoveIO(path, true, true)
-		if errRemove != nil {
-			fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
-		}
+		// errRemove := utils.RemoveIO(path, true, true)
+		// if errRemove != nil {
+		// 	fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
+		// }
 		return TaskDirConfig{}, err
 	}
 

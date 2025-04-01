@@ -116,10 +116,16 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 		targetPath := filepath.Join(baseFilePath, cleanName)
 
 		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(cleanName, 0755); err != nil {
+				return err
+			}
+
 		case tar.TypeReg:
 			if header.Size > constants.MaxFileSize {
 				return fmt.Errorf("file too large: %s (%d bytes)", cleanName, header.Size)
 			}
+
 			err := handleRegularFileDecompression(tarReader, targetPath, header.Size)
 			if err != nil {
 				return err
@@ -135,6 +141,10 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 }
 
 func handleRegularFileDecompression(tarReader *tar.Reader, targetPath string, size int64) error {
+	if err := os.MkdirAll(path.Dir(targetPath), 0755); err != nil {
+		return err
+	}
+
 	outFile, err := os.Create(targetPath)
 	if err != nil {
 		return err
