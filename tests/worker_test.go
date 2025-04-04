@@ -334,6 +334,8 @@ func TestProcessTask(t *testing.T) {
 					t.Fatalf("Failed to parse response JSON: %s", err)
 				}
 
+				t.Logf("Response: %+v", actualResponse)
+
 				if !validateResponse(tt.testType, actualResponse) {
 					t.Fatalf("Unexpected response: %+v", actualResponse)
 				}
