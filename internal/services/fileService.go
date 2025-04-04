@@ -180,7 +180,7 @@ func (fs *fileService) sendArchiveToStorage(
 	archiveFilePath string,
 	userID, taskID, submissionNumber int64,
 ) error {
-	body, contentType, err := fs.prepareMultipartBody(archiveFilePath, userID, taskID, submissionNumber)
+	body, err := fs.prepareMultipartBody(archiveFilePath, userID, taskID, submissionNumber)
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (fs *fileService) sendArchiveToStorage(
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := fs.createRequestWithContext(ctx, body, contentType)
+	req, err := fs.createRequestWithContext(ctx, body, "multipart/form-data")
 	if err != nil {
 		return err
 	}
@@ -199,10 +199,10 @@ func (fs *fileService) sendArchiveToStorage(
 func (fs *fileService) prepareMultipartBody(
 	archiveFilePath string,
 	userID, taskID, submissionNumber int64,
-) (*bytes.Buffer, string, error) {
+) (*bytes.Buffer, error) {
 	file, err := os.Open(archiveFilePath)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	defer file.Close()
 
@@ -217,23 +217,23 @@ func (fs *fileService) prepareMultipartBody(
 
 	for key, val := range form {
 		if err := writer.WriteField(key, val); err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 
 	part, err := writer.CreateFormFile("archive", filepath.Base(archiveFilePath))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	if err := writer.Close(); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	return body, writer.FormDataContentType(), nil
+	return body, nil
 }
 
 func (fs *fileService) createRequestWithContext(
