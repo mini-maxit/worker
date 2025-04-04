@@ -9,6 +9,8 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
+
+	e "errors"
 )
 
 type QueueService interface {
@@ -86,26 +88,38 @@ func (qs *queueService) Listen() {
 			}
 			continue
 		}
-		if queueMessage.Type == constants.QueueMessageTypeTask {
-			qs.handleTaskMessage(queueMessage, msg.ReplyTo)
 
-		} else if queueMessage.Type == constants.QueueMessageTypeStatus {
+		switch queueMessage.Type {
+		case constants.QueueMessageTypeTask:
+			qs.logger.Infof("Received task message: %s", queueMessage.MessageID)
+			qs.handleTaskMessage(queueMessage, msg.ReplyTo)
+		case constants.QueueMessageTypeStatus:
+			qs.logger.Infof("Received status message: %s", queueMessage.MessageID)
 			qs.handleStatusMessage(queueMessage, msg.ReplyTo)
-		} else if queueMessage.Type == constants.QueueMessageTypeHandshake {
+		case constants.QueueMessageTypeHandshake:
+			qs.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
 			qs.handleHandshakeMessage(queueMessage, msg.ReplyTo)
-		} else {
-			qs.logger.Errorf("Failed to handle message: %s", err)
-			err = PublishErrorToResponseQueue(qs.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, errors.ErrUnknownMessageType)
+		default:
+			qs.logger.Errorf("Unknown message type: %s", queueMessage.Type)
+			err = PublishErrorToResponseQueue(
+				qs.channel,
+				msg.ReplyTo,
+				queueMessage.Type,
+				queueMessage.MessageID,
+				errors.ErrUnknownMessageType)
 			if err != nil {
 				qs.logger.Errorf("Failed to publish error message: %s", err)
 			}
+			continue
 		}
 	}
-
 }
 
-func PublishErrorToResponseQueue(channel *amqp.Channel, responseQueueName, messageType, messageID string, err error) error {
-
+func PublishErrorToResponseQueue(
+	channel *amqp.Channel,
+	responseQueueName, messageType, messageID string,
+	err error,
+) error {
 	errorPayload := map[string]string{"error": err.Error()}
 	payload, jsonErr := json.Marshal(errorPayload)
 	if jsonErr != nil {
@@ -137,7 +151,11 @@ func PublishErrorToResponseQueue(channel *amqp.Channel, responseQueueName, messa
 	return nil
 }
 
-func PublishSucessToResponseQueue(channel *amqp.Channel, responseQueueName, messageType, messageID string, payload []byte) error {
+func PublishSucessToResponseQueue(
+	channel *amqp.Channel,
+	responseQueueName, messageType, messageID string,
+	payload []byte,
+) error {
 	logger := logger.NewNamedLogger("queueService")
 
 	queueMessage := ResponseQueueMessage{
@@ -193,30 +211,46 @@ func (qs *queueService) requeueTaskWithPriority2(queueMessage QueueMessage) erro
 
 func (qs *queueService) handleTaskMessage(queueMessage QueueMessage, replyTo string) {
 	qs.logger.Infof("Processing task message")
+
 	var task TaskQueueMessage
-	err := json.Unmarshal(queueMessage.Payload, &task)
-	if err != nil {
+	if err := json.Unmarshal(queueMessage.Payload, &task); err != nil {
 		qs.logger.Errorf("Failed to unmarshal task message: %s", err)
-		err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
-		if err != nil {
-			qs.logger.Errorf("Failed to publish error message: %s", err)
+		pubErr := PublishErrorToResponseQueue(
+			qs.channel,
+			replyTo,
+			queueMessage.Type,
+			queueMessage.MessageID,
+			err)
+		if pubErr != nil {
+			qs.logger.Errorf("Failed to publish error message: %s", pubErr)
 		}
+		return
 	}
 
-	err = qs.workerPool.ProcessTask(replyTo, queueMessage.MessageID, task)
-	if err != nil {
-		qs.logger.Errorf("Failed to process task message: %s", err)
-		if err == errors.ErrFailedToGetFreeWorker {
-			err = qs.requeueTaskWithPriority2(queueMessage)
-			if err != nil {
-				qs.logger.Errorf("Failed to requeue task with higher priority: %s", err)
-			}
-		} else {
-			err = PublishErrorToResponseQueue(qs.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
-			if err != nil {
-				qs.logger.Errorf("Failed to publish error message: %s", err)
-			}
+	err := qs.workerPool.ProcessTask(replyTo, queueMessage.MessageID, task)
+	if err == nil {
+		return
+	}
+
+	qs.logger.Errorf("Failed to process task message: %s", err)
+
+	if e.Is(err, errors.ErrFailedToGetFreeWorker) {
+		requeueErr := qs.requeueTaskWithPriority2(queueMessage)
+		if requeueErr != nil {
+			qs.logger.Errorf("Failed to requeue task with higher priority: %s", requeueErr)
 		}
+		return
+	}
+
+	pubErr := PublishErrorToResponseQueue(
+		qs.channel,
+		replyTo,
+		queueMessage.Type,
+		queueMessage.MessageID,
+		err)
+
+	if pubErr != nil {
+		qs.logger.Errorf("Failed to publish error message: %s", pubErr)
 	}
 }
 

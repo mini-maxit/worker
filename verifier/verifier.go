@@ -1,86 +1,59 @@
 package verifier
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
+	"os/exec"
+	"path/filepath"
+
+	"github.com/mini-maxit/worker/internal/constants"
 )
 
-// Returns true if the output and expected output are the same
-// Returns false otherwise
-// Returns an error if an error occurs
+// Returns true if the output and expected output are the same.
+// Returns false otherwise.
+// Returns an error if an error occurs.
 type Verifier interface {
-	CompareOutput(outputPath string, expectedOutputPath string) (bool, string, error)
+	CompareOutput(outputPath, expectedOutputPath, stderrPath string) (bool, error)
 }
 
-type DefaultVerifier struct{}
+type DefaultVerifier struct {
+	flags []string
+}
 
 // CompareOutput compares the output file with the expected output file.
 // It returns true if the files are the same, false otherwise.
 // It returns a string of differences if there are any.
 // It returns an error if any issue occurs during the comparison.
-func (dv *DefaultVerifier) CompareOutput(outputPath string, expectedOutputPath string) (bool, string, error) {
-	outputFile, err := os.Open(outputPath)
+func (dv *DefaultVerifier) CompareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
+	outputPath = filepath.Clean(outputPath)
+	expectedFilePath = filepath.Clean(expectedFilePath)
+
+	args := dv.flags
+
+	args = append(args, outputPath, expectedFilePath)
+	diffCmd := exec.Command("diff", args...)
+
+	diffCmdOutput, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return false, "", fmt.Errorf("failed to open output file: %v", err)
+		return false, fmt.Errorf("error opening output file %s: %w", outputPath, err)
 	}
-	defer outputFile.Close()
+	defer diffCmdOutput.Close()
 
-	expectedFile, err := os.Open(expectedOutputPath)
+	diffCmd.Stdout = diffCmdOutput
+	err = diffCmd.Run()
+	diffExitCode := diffCmd.ProcessState.ExitCode()
 	if err != nil {
-		return false, "", fmt.Errorf("failed to open expected output file: %v", err)
-	}
-	defer expectedFile.Close()
-
-	outputScanner := bufio.NewScanner(outputFile)
-	expectedScanner := bufio.NewScanner(expectedFile)
-
-	var differences strings.Builder
-	isIdentical := true
-	lineNumber := 1
-
-	for outputScanner.Scan() && expectedScanner.Scan() {
-		outputLine := outputScanner.Text()
-		expectedLine := expectedScanner.Text()
-
-		if outputLine != expectedLine {
-			isIdentical = false
-			differences.WriteString(fmt.Sprintf("Difference at line %d:\n", lineNumber))
-			differences.WriteString(fmt.Sprintf("Output:   %s\n", outputLine))
-			differences.WriteString(fmt.Sprintf("Expected: %s\n\n", expectedLine))
+		if diffExitCode == constants.ExitCodeDifference {
+			return false, nil
 		}
-		lineNumber++
+		return false, fmt.Errorf("error running diff command: %w", err)
 	}
 
-	// Check if there are remaining lines in either file
-	for outputScanner.Scan() {
-		isIdentical = false
-		outputLine := outputScanner.Text()
-		differences.WriteString(fmt.Sprintf("Extra line in output at line %d:\n", lineNumber))
-		differences.WriteString(fmt.Sprintf("Output: %s\n\n", outputLine))
-		lineNumber++
-	}
-
-	for expectedScanner.Scan() {
-		isIdentical = false
-		expectedLine := expectedScanner.Text()
-		differences.WriteString(fmt.Sprintf("Missing line in output at line %d:\n", lineNumber))
-		differences.WriteString(fmt.Sprintf("Expected: %s\n\n", expectedLine))
-		lineNumber++
-	}
-
-	if err := outputScanner.Err(); err != nil {
-		return false, "", fmt.Errorf("error reading output file: %v", err)
-	}
-
-	if err := expectedScanner.Err(); err != nil {
-		return false, "", fmt.Errorf("error reading expected output file: %v", err)
-	}
-
-	return isIdentical, differences.String(), nil
+	return true, nil
 }
 
-func NewDefaultVerifier() Verifier {
-	return &DefaultVerifier{}
+func NewDefaultVerifier(flags []string) Verifier {
+	return &DefaultVerifier{
+		flags: flags,
+	}
 }

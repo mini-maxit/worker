@@ -21,9 +21,15 @@ type WorkerPool struct {
 	logger           *zap.SugaredLogger
 }
 
-func NewWorkerPool(workerChannel *amqp.Channel, workerQueue string, maxWorkers int, fileService FileService, runnerService RunnerService) *WorkerPool {
+func NewWorkerPool(
+	workerChannel *amqp.Channel,
+	workerQueue string,
+	maxWorkers int,
+	fileService FileService,
+	runnerService RunnerService,
+) *WorkerPool {
 	workers := make(map[int]*Worker, maxWorkers)
-	for i := 0; i < maxWorkers; i++ {
+	for i := range maxWorkers {
 		workers[i] = &Worker{
 			id:            i,
 			status:        constants.WorkerStatusIdle,

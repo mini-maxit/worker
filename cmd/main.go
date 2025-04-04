@@ -27,8 +27,14 @@ func main() {
 
 	// Initialize the services
 	runnerService := services.NewRunnerService()
-	fileService := services.NewFilesService(config.FileStorageUrl)
-	workerPool := services.NewWorkerPool(workerChannel, config.WorkerQueueName, config.MaxWorkers, fileService, runnerService)
+	fileService := services.NewFilesService(config.FileStorageURL)
+	workerPool := services.NewWorkerPool(
+		workerChannel,
+		config.WorkerQueueName,
+		config.MaxWorkers,
+		fileService,
+		runnerService)
+
 	queueService := services.NewQueueService(workerChannel, config.WorkerQueueName, workerPool)
 
 	logger.Info("Listening for messages")
