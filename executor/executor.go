@@ -49,6 +49,7 @@ func ExitCodeToString(exitCode int) string {
 
 type ExecutionResult struct {
 	ExitCode int
+	ExecTime float64
 	Message  string
 }
 

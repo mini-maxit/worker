@@ -23,8 +23,8 @@ import (
 )
 
 type FileService interface {
-	HandleTaskPackage(taskID, userID, submissionNumber int64) (TaskDirConfig, error)
-	UnconpressPackage(zipFilePath string) (TaskDirConfig, error)
+	HandleTaskPackage(taskID, userID, submissionNumber int64) (*TaskDirConfig, error)
+	UnconpressPackage(zipFilePath string) (*TaskDirConfig, error)
 	StoreSolutionResult(
 		solutionResult solution.Result,
 		TaskFilesDirPath string,
@@ -50,7 +50,7 @@ func NewFilesService(fileServiceURL string) FileService {
 	}
 }
 
-func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64) (TaskDirConfig, error) {
+func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64) (*TaskDirConfig, error) {
 	fs.logger.Info("Handling task package")
 	requestURL := fmt.Sprintf("%s/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d",
 		fs.fileStorageURL,
@@ -61,20 +61,20 @@ func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 
 	client := &http.Client{}
 	response, err := client.Do(req)
 	if err != nil {
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
 		fs.logger.Errorf("Failed to get solution package. %s", response.Status)
 		bodyBytes, _ := io.ReadAll(response.Body)
-		return TaskDirConfig{}, errors.New(string(bodyBytes))
+		return &TaskDirConfig{}, errors.New(string(bodyBytes))
 	}
 
 	id := uuid.New()
@@ -82,7 +82,7 @@ func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64)
 	file, err := os.Create(filePath)
 	if err != nil {
 		fs.logger.Errorf("Failed to create file. %s", err)
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 
 	defer file.Close()
@@ -90,12 +90,12 @@ func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64)
 	_, err = io.Copy(file, response.Body)
 	if err != nil {
 		fs.logger.Errorf("Failed to copy file. %s", err)
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 
 	taskDirConfig, err := fs.UnconpressPackage(filePath)
 	if err != nil {
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 
 	file.Close()
@@ -103,13 +103,13 @@ func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64)
 	return taskDirConfig, nil
 }
 
-func (fs *fileService) UnconpressPackage(zipFilePath string) (TaskDirConfig, error) {
+func (fs *fileService) UnconpressPackage(zipFilePath string) (*TaskDirConfig, error) {
 	fs.logger.Infof("Unzipping solution package")
 
 	path, err := os.MkdirTemp("", "temp")
 	if err != nil {
 		fs.logger.Errorf("Failed to create temp directory. %s", err)
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 
 	err = os.Rename(zipFilePath, path+"/file.tar.gz")
@@ -119,17 +119,17 @@ func (fs *fileService) UnconpressPackage(zipFilePath string) (TaskDirConfig, err
 		if errRemove != nil {
 			fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
 		}
-		return TaskDirConfig{}, err
+		return &TaskDirConfig{}, err
 	}
 
 	err = utils.ExtractTarGz(path+"/file.tar.gz", path)
 	if err != nil {
 		fs.logger.Errorf("Failed to extract file. %s", err)
-		// errRemove := utils.RemoveIO(path, true, true)
-		// if errRemove != nil {
-		// 	fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
-		// }
-		return TaskDirConfig{}, err
+		errRemove := utils.RemoveIO(path, true, true)
+		if errRemove != nil {
+			fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
+		}
+		return &TaskDirConfig{}, err
 	}
 
 	errRemove := utils.RemoveIO(path+"/file.tar.gz", false, false)
@@ -142,7 +142,7 @@ func (fs *fileService) UnconpressPackage(zipFilePath string) (TaskDirConfig, err
 		TaskFilesDirPath:    path + "/Task",
 	}
 
-	return dirConfig, nil
+	return &dirConfig, nil
 }
 
 func (fs *fileService) StoreSolutionResult(

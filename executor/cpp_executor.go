@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/languages"
@@ -58,7 +59,11 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 
 	// Execute the command
 	e.logger.Infof("Executing command [MsgID: %s]", messageID)
+	execTimeStart := time.Now()
 	runErr := restrictedCmd.Run()
+	execTimeEnd := time.Now()
+
+	execTime := execTimeEnd.Sub(execTimeStart).Seconds()
 	exitCode := restrictedCmd.ProcessState.ExitCode()
 
 	errorMessage := ""
@@ -72,6 +77,7 @@ func (e *CppExecutor) ExecuteCommand(command, messageID string, commandConfig Co
 
 	return &ExecutionResult{
 		ExitCode: exitCode,
+		ExecTime: execTime,
 		Message:  errorMessage,
 	}
 }

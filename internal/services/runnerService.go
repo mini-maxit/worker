@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
@@ -136,11 +135,7 @@ func (r *runnerService) runAndEvaluateTestCases(
 			UseChroot:     task.useChroot,
 		}
 
-    execTimeStart := time.Now()
 		execResult := solutionExecutor.ExecuteCommand(filePath, messageID, commandConfig)
-		execTimeEnd := time.Now()
-    
-    execTime := execTimeEnd.Sub(execTimeStart).Seconds()
 		testCases[i], solutionStatus, solutionMessage = r.evaluateTestCase(
 			execResult,
 			verifier,
@@ -149,8 +144,7 @@ func (r *runnerService) runAndEvaluateTestCases(
 			stderrPath,
 			(i + 1),
 		)
-    
-    testCases[i].ExecutionTime = execTime
+		testCases[i].ExecutionTime = execResult.ExecTime
 	}
 
 	return s.Result{

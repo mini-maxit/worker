@@ -106,7 +106,7 @@ func (ws *Worker) prepareTaskEnvironment(task TaskQueueMessage,
 		return nil, "", 0, err
 	}
 
-	return &dc, solutionFileName, langType, nil
+	return dc, solutionFileName, langType, nil
 }
 
 func (ws *Worker) publishError(queue, messageID string, err error) {

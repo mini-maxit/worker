@@ -28,9 +28,9 @@ type Result struct {
 	TestResults []TestResult `json:"test_results"` // test results in case of error or success
 }
 type TestResult struct {
-	Passed bool `json:"passed"` // Whether the test passed or failed
-  ExecutionTime float64 `json:"execution_time"`
-  // Error message in case of failure. Does not include information about difference in expected and actual output
+	Passed        bool    `json:"passed"` // Whether the test passed or failed
+	ExecutionTime float64 `json:"execution_time"`
+	// Error message in case of failure. Does not include information about difference in expected and actual output
 	ErrorMessage string `json:"error_message"`
 	Order        int    `json:"order"` // Order to input output pair for ex 1 mean in1.in and out1.out was used
 }
