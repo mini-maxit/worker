@@ -38,6 +38,8 @@ var testTypeSolutionMap = map[TestType]string{
 	CPPCompilationError:        "CPPCompilationErrorSolution.cpp",
 	CPPTestCaseFailed:          "CPPTestCaseFailedSolution.cpp",
 	LongTaskMessage:            "CPPFailedTimeLimitExceededSolution.cpp",
+	Handshake:                  "", // Linter needs this
+	Status:                     "",
 }
 
 type MockFileService struct {
@@ -65,7 +67,10 @@ func (mfs *MockFileService) HandleTaskPackage(taskID, userID, submissionNumber i
 	// Cleanup on failure
 	defer func() {
 		if err != nil {
-			os.RemoveAll(dirPath)
+			err = os.RemoveAll(dirPath)
+			if err != nil {
+				mfs.t.Errorf("failed to remove temporary directory: %s", err)
+			}
 		}
 	}()
 

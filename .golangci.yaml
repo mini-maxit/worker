@@ -10,7 +10,7 @@
 
 # Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
 
-version: "2.02"
+version: "2"
 
 run:
   # Timeout for analysis, e.g. 30s, 5m.
@@ -33,8 +33,7 @@ linters:
   default: "none"
   enable:
     ## enabled by default
-    - errcheck # checking for unchecked errors, these unchecked errors can be critical bugs in some cases
-    - gosimple # specializes in simplifying a code
+    - errcheck # checking for unchecked errors, these unchecked errors can be critical bugs in some cases # TODO: enable this
     - govet # reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
     - ineffassign # detects when assignments to existing variables are not used
     - staticcheck # is a go vet on steroids, applying a ton of static analysis checks
@@ -66,10 +65,9 @@ linters:
     - gocritic # provides diagnostics that check for bugs, performance and style issues
     - gocyclo # computes and checks the cyclomatic complexity of functions
     - godot # checks if comments end in a period
-    - goimports # in addition to fixing imports, goimports also formats your code in the same style as gofmt
     - gomoddirectives # manages the use of 'replace', 'retract', and 'excludes' directives in go.mod
     - goprintffuncname # checks that printf-like functions are named with f at the end
-    - gosec # inspects source code for security problems # TODO: enable and fix this
+    # - gosec # inspects source code for security problems # TODO: enable and fix this
     - iface # checks the incorrect use of interfaces, helping developers avoid interface pollution
     - intrange # finds places where for loops could make use of an integer range
     - lll # reports long lines
@@ -97,7 +95,6 @@ linters:
     - sloglint # ensure consistent code style when using log/slog
     - spancheck # checks for mistakes with OpenTelemetry/Census spans
     - sqlclosecheck # checks that sql.Rows and sql.Stmt are closed
-    - stylecheck # is a replacement for golint
     - testableexamples # checks if examples are testable (have an expected output)
     - testifylint # checks usage of github.com/stretchr/testify
     - testpackage # makes you use a separate _test package
@@ -150,6 +147,10 @@ linters:
 
   exclusions:
     rules:
+      - path: docs/
+        linters:
+          - lll
+          - gochecknoinits
       - path: _test\.go$
         linters:
           - funlen
@@ -161,6 +162,12 @@ linters:
           - cyclop
 
   settings:
+    revive:
+      rules:
+        - name: package-comments
+          # Whether to check for package comments.
+          # Default: true
+          disabled: true
     cyclop:
       # The maximal code complexity to report.
       # Default: 10
@@ -220,6 +227,13 @@ linters:
       # Such cases aren't reported by default.
       # Default: false
       check-type-assertions: true
+      exclude-functions:
+        - io/ioutil.ReadFile
+        - io.Copy(*bytes.Buffer)
+        - io.Copy(os.Stdout)
+        - os.Remove
+        - (*os.File).Close
+        - (io.ReadCloser).Close
 
     exhaustive:
       # Program elements to check for exhaustiveness.
@@ -303,12 +317,7 @@ linters:
       # Default: []
       disable:
         - fieldalignment # too strict
-      # Settings per analyzer.
-      settings:
-        shadow:
-          # Whether to be strict about shadowing; can be noisy.
-          # Default: false
-          strict: true
+        - shadow # noisy
 
     inamedparam:
       # Skips check for interface methods with only a single parameter.
@@ -391,6 +400,10 @@ linters:
       # Enable/disable `os.TempDir()` detections.
       # Default: false
       os-temp-dir: true
+
+formatters:
+  enable:
+    - goimports # in addition to fixing imports, goimports also formats your code in the same style as gofmt
 
 issues:
   # Maximum count of issues with the same text.

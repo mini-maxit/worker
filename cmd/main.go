@@ -21,7 +21,12 @@ func main() {
 	// Connect to RabbitMQ
 	conn := rabbitmq.NewRabbitMqConnection(config)
 
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			logger.Error("Failed to close RabbitMQ connection", err)
+		}
+	}()
 
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 

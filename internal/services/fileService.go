@@ -98,7 +98,11 @@ func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64)
 		return nil, err
 	}
 
-	file.Close()
+	err = file.Close()
+	if err != nil {
+		fs.logger.Errorf("Failed to close file. %s", err)
+		return nil, err
+	}
 
 	return taskDirConfig, nil
 }

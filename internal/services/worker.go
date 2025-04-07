@@ -40,7 +40,11 @@ func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task T
 	defer func() {
 		if r := recover(); r != nil {
 			ws.logger.Errorf("Worker panicked: %v", r)
-			ws.publishError(responseQueueName, messageID, r.(error))
+			if err, ok := r.(error); ok {
+				ws.publishError(responseQueueName, messageID, err)
+			} else {
+				ws.logger.Errorf("Recovered value is not an error: %v", r)
+			}
 		}
 	}()
 

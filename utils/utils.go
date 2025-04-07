@@ -14,6 +14,7 @@ import (
 
 	"github.com/mini-maxit/worker/internal/constants"
 	e "github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/logger"
 )
 
 // Attemts to close the file, and panics if something goes wrong.
@@ -84,6 +85,7 @@ func RemoveIO(dir string, recursive, ignoreError bool) error {
 
 // ExtractTarGz extracts a tar.gz archive to a given directory.
 func ExtractTarGz(filePath string, baseFilePath string) error {
+	logger := logger.NewNamedLogger("utils")
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -94,7 +96,11 @@ func ExtractTarGz(filePath string, baseFilePath string) error {
 	if err != nil {
 		return err
 	}
-	defer uncompressedStream.Close()
+	defer func() {
+		if err := uncompressedStream.Close(); err != nil {
+			logger.Errorf("error during closing uncompressed stream: %s", err.Error())
+		}
+	}()
 
 	tarReader := tar.NewReader(uncompressedStream)
 
@@ -160,6 +166,7 @@ func handleRegularFileDecompression(tarReader *tar.Reader, targetPath string, si
 }
 
 func TarGzFolder(srcDir string) (string, error) {
+	logger := logger.NewNamedLogger("utils")
 	absSrcDir, err := filepath.Abs(srcDir)
 	if err != nil {
 		return "", err
@@ -175,10 +182,19 @@ func TarGzFolder(srcDir string) (string, error) {
 	defer outFile.Close()
 
 	gzWriter := gzip.NewWriter(outFile)
-	defer gzWriter.Close()
+	defer func() {
+		if err := gzWriter.Close(); err != nil {
+			logger.Errorf("error during closing gzip writer: %s", err.Error())
+		}
+	}()
 
 	tarWriter := tar.NewWriter(gzWriter)
-	defer tarWriter.Close()
+	defer func() {
+		err := tarWriter.Close()
+		if err != nil {
+			logger.Errorf("error during closing tar writer: %s", err.Error())
+		}
+	}()
 
 	err = walkAndWriteToTar(absSrcDir, parentDir, tarWriter)
 	if err != nil {

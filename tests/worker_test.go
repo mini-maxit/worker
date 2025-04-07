@@ -66,7 +66,7 @@ func generateQueueMessage(test tests.TestType, language, version string) []byte 
 	var payload map[string]interface{}
 	var msgType string
 
-	//nolint:exhaustive
+	//nolint:exhaustive // there is no need to define for all test cases ther is a default case which handles it
 	switch test {
 	case tests.Handshake:
 		payload = map[string]interface{}{}
@@ -168,6 +168,9 @@ var validators = map[tests.TestType]func(ExpectedTaskResponse) bool{
 	tests.CPPFailedTimeLimitExceeded: isTimeLimitExceeded,
 	tests.CPPCompilationError:        isCompilationError,
 	tests.CPPTestCaseFailed:          isTestCaseFailed,
+	tests.Handshake:                  nil, // to make linter happy
+	tests.LongTaskMessage:            nil,
+	tests.Status:                     nil,
 }
 
 var testCases = []struct {
@@ -299,9 +302,17 @@ func tearDown(t *testing.T) {
 
 func TestProcessTask(t *testing.T) {
 	qs, channel, conn := setUp(t, 1)
-	defer conn.Close()
-	defer channel.Close()
-	defer tearDown(t)
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ connection: %s", err)
+		}
+		err = channel.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ channel: %s", err)
+		}
+		tearDown(t)
+	}()
 
 	go qs.Listen()
 
@@ -359,9 +370,17 @@ func TestProcessTask(t *testing.T) {
 }
 func TestProcessHandshake(t *testing.T) {
 	qs, channel, conn := setUp(t, 1)
-	defer conn.Close()
-	defer channel.Close()
-	defer tearDown(t)
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ connection: %s", err)
+		}
+		err = channel.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ channel: %s", err)
+		}
+		tearDown(t)
+	}()
 
 	go qs.Listen()
 
@@ -417,9 +436,17 @@ func TestProcessHandshake(t *testing.T) {
 func TestProcessStatus(t *testing.T) {
 	const numberOfWorkers = 5
 	qs, channel, conn := setUp(t, numberOfWorkers)
-	defer conn.Close()
-	defer channel.Close()
-	defer tearDown(t)
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ connection: %s", err)
+		}
+		err = channel.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ channel: %s", err)
+		}
+		tearDown(t)
+	}()
 
 	go qs.Listen()
 
