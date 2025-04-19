@@ -1,29 +1,35 @@
 package constants
 
-// Queue message types
+// Queue message types.
 const (
 	QueueMessageTypeTask      = "task"
 	QueueMessageTypeHandshake = "handshake"
 	QueueMessageTypeStatus    = "status"
 )
 
-// SolutionResult messages
+// SolutionResult messages.
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
 	SolutionMessageRuntimeError        = "solution execution failed"
 	SolutionMessageInvalidLanguageType = "invalid language type supplied"
 	SolutionMessageTimeout             = "some test cases failed due to time limit exceeded"
 	SolutionMessageMemoryLimitExceeded = "some test cases failed due to memory limit exceeded"
+	SolutionMessageTestFailed          = "some test cases failed"
 	SolutionMessageLimitsMismatch      = "time and memory limits mismatch compared to the number of test cases"
+	SolutionMessageInternalError       = "internal error occurred"
 )
 
-// TestResult messages
+// TestResult messages.
 const (
 	TestMessageTimeLimitExceeded   = "time limit exceeded"
 	TestMessageMemoryLimitExceeded = "memory limit exceeded"
 )
 
-// Worker specific constants
+const (
+	ExitCodeDifference = 1
+)
+
+// Worker specific constants.
 const (
 	SolutionFileBaseName = "solution"
 	InputDirName         = "inputs"
@@ -32,7 +38,7 @@ const (
 	WorkerStatusBusy     = "busy"
 )
 
-// Exit codes
+// Exit codes.
 const (
 	ExitCodeSuccess             = 0
 	ExitCodeInternalError       = 1
@@ -40,9 +46,9 @@ const (
 	ExitCodeMemoryLimitExceeded = 137
 )
 
-// Configuratioin constants
+// Configuratioin constants.
 const (
-	DefailtRabbitmqHost     = "localhost"
+	DefaultRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
 	DefaultRabbitmqPassword = "guest"
 	DefaultRabbitmqPort     = "5672"
@@ -53,4 +59,10 @@ const (
 	BaseChrootDir           = "../tmp/chroot"
 	DefaultWorkerQueueName  = "worker_queue"
 	DefaultMaxWorkersStr    = "10"
+	UserOutputDirName       = "user-output"
+)
+
+// Utility constants.
+const (
+	MaxFileSize = 10 * 1024 * 1024 // 10 MB
 )

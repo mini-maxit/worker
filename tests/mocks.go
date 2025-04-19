@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/services"
@@ -18,8 +17,30 @@ const (
 	mockFilesDir        = "./mock_files/"
 	mockTaskFilesDir    = mockFilesDir + "Task"
 	mockUserSolutionDir = mockFilesDir + "solutions/"
-	mockTmpDir          = mockFilesDir + "tmp"
+	MockTmpDir          = mockFilesDir + "tmp"
 )
+
+type TestType int
+
+const (
+	CPPSuccess TestType = iota + 1
+	CPPFailedTimeLimitExceeded
+	CPPCompilationError
+	CPPTestCaseFailed
+	Handshake
+	LongTaskMessage
+	Status
+)
+
+var testTypeSolutionMap = map[TestType]string{
+	CPPSuccess:                 "CPPSuccessSolution.cpp",
+	CPPFailedTimeLimitExceeded: "CPPFailedTimeLimitExceededSolution.cpp",
+	CPPCompilationError:        "CPPCompilationErrorSolution.cpp",
+	CPPTestCaseFailed:          "CPPTestCaseFailedSolution.cpp",
+	LongTaskMessage:            "CPPFailedTimeLimitExceededSolution.cpp",
+	Handshake:                  "", // Linter needs this
+	Status:                     "",
+}
 
 type MockFileService struct {
 	t *testing.T
@@ -31,45 +52,53 @@ func NewMockFileService(t *testing.T) services.FileService {
 	}
 }
 
-func (mfs *MockFileService) HandleTaskPackage(taskId, userId, submissionNumber int64) (services.TaskDirConfig, error) {
-	if _, err := os.Stat(mockTmpDir); os.IsNotExist(err) {
-		return services.TaskDirConfig{}, fmt.Errorf("temporary directory does not exist: %s", mockTmpDir)
+func (mfs *MockFileService) HandleTaskPackage(taskID, userID, submissionNumber int64) (*services.TaskDirConfig, error) {
+	if _, err := os.Stat(MockTmpDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("temporary directory does not exist: %s", MockTmpDir)
 	}
 
-	dirName := fmt.Sprintf("Task_%d_%d_%d", taskId, userId, submissionNumber)
-	dirPath := filepath.Join(mockTmpDir, dirName)
+	dirName := fmt.Sprintf("Task_%d_%d_%d", taskID, userID, submissionNumber)
+	dirPath := filepath.Join(MockTmpDir, dirName)
 	err := os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {
-		return services.TaskDirConfig{}, fmt.Errorf("failed to create temporary directory: %w", err)
+		return nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
 	// Cleanup on failure
 	defer func() {
 		if err != nil {
-			os.RemoveAll(dirPath)
+			err = os.RemoveAll(dirPath)
+			if err != nil {
+				mfs.t.Errorf("failed to remove temporary directory: %s", err)
+			}
 		}
 	}()
 
 	if _, err := os.Stat(mockTaskFilesDir); os.IsNotExist(err) {
-		return services.TaskDirConfig{}, fmt.Errorf("task files directory does not exist: %s", mockTaskFilesDir)
+		return nil, fmt.Errorf("task files directory does not exist: %s", mockTaskFilesDir)
 	}
 
 	if err := copyDir(mockTaskFilesDir, dirPath); err != nil {
-		return services.TaskDirConfig{}, fmt.Errorf("failed to copy task files: %w", err)
+		return nil, fmt.Errorf("failed to copy task files: %w", err)
 	}
 
-	userSolution := filepath.Join(mockUserSolutionDir, strconv.FormatInt(submissionNumber, 10)+".cpp")
-	destSolution := filepath.Join(dirPath, "solution.cpp")
+	solutionFile, ok := testTypeSolutionMap[TestType(submissionNumber)]
+	if !ok {
+		return nil, fmt.Errorf("invalid submission number: %d", submissionNumber)
+	}
+	userSolution := filepath.Join(mockUserSolutionDir, solutionFile)
+	solutionName := "solution" + filepath.Ext(userSolution)
+	destSolution := filepath.Join(dirPath, solutionName)
 
 	if _, err := os.Stat(userSolution); os.IsNotExist(err) {
-		return services.TaskDirConfig{}, fmt.Errorf("user solution file does not exist: %s", userSolution)
+		return nil, fmt.Errorf("user solution file does not exist: %s", userSolution)
 	}
 
 	if err := utils.CopyFile(userSolution, destSolution); err != nil {
-		return services.TaskDirConfig{}, fmt.Errorf("failed to copy user solution file: %w", err)
+		return nil, fmt.Errorf("failed to copy user solution file: %w", err)
 	}
 
-	return services.TaskDirConfig{
+	return &services.TaskDirConfig{
 		TaskFilesDirPath:    dirPath,
 		UserSolutionDirPath: destSolution,
 	}, nil
@@ -102,10 +131,10 @@ func copyDir(src string, dst string) error {
 	})
 }
 
-func (mfs *MockFileService) UnconpressPackage(zipFilePath string) (services.TaskDirConfig, error) {
-	return services.TaskDirConfig{}, errors.New("UncompressPackage not implemented")
+func (mfs *MockFileService) UnconpressPackage(_ string) (*services.TaskDirConfig, error) {
+	return nil, errors.New("UncompressPackage not implemented")
 }
 
-func (mfs *MockFileService) StoreSolutionResult(solutionResult solution.SolutionResult, taskFilesDirPath string, userId, taskId, submissionNumber int64) error {
+func (mfs *MockFileService) StoreSolutionResult(_ solution.Result, _ string, _, _, _ int64) error {
 	return nil
 }
