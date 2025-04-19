@@ -19,7 +19,7 @@ jobs:
           go-version: stable
 
       - name: Install dependency tools
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest | go install golang.org/x/tools/cmd/goimports@latest
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest | go install golang.org/x/tools/cmd/goimports@latest
 
       - name: Set up pre-commit Cache
         uses: pre-commit/action@v3.0.1
