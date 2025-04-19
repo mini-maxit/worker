@@ -12,17 +12,11 @@ const (
 	SolutionMessageSuccess             = "solution executed successfully"
 	SolutionMessageRuntimeError        = "solution execution failed"
 	SolutionMessageInvalidLanguageType = "invalid language type supplied"
-	SolutionMessageTimeout             = "some test cases failed due to time limit exceeded"
-	SolutionMessageMemoryLimitExceeded = "some test cases failed due to memory limit exceeded"
-	SolutionMessageTestFailed          = "some test cases failed"
+	SolutionMessageTimeout             = "time limit exceeded"
+	SolutionMessageMemoryLimitExceeded = "memory limit exceeded"
+	SolutionMessageOutputDifference    = "output difference"
 	SolutionMessageLimitsMismatch      = "time and memory limits mismatch compared to the number of test cases"
 	SolutionMessageInternalError       = "internal error occurred"
-)
-
-// TestResult messages.
-const (
-	TestMessageTimeLimitExceeded   = "time limit exceeded"
-	TestMessageMemoryLimitExceeded = "memory limit exceeded"
 )
 
 const (

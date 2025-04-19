@@ -39,7 +39,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 	if err != nil {
 		r.logger.Errorf("Error initializing solutionExecutor [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{
-			StatusCode: s.InternalError,
+			StatusCode: s.InitializationError,
 			Message:    err.Error(),
 		}
 	}
@@ -121,7 +121,7 @@ func (r *runnerService) runAndEvaluateTestCases(
 	verifier := verifier.NewDefaultVerifier([]string{"-w"})
 	testCases := make([]s.TestResult, len(inputFiles))
 	solutionStatus := s.Success
-	solutionMessage := constants.SolutionMessageSuccess
+	solutionMessages := make([]string, len(inputFiles))
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
@@ -135,22 +135,42 @@ func (r *runnerService) runAndEvaluateTestCases(
 			UseChroot:     task.useChroot,
 		}
 
+		taskForEvaluation := &TaskForEvaluation{
+			taskFilesDirPath: task.taskFilesDirPath,
+			outputDirName:    task.outputDirName,
+			timeLimit:        task.timeLimits[i],
+			memoryLimit:      task.memoryLimits[i],
+		}
+
 		execResult := solutionExecutor.ExecuteCommand(filePath, messageID, commandConfig)
-		testCases[i], solutionStatus, solutionMessage = r.evaluateTestCase(
+		testCases[i], solutionStatus, solutionMessages[i] = r.evaluateTestCase(
 			execResult,
 			verifier,
-			task,
+			taskForEvaluation,
 			outputPath,
 			stderrPath,
 			(i + 1),
 		)
-		testCases[i].ExecutionTime = execResult.ExecTime
+	}
+
+	// Construct final message summarizing the results
+	var finalMessage string
+	if solutionStatus == s.Success {
+		finalMessage = constants.SolutionMessageSuccess
+	} else {
+		for i, message := range solutionMessages {
+			if i != 0 {
+				finalMessage += ", "
+			}
+			finalMessage += fmt.Sprintf("%d. %s", (i + 1), message)
+		}
+		finalMessage += "."
 	}
 
 	return s.Result{
 		OutputDir:   task.userOutputDirName,
 		StatusCode:  solutionStatus,
-		Message:     solutionMessage,
+		Message:     finalMessage,
 		TestResults: testCases,
 	}
 }
@@ -158,10 +178,10 @@ func (r *runnerService) runAndEvaluateTestCases(
 func (r *runnerService) evaluateTestCase(
 	execResult *executor.ExecutionResult,
 	verifier verifier.Verifier,
-	task *TaskForRunner,
+	task *TaskForEvaluation,
 	outputPath, stderrPath string,
 	testCase int,
-) (s.TestResult, s.Status, string) {
+) (s.TestResult, s.ResultStatus, string) {
 	solutionStatus := s.Success
 	solutionMessage := constants.SolutionMessageSuccess
 
@@ -172,43 +192,58 @@ func (r *runnerService) evaluateTestCase(
 		passed, err := verifier.CompareOutput(outputPath, expectedFilePath, stderrPath)
 		if err != nil {
 			return s.TestResult{
-				Passed:       false,
-				ErrorMessage: err.Error(),
-				Order:        testCase,
+				Passed:        false,
+				ExecutionTime: execResult.ExecTime,
+				StatusCode:    s.TestCaseStatus(s.InternalError),
+				ErrorMessage:  err.Error(),
+				Order:         testCase,
 			}, s.InternalError, constants.SolutionMessageInternalError
 		}
 
+		statusCode := s.TestCasePassed
+
 		if !passed {
 			solutionStatus = s.TestFailed
-			solutionMessage = constants.SolutionMessageTestFailed
+			solutionMessage = constants.SolutionMessageOutputDifference
+			statusCode = s.OutputDifference
 		}
 
 		return s.TestResult{
-			Passed:       passed,
-			ErrorMessage: "",
-			Order:        testCase,
+			Passed:        passed,
+			ExecutionTime: execResult.ExecTime,
+			StatusCode:    statusCode,
+			ErrorMessage:  "",
+			Order:         testCase,
 		}, solutionStatus, solutionMessage
 
 	case constants.ExitCodeTimeLimitExceeded:
+		message := fmt.Sprintf("Solution timed out after %d s", task.timeLimit)
 		return s.TestResult{
-			Passed:       false,
-			ErrorMessage: constants.TestMessageTimeLimitExceeded,
-			Order:        testCase,
-		}, s.TimeLimitExceeded, constants.SolutionMessageTimeout
+			Passed:        false,
+			ExecutionTime: execResult.ExecTime,
+			StatusCode:    s.TimeLimitExceeded,
+			ErrorMessage:  message,
+			Order:         testCase,
+		}, s.TestFailed, constants.SolutionMessageTimeout
 
 	case constants.ExitCodeMemoryLimitExceeded:
+		message := fmt.Sprintf("Solution exceeded memory limit of %d MB", task.memoryLimit)
 		return s.TestResult{
-			Passed:       false,
-			ErrorMessage: constants.TestMessageMemoryLimitExceeded,
-			Order:        testCase,
-		}, s.MemoryLimitExceeded, constants.SolutionMessageMemoryLimitExceeded
+			Passed:        false,
+			ExecutionTime: execResult.ExecTime,
+			StatusCode:    s.MemoryLimitExceeded,
+			ErrorMessage:  message,
+			Order:         testCase,
+		}, s.TestFailed, constants.SolutionMessageMemoryLimitExceeded
 
 	default:
 		return s.TestResult{
-			Passed:       false,
-			ErrorMessage: execResult.Message,
-			Order:        testCase,
-		}, s.RuntimeError, constants.SolutionMessageRuntimeError
+			Passed:        false,
+			ExecutionTime: execResult.ExecTime,
+			StatusCode:    s.RuntimeError,
+			ErrorMessage:  execResult.Message,
+			Order:         testCase,
+		}, s.TestFailed, constants.SolutionMessageRuntimeError
 	}
 }
 

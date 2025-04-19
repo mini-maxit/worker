@@ -33,7 +33,7 @@ type QueueMessage struct {
 type ResponseQueueMessage struct {
 	Type      string          `json:"type"`
 	MessageID string          `json:"message_id"`
-	Ok        bool            `json:"ok"`
+	HasResult bool            `json:"has_result"`
 	Payload   json.RawMessage `json:"payload"`
 }
 
@@ -129,7 +129,7 @@ func PublishErrorToResponseQueue(
 	queueMessage := ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
-		Ok:        false,
+		HasResult: false,
 		Payload:   payload,
 	}
 
@@ -161,7 +161,7 @@ func PublishSucessToResponseQueue(
 	queueMessage := ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
-		Ok:        true,
+		HasResult: true,
 		Payload:   payload,
 	}
 
