@@ -48,7 +48,7 @@ const (
 
 // Configuratioin constants.
 const (
-	DefailtRabbitmqHost     = "localhost"
+	DefaultRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
 	DefaultRabbitmqPassword = "guest"
 	DefaultRabbitmqPort     = "5672"

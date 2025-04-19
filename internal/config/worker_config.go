@@ -53,8 +53,8 @@ func rabbitmqConfig() string {
 
 	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
 	if rabbitmqHost == "" {
-		rabbitmqHost = constants.DefailtRabbitmqHost
-		logger.Warnf("RABBITMQ_HOST is not set, using default value %s", constants.DefailtRabbitmqHost)
+		rabbitmqHost = constants.DefaultRabbitmqHost
+		logger.Warnf("RABBITMQ_HOST is not set, using default value %s", constants.DefaultRabbitmqHost)
 	}
 	rabbitmqPortStr := os.Getenv("RABBITMQ_PORT")
 	if rabbitmqPortStr == "" {
