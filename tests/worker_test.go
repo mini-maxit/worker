@@ -522,7 +522,6 @@ func TestInvalidMessage(t *testing.T) {
 			t.Fatalf("Did not receive response in time")
 		}
 	})
-
 	t.Run("Invalid message type", func(t *testing.T) {
 		// Send a message with an invalid type
 		invalidMessage := map[string]interface{}{
