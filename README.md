@@ -4,9 +4,9 @@
 
 The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are stored using the file storage service and sent back to the backend service.
 
-The worker service can process two types of messages:
+The worker service can process three types of messages:
 1. **Task Message**: Contains details about the task to execute.
-2. **Handshake Message**: Used to syncronize the worker with the backend service. Returns supported languages and versions.
+2. **Handshake Message**: Used to synchronize the worker with the backend service. Returns supported languages and versions.
 3. **Status Message**: Used to check the status of the worker.
 
 ## Message Structure
@@ -18,7 +18,6 @@ The worker service can process two types of messages:
 ### Message Body
 
 The body of the message is a JSON object with the following structure:
-
 
 #### Task Message
 ```json
@@ -70,12 +69,11 @@ Basic structure of the response message:
 {
   "type": "task",
   "message_id": "adsa",
-  "ok": true, // Indicates if the message was processed successfully and produced a result
-  "payload": {
-    // Payload structure will vary based on the type of message and ok value
-  }
+  "ok": true,
+  "payload": {}
 }
 ```
+Based on the `ok` field, the response can be either a success or an error message.
 
 ### 1. Task Message
 
@@ -84,17 +82,17 @@ Basic Task Message structure
 {
   "type": "task",
   "message_id": "adsa",
-  "ok": true, // Indicates if the task was processed successfully
+  "ok": true,
   "payload": {
-    "status_code": 1, // Indicates the status of the task
-    "message": "solution executed successfully", // Message indicating the result of the task
-    "test_results": [ // Array of test results
+    "status_code": 1,
+    "message": "solution executed successfully",
+    "test_results": [
       {
-        "passed": true, // Indicates if the test passed
-        "status_code": 1, // Indicates the status of the test
-        "execution_time": 0.000000, // Execution time of the test
-        "error_message": "", // Error message for any runetime errors that occurred during execution of this test case
-        "order": 1 // Order of the test case
+        "passed": true,
+        "status_code": 1,
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 1
       }
     ]
   }
@@ -110,7 +108,7 @@ This message occurs when the worker receives a language type that is not support
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "status_code": 4, // InitializationError
+    "status_code": 4,
     "message": "invalid language type",
     "test_results": []
   }
@@ -118,7 +116,7 @@ This message occurs when the worker receives a language type that is not support
 ```
 
 **Invalid Language Version**
-This message occurs when the worer receives a language version that is not supported. The worker will return an error message indicating that the language version is invalid.
+This message occurs when the worker receives a language version that is not supported. The worker will return an error message indicating that the language version is invalid.
 
 ```json
 {
@@ -126,7 +124,7 @@ This message occurs when the worer receives a language version that is not suppo
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "status_code": 4, // InitializationError
+    "status_code": 4,
     "message": "invalid version supplied",
     "test_results": []
   }
@@ -141,9 +139,9 @@ This message occurs when the worker encounters an internal error while processin
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "status_code": 5, // InternalError
-    "message": "mkdir /some/path/to/directory: no such file or directory", // For example
-    "test_results": [] // Might not be empty depending on when the error occurred
+    "status_code": 5,
+    "message": "mkdir /some/path/to/directory: no such file or directory",
+    "test_results": []
   }
 }
 ```
@@ -161,14 +159,14 @@ This message occurs when any of the test cases fail. The worker will return an e
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "status_code": 2, // TestFailed
+    "status_code": 2,
     "message": "1. solution execution failed",
     "test_results": [
       {
         "passed": false,
-        "status_code": 5, // RuntimeError
+        "status_code": 5,
         "execution_time": 0.000000,
-        "error_message": "Segmentation fault", // For example
+        "error_message": "Segmentation fault",
         "order": 1
       }
     ]
@@ -190,8 +188,8 @@ This message occurs when the worker encounters a compilation error while executi
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "status_code": 5, // CompilationError
-    "message": "exec: \"g++\": executable file found in $PATH", // For example",
+    "status_code": 5,
+    "message": "exec: \"g++\": executable file found in $PATH",
     "test_results": []
   }
 }
@@ -205,12 +203,12 @@ This message occurs when the worker successfully executes the task. The worker w
   "message_id": "adsa",
   "ok": true,
   "payload": {
-    "status_code": 1, // Success
+    "status_code": 1,
     "message": "solution executed successfully",
     "test_results": [
       {
         "passed": true,
-        "status_code": 1, // TestCasePassed
+        "status_code": 1,
         "execution_time": 0.000000,
         "error_message": "",
         "order": 1
@@ -270,7 +268,6 @@ This message occurs when the worker successfully executes the task. The worker w
 }
 ```
 
-
 #### Handshake Message
 This message occurs when the worker receives a handshake message. The worker will return a message indicating the supported languages and versions.
 
@@ -328,9 +325,29 @@ In case of an error, the worker will return an error message structured as follo
 }
 ```
 
+## Status Codes
+
+### Solution Status Codes
+The `status_code` field in the response indicates the overall status of the solution execution. Below are the possible values:
+
+- **1 (Success)**: The solution executed successfully without any errors and all test casses passed.
+- **2 (TestFailed)**: Some test cases failed (e.g., output difference, timeout, memory limit exceeded, etc.).
+- **3 (CompilationError)**: The solution failed to compile.
+- **4 (InitializationError)**: The solution failed to initialize due to an invalid language, version, or other configuration issues.
+- **5 (InternalError)**: An internal error occurred during the execution (e.g., failure to create a directory).
+
+### Test Result Status Codes
+The `status_code` field in the `test_results` array indicates the status of individual test cases. Below are the possible values:
+
+- **1 (TestCasePassed)**: The test case passed successfully.
+- **2 (OutputDifference)**: The output of the solution differs from the expected output.
+- **3 (TimeLimitExceeded)**: The solution exceeded the allowed time limit for the test case.
+- **4 (MemoryLimitExceeded)**: The solution exceeded the allowed memory limit for the test case.
+- **5 (RuntimeError)**: A runtime error occurred during the execution of the test case (e.g., segmentation fault).
+
 ## Development
 
-We use pre-commit hooks together with popular linters to enchance our code. Some of them are not installed by default:
+We use pre-commit hooks together with popular linters to enhance our code. Some of them are not installed by default:
 
 - `go-imports` - golang.org/x/tools/cmd/goimports
 - `golangci-lint` - https://github.com/golangci/golangci-lint

@@ -3,7 +3,7 @@ package solution
 type ResultStatus int
 
 const (
-	// Means the solution executed successfully without any errors. Does not mean that all tests passed.
+	// Means the solution executed successfully without any errors and all test cases passed.
 	Success ResultStatus = iota + 1
 	// Means that some test casses failed (difference, timeout, memory limit exceeded etc.)
 	TestFailed

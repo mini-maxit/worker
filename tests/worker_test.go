@@ -30,7 +30,7 @@ type TaskResponsePayload struct {
 type ExpectedTaskResponse struct {
 	Type      string              `json:"type"`
 	MessageID string              `json:"message_id"`
-	Ok        bool                `json:"ok"` // Updated to match the new response format
+	Ok        bool                `json:"ok"`
 	Payload   TaskResponsePayload `json:"payload"`
 }
 
