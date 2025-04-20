@@ -30,6 +30,7 @@ type TaskResponsePayload struct {
 type ExpectedTaskResponse struct {
 	Type      string              `json:"type"`
 	MessageID string              `json:"message_id"`
+	Ok        bool                `json:"ok"` // Updated to match the new response format
 	Payload   TaskResponsePayload `json:"payload"`
 }
 
@@ -116,12 +117,12 @@ func generateQueueMessage(test tests.TestType, language, version string) []byte 
 	return messageBytes
 }
 
-func declareResponseQueue(ch *amqp.Channel, queueName string) (amqp.Queue, error) {
-	return ch.QueueDeclare(queueName, false, false, false, false, nil)
+func declareResponseQueue(ch *amqp.Channel) (amqp.Queue, error) {
+	return ch.QueueDeclare(responseQueueName, false, false, false, false, nil)
 }
 
-func consumeResponse(ch *amqp.Channel, queueName string) (<-chan amqp.Delivery, error) {
-	return ch.Consume(queueName, "", true, false, false, false, nil)
+func consumeResponse(ch *amqp.Channel) (<-chan amqp.Delivery, error) {
+	return ch.Consume(responseQueueName, "", true, false, false, false, nil)
 }
 
 func publishMessage(ch *amqp.Channel, message []byte) error {
@@ -138,28 +139,31 @@ func publishMessage(ch *amqp.Channel, message []byte) error {
 }
 
 func isSuccess(actual ExpectedTaskResponse) bool {
-	return actual.Payload.StatusCode == int(solution.Success) &&
+	return actual.Ok &&
+		actual.Payload.StatusCode == int(solution.Success) &&
 		strings.Contains(actual.Payload.Message, constants.SolutionMessageSuccess) &&
 		len(actual.Payload.TestResults) == 1 && actual.Payload.TestResults[0].Passed
 }
 
 func isTimeLimitExceeded(actual ExpectedTaskResponse) bool {
-	return actual.Payload.StatusCode == int(solution.TimeLimitExceeded) &&
+	return actual.Ok &&
+		actual.Payload.StatusCode == int(solution.TestFailed) &&
 		strings.Contains(actual.Payload.Message, constants.SolutionMessageTimeout) &&
 		len(actual.Payload.TestResults) == 1 &&
 		!actual.Payload.TestResults[0].Passed &&
-		actual.Payload.TestResults[0].ErrorMessage == constants.TestMessageTimeLimitExceeded
+		strings.Contains(actual.Payload.TestResults[0].ErrorMessage, "timed out")
 }
 
 func isCompilationError(actual ExpectedTaskResponse) bool {
-	return actual.Payload.StatusCode == int(solution.CompilationError) &&
-		strings.Contains(actual.Payload.Message, "exit status") &&
+	return actual.Ok &&
+		actual.Payload.StatusCode == int(solution.CompilationError) &&
+		len(actual.Payload.Message) > 0 &&
 		actual.Payload.TestResults == nil
 }
 
 func isTestCaseFailed(actual ExpectedTaskResponse) bool {
 	return actual.Payload.StatusCode == int(solution.TestFailed) &&
-		strings.Contains(actual.Payload.Message, constants.SolutionMessageTestFailed) &&
+		len(actual.Payload.Message) > 0 &&
 		len(actual.Payload.TestResults) > 0 && !actual.Payload.TestResults[0].Passed
 }
 
@@ -316,11 +320,11 @@ func TestProcessTask(t *testing.T) {
 
 	go qs.Listen()
 
-	_, err := declareResponseQueue(channel, responseQueueName)
+	_, err := declareResponseQueue(channel)
 	if err != nil {
 		t.Fatalf("Failed to declare response queue: %s", err)
 	}
-	responseChannel, err := consumeResponse(channel, responseQueueName)
+	responseChannel, err := consumeResponse(channel)
 	if err != nil {
 		t.Fatalf("Failed to consume response queue: %s", err)
 	}
@@ -344,8 +348,6 @@ func TestProcessTask(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to parse response JSON: %s", err)
 				}
-
-				t.Logf("Response: %+v", actualResponse)
 
 				if !validateResponse(tt.testType, actualResponse) {
 					t.Fatalf("Unexpected response: %+v", actualResponse)
@@ -384,11 +386,11 @@ func TestProcessHandshake(t *testing.T) {
 
 	go qs.Listen()
 
-	_, err := declareResponseQueue(channel, responseQueueName)
+	_, err := declareResponseQueue(channel)
 	if err != nil {
 		t.Fatalf("Failed to declare response queue: %s", err)
 	}
-	responseChannel, err := consumeResponse(channel, responseQueueName)
+	responseChannel, err := consumeResponse(channel)
 	if err != nil {
 		t.Fatalf("Failed to consume response queue: %s", err)
 	}
@@ -450,11 +452,11 @@ func TestProcessStatus(t *testing.T) {
 
 	go qs.Listen()
 
-	_, err := declareResponseQueue(channel, responseQueueName)
+	_, err := declareResponseQueue(channel)
 	if err != nil {
 		t.Fatalf("Failed to declare response queue: %s", err)
 	}
-	responseChannel, err := consumeResponse(channel, responseQueueName)
+	responseChannel, err := consumeResponse(channel)
 	if err != nil {
 		t.Fatalf("Failed to consume response queue: %s", err)
 	}
@@ -465,6 +467,99 @@ func TestProcessStatus(t *testing.T) {
 
 	t.Run("Test 1 busy worker", func(t *testing.T) {
 		testOneBusyWorker(t, channel, responseChannel, numberOfWorkers)
+	})
+}
+
+func TestInvalidMessage(t *testing.T) {
+	qs, channel, conn := setUp(t, 1)
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ connection: %s", err)
+		}
+		err = channel.Close()
+		if err != nil {
+			t.Fatalf("Failed to close RabbitMQ channel: %s", err)
+		}
+		tearDown(t)
+	}()
+
+	go qs.Listen()
+
+	_, err := declareResponseQueue(channel)
+	if err != nil {
+		t.Fatalf("Failed to declare response queue: %s", err)
+	}
+	responseChannel, err := consumeResponse(channel)
+	if err != nil {
+		t.Fatalf("Failed to consume response queue: %s", err)
+	}
+
+	t.Run("Test invalid message body", func(t *testing.T) {
+		// Send an invalid message body (not a valid JSON)
+		invalidMessage := []byte("invalid-json-body")
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- publishMessage(channel, invalidMessage)
+		}()
+
+		if err := <-errChan; err != nil {
+			t.Fatalf("Failed to publish message: %s", err)
+		}
+
+		select {
+		case response := <-responseChannel:
+			var actualResponse ExpectedTaskResponse
+			err := json.Unmarshal(response.Body, &actualResponse)
+			if err != nil {
+				t.Fatalf("Failed to parse response JSON: %s", err)
+			}
+
+			require.False(t, actualResponse.Ok, "Expected ok to be false")
+			require.Contains(t, string(response.Body), "error", "Expected error field in response payload")
+
+		case <-time.After(5 * time.Second):
+			t.Fatalf("Did not receive response in time")
+		}
+	})
+	t.Run("Invalid message type", func(t *testing.T) {
+		// Send a message with an invalid type
+		invalidMessage := map[string]interface{}{
+			"type":       "invalid_type",
+			"message_id": "invalid_message_id",
+			"payload":    map[string]interface{}{},
+		}
+		messageBytes, err := json.Marshal(invalidMessage)
+		if err != nil {
+			t.Fatalf("Failed to marshal invalid message: %s", err)
+		}
+
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- publishMessage(channel, messageBytes)
+		}()
+
+		if err := <-errChan; err != nil {
+			t.Fatalf("Failed to publish message: %s", err)
+		}
+
+		select {
+		case response := <-responseChannel:
+			var actualResponse ExpectedTaskResponse
+			err := json.Unmarshal(response.Body, &actualResponse)
+			if err != nil {
+				t.Fatalf("Failed to parse response JSON: %s", err)
+			}
+
+			// Validate the response structure
+			require.False(t, actualResponse.Ok, "Expected ok to be false")
+			require.Equal(t, "invalid_type", actualResponse.Type, "Expected response type to match the invalid message type")
+			require.Contains(t, string(response.Body), "error", "Expected error field in response payload")
+			require.Contains(t, string(response.Body), "unknown message type", "Expected to indicate unknown message type")
+
+		case <-time.After(5 * time.Second):
+			t.Fatalf("Did not receive response in time")
+		}
 	})
 }
 

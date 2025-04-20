@@ -63,40 +63,217 @@ The body of the message is a JSON object with the following structure:
 4. **Response Sending**: The worker sends a response back to the specified `backend_response_queue`, indicating the success or failure of the task execution.
 
 ## Response Structure
+Below are the possible responses from the worker service to different types of messages.
 
-### Successful Response
-
-Upon successful execution of the task, the worker sends a message to the specified backend queue. The response will have the following structure:
-
-#### Task Message
+Basic structure of the response message:
 ```json
 {
   "type": "task",
   "message_id": "adsa",
-  "ok": true,
+  "ok": true, // Indicates if the message was processed successfully and produced a result
   "payload": {
-    "Success": true,
-    "StatusCode": 1,
-    "Message": "solution executed successfully",
-    "TestResults": [
+    // Payload structure will vary based on the type of message and ok value
+  }
+}
+```
+
+### 1. Task Message
+
+Basic Task Message structure
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true, // Indicates if the task was processed successfully
+  "payload": {
+    "status_code": 1, // Indicates the status of the task
+    "message": "solution executed successfully", // Message indicating the result of the task
+    "test_results": [ // Array of test results
       {
-        "Passed": false,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "Difference at line 1:\nOutput:   Hello, World!\nExpected: Hello World!\n\n",
-        "Order": 1
-      },
-      {
-        "Passed": true,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "",
-        "Order": 2
+        "passed": true, // Indicates if the test passed
+        "status_code": 1, // Indicates the status of the test
+        "execution_time": 0.000000, // Execution time of the test
+        "error_message": "", // Error message for any runetime errors that occurred during execution of this test case
+        "order": 1 // Order of the test case
       }
     ]
   }
 }
 ```
 
+**Invalid Language Type**
+This message occurs when the worker receives a language type that is not supported. The worker will return an error message indicating that the language type is invalid.
+
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 4, // InitializationError
+    "message": "invalid language type",
+    "test_results": []
+  }
+}
+```
+
+**Invalid Language Version**
+This message occurs when the worer receives a language version that is not supported. The worker will return an error message indicating that the language version is invalid.
+
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 4, // InitializationError
+    "message": "invalid version supplied",
+    "test_results": []
+  }
+}
+```
+
+**Internal Error**
+This message occurs when the worker encounters an internal error while processing the task. The worker will return an error message indicating that an internal error occurred. For example when creating user output directory fails.
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 5, // InternalError
+    "message": "mkdir /some/path/to/directory: no such file or directory", // For example
+    "test_results": [] // Might not be empty depending on when the error occurred
+  }
+}
+```
+
+**Test Failed**
+This message occurs when any of the test cases fail. The worker will return an error message summarizing the test case failures. The worker will also return the test results for each test case. Possible failing test case statuses are:
+- `OutputDifferent`, StatusCode 2
+- `TimeLimitExceeded`, StatusCode 3
+- `MemoryLimitExceeded`, StatusCode 4
+- `RuntimeError`, StatusCode 5
+
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 2, // TestFailed
+    "message": "1. solution execution failed",
+    "test_results": [
+      {
+        "passed": false,
+        "status_code": 5, // RuntimeError
+        "execution_time": 0.000000,
+        "error_message": "Segmentation fault", // For example
+        "order": 1
+      }
+    ]
+  }
+}
+```
+
+Error messages for test case failures are as follows:
+- **Output Different** error message will be empty.
+- **Time Limit Exceeded** error message: "Solution timed out after x s"
+- **Memory Limit Exceeded** error message: "Solution exceeded memory limit of x MB"
+- **Runtime Error** error message: "Segmentation fault" for example
+
+**Compilation Error**
+This message occurs when the worker encounters a compilation error while executing the task. The worker will return an error message indicating that a compilation error occurred.
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 5, // CompilationError
+    "message": "exec: \"g++\": executable file found in $PATH", // For example",
+    "test_results": []
+  }
+}
+```
+
+**Success**
+This message occurs when the worker successfully executes the task. The worker will return a success message indicating that the task was executed and all test cases passed.
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 1, // Success
+    "message": "solution executed successfully",
+    "test_results": [
+      {
+        "passed": true,
+        "status_code": 1, // TestCasePassed
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 1
+      }
+    ]
+  }
+}
+```
+
+**Example message**
+```json
+{
+  "type": "task",
+  "message_id": "adsa",
+  "ok": true,
+  "payload": {
+    "status_code": 2,
+    "message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. runtime error, 5. output difference",
+    "test_results": [
+      {
+        "passed": true,
+        "status_code": 1,
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 1
+      },
+      {
+        "passed": false,
+        "status_code": 3,
+        "execution_time": 0.000000,
+        "error_message": "Solution timed out after x s",
+        "order": 2
+      },
+      {
+        "passed": false,
+        "status_code": 4,
+        "execution_time": 0.000000,
+        "error_message": "Solution exceeded memory limit of x MB",
+        "order": 3
+      },
+      {
+        "passed": false,
+        "status_code": 5,
+        "execution_time": 0.000000,
+        "error_message": "Segmentation fault",
+        "order": 4
+      },
+      {
+        "passed": false,
+        "status_code": 2,
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 5
+      }
+    ]
+  }
+}
+```
+
+
 #### Handshake Message
+This message occurs when the worker receives a handshake message. The worker will return a message indicating the supported languages and versions.
+
 ```json
 {
   "type": "handshake",
@@ -118,6 +295,8 @@ Upon successful execution of the task, the worker sends a message to the specifi
 ```
 
 #### Status Message
+This message occurs when the worker receives a status message. The worker will return a message indicating the status of the worker.
+
 ```json
 {
   "type": "status",
@@ -127,8 +306,8 @@ Upon successful execution of the task, the worker sends a message to the specifi
     "busy_workers": 1,
     "total_workers": 2,
     "worker_status": {
-      0: "idle",
-      1: "busy Processing message 1",
+      "0": "idle",
+      "1": "busy Processing message 1",
     }
   }
 }
