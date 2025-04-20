@@ -120,7 +120,7 @@ func (r *runnerService) runAndEvaluateTestCases(
 
 	verifier := verifier.NewDefaultVerifier([]string{"-w"})
 	testCases := make([]s.TestResult, len(inputFiles))
-	solutionStatus := s.Success
+	solutionStatuses := make([]s.ResultStatus, len(inputFiles))
 	solutionMessages := make([]string, len(inputFiles))
 	for i, inputPath := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
@@ -143,7 +143,7 @@ func (r *runnerService) runAndEvaluateTestCases(
 		}
 
 		execResult := solutionExecutor.ExecuteCommand(filePath, messageID, commandConfig)
-		testCases[i], solutionStatus, solutionMessages[i] = r.evaluateTestCase(
+		testCases[i], solutionStatuses[i], solutionMessages[i] = r.evaluateTestCase(
 			execResult,
 			verifier,
 			taskForEvaluation,
@@ -155,6 +155,14 @@ func (r *runnerService) runAndEvaluateTestCases(
 
 	// Construct final message summarizing the results
 	var finalMessage string
+	solutionStatus := s.Success
+	for _, status := range solutionStatuses {
+		if status != s.Success {
+			solutionStatus = s.TestFailed
+			break
+		}
+	}
+
 	if solutionStatus == s.Success {
 		finalMessage = constants.SolutionMessageSuccess
 	} else {

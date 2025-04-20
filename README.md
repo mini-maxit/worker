@@ -70,9 +70,9 @@ Basic structure of the response message:
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true, // Indicates if the message was processed successfully and produced a result
+  "ok": true, // Indicates if the message was processed successfully and produced a result
   "payload": {
-    // Payload structure will vary based on the type of message and has_result value
+    // Payload structure will vary based on the type of message and ok value
   }
 }
 ```
@@ -84,17 +84,17 @@ Basic Task Message structure
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true, // Indicates if the task was processed successfully
+  "ok": true, // Indicates if the task was processed successfully
   "payload": {
-    "StatusCode": 1, // Indicates the status of the task
-    "Message": "solution executed successfully", // Message indicating the result of the task
-    "TestResults": [ // Array of test results
+    "status_code": 1, // Indicates the status of the task
+    "message": "solution executed successfully", // Message indicating the result of the task
+    "test_results": [ // Array of test results
       {
-        "Passed": true, // Indicates if the test passed
-        "StatusCode": 1, // Indicates the status of the test
-        "ExecutionTime": 0.000000, // Execution time of the test
-        "ErrorMessage": "", // Error message for any runetime errors that occurred during execution of this test case
-        "Order": 1 // Order of the test case
+        "passed": true, // Indicates if the test passed
+        "status_code": 1, // Indicates the status of the test
+        "execution_time": 0.000000, // Execution time of the test
+        "error_message": "", // Error message for any runetime errors that occurred during execution of this test case
+        "order": 1 // Order of the test case
       }
     ]
   }
@@ -102,17 +102,17 @@ Basic Task Message structure
 ```
 
 **Invalid Language Type**
-This message occurs when the worer receives a language type that is not supported. The worker will return an error message indicating that the language type is invalid.
+This message occurs when the worker receives a language type that is not supported. The worker will return an error message indicating that the language type is invalid.
 
 ```json
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 4, // InitializationError
-    "Message": "invalid language type",
-    "TestResults": []
+    "status_code": 4, // InitializationError
+    "message": "invalid language type",
+    "test_results": []
   }
 }
 ```
@@ -124,11 +124,11 @@ This message occurs when the worer receives a language version that is not suppo
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 4, // InitializationError
-    "Message": "invalid version supplied",
-    "TestResults": []
+    "status_code": 4, // InitializationError
+    "message": "invalid version supplied",
+    "test_results": []
   }
 }
 ```
@@ -139,11 +139,11 @@ This message occurs when the worker encounters an internal error while processin
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 5, // InternalError
-    "Message": "mkdir /some/path/to/directory: no such file or directory", // For example
-    "TestResults": [] // Might not be empty depending on when the error occurred
+    "status_code": 5, // InternalError
+    "message": "mkdir /some/path/to/directory: no such file or directory", // For example
+    "test_results": [] // Might not be empty depending on when the error occurred
   }
 }
 ```
@@ -159,17 +159,17 @@ This message occurs when any of the test cases fail. The worker will return an e
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 2, // TestFailed
-    "Message": "1. solution execution failed",
-    "TestResults": [
+    "status_code": 2, // TestFailed
+    "message": "1. solution execution failed",
+    "test_results": [
       {
-        "Passed": false,
-        "StatusCode": 5, // RuntimeError
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "Segmentation fault", // For example
-        "Order": 1
+        "passed": false,
+        "status_code": 5, // RuntimeError
+        "execution_time": 0.000000,
+        "error_message": "Segmentation fault", // For example
+        "order": 1
       }
     ]
   }
@@ -188,11 +188,11 @@ This message occurs when the worker encounters a compilation error while executi
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 5, // CompilationError
-    "Message": "exec: \"g++\": executable file found in $PATH", // For example",
-    "TestResults": []
+    "status_code": 5, // CompilationError
+    "message": "exec: \"g++\": executable file found in $PATH", // For example",
+    "test_results": []
   }
 }
 ```
@@ -203,17 +203,17 @@ This message occurs when the worker successfully executes the task. The worker w
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 1, // Success
-    "Message": "solution executed successfully",
-    "TestResults": [
+    "status_code": 1, // Success
+    "message": "solution executed successfully",
+    "test_results": [
       {
-        "Passed": true,
-        "StatusCode": 1, // TestCasePassed
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "",
-        "Order": 1
+        "passed": true,
+        "status_code": 1, // TestCasePassed
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 1
       }
     ]
   }
@@ -225,45 +225,45 @@ This message occurs when the worker successfully executes the task. The worker w
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
-    "StatusCode": 2,
-    "Message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. runtime error, 5. output difference",
-    "TestResults": [
+    "status_code": 2,
+    "message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. runtime error, 5. output difference",
+    "test_results": [
       {
-        "Passed": true,
-        "StatusCode": 1,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "",
-        "Order": 1
+        "passed": true,
+        "status_code": 1,
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 1
       },
       {
-        "Passed": false,
-        "StatusCode": 3,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "Solution timed out after x s",
-        "Order": 2
+        "passed": false,
+        "status_code": 3,
+        "execution_time": 0.000000,
+        "error_message": "Solution timed out after x s",
+        "order": 2
       },
       {
-        "Passed": false,
-        "StatusCode": 4,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "Solution exceeded memory limit of x MB",
-        "Order": 3
+        "passed": false,
+        "status_code": 4,
+        "execution_time": 0.000000,
+        "error_message": "Solution exceeded memory limit of x MB",
+        "order": 3
       },
       {
-        "Passed": false,
-        "StatusCode": 5,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "Segmentation fault",
-        "Order": 4
+        "passed": false,
+        "status_code": 5,
+        "execution_time": 0.000000,
+        "error_message": "Segmentation fault",
+        "order": 4
       },
       {
-        "Passed": false,
-        "StatusCode": 2,
-        "ExecutionTime": 0.000000,
-        "ErrorMessage": "",
-        "Order": 5
+        "passed": false,
+        "status_code": 2,
+        "execution_time": 0.000000,
+        "error_message": "",
+        "order": 5
       }
     ]
   }
@@ -278,7 +278,7 @@ This message occurs when the worker receives a handshake message. The worker wil
 {
   "type": "handshake",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
     "languages": [
       {
@@ -301,7 +301,7 @@ This message occurs when the worker receives a status message. The worker will r
 {
   "type": "status",
   "message_id": "adsa",
-  "has_result": true,
+  "ok": true,
   "payload": {
     "busy_workers": 1,
     "total_workers": 2,
@@ -321,7 +321,7 @@ In case of an error, the worker will return an error message structured as follo
 {
   "type": "task",
   "message_id": "adsa",
-  "has_result": false,
+  "ok": false,
   "payload": {
     "error": "error message"
   }

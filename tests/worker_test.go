@@ -30,7 +30,7 @@ type TaskResponsePayload struct {
 type ExpectedTaskResponse struct {
 	Type      string              `json:"type"`
 	MessageID string              `json:"message_id"`
-	HasResult bool                `json:"has_result"` // Added to match the new response format
+	Ok        bool                `json:"ok"` // Updated to match the new response format
 	Payload   TaskResponsePayload `json:"payload"`
 }
 
@@ -139,14 +139,14 @@ func publishMessage(ch *amqp.Channel, message []byte) error {
 }
 
 func isSuccess(actual ExpectedTaskResponse) bool {
-	return actual.HasResult &&
+	return actual.Ok &&
 		actual.Payload.StatusCode == int(solution.Success) &&
 		strings.Contains(actual.Payload.Message, constants.SolutionMessageSuccess) &&
 		len(actual.Payload.TestResults) == 1 && actual.Payload.TestResults[0].Passed
 }
 
 func isTimeLimitExceeded(actual ExpectedTaskResponse) bool {
-	return actual.HasResult &&
+	return actual.Ok &&
 		actual.Payload.StatusCode == int(solution.TestFailed) &&
 		strings.Contains(actual.Payload.Message, constants.SolutionMessageTimeout) &&
 		len(actual.Payload.TestResults) == 1 &&
@@ -155,7 +155,7 @@ func isTimeLimitExceeded(actual ExpectedTaskResponse) bool {
 }
 
 func isCompilationError(actual ExpectedTaskResponse) bool {
-	return actual.HasResult &&
+	return actual.Ok &&
 		actual.Payload.StatusCode == int(solution.CompilationError) &&
 		len(actual.Payload.Message) > 0 &&
 		actual.Payload.TestResults == nil
@@ -515,7 +515,7 @@ func TestInvalidMessage(t *testing.T) {
 				t.Fatalf("Failed to parse response JSON: %s", err)
 			}
 
-			require.False(t, actualResponse.HasResult, "Expected has_result to be false")
+			require.False(t, actualResponse.Ok, "Expected ok to be false")
 			require.Contains(t, string(response.Body), "error", "Expected error field in response payload")
 
 		case <-time.After(5 * time.Second):
@@ -553,7 +553,7 @@ func TestInvalidMessage(t *testing.T) {
 			}
 
 			// Validate the response structure
-			require.False(t, actualResponse.HasResult, "Expected has_result to be false")
+			require.False(t, actualResponse.Ok, "Expected ok to be false")
 			require.Equal(t, "invalid_type", actualResponse.Type, "Expected response type to match the invalid message type")
 			require.Contains(t, string(response.Body), "error", "Expected error field in response payload")
 			require.Contains(t, string(response.Body), "unknown message type", "Expected to indicate unknown message type")

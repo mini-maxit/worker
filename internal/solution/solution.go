@@ -31,7 +31,7 @@ const (
 )
 
 type Result struct {
-	OutputDir   string       `json:"output_dir"`   // Directory where output files are stored
+	OutputDir   string       `json:"-"`            // Directory where output files are stored, excluded from JSON
 	StatusCode  ResultStatus `json:"status_code"`  // Status of the solution execution
 	Message     string       `json:"message"`      // any information message in case of error is error message
 	TestResults []TestResult `json:"test_results"` // test results in case of error or success
