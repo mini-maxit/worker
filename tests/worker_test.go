@@ -20,7 +20,6 @@ import (
 
 // Struct for validating response payload.
 type TaskResponsePayload struct {
-	OutputDir   string                `json:"output_dir"`
 	StatusCode  int                   `json:"status_code"`
 	Code        string                `json:"code"`
 	Message     string                `json:"message"`
@@ -63,6 +62,9 @@ type ExpecredStatusResponse struct {
 
 const responseQueueName = "reply_to"
 
+var timeLimits = []int{2}
+var memoryLimits = []int{512}
+
 func generateQueueMessage(test tests.TestType, language, version string) []byte {
 	var payload map[string]interface{}
 	var msgType string
@@ -82,8 +84,8 @@ func generateQueueMessage(test tests.TestType, language, version string) []byte 
 			"submission_number": tests.CPPFailedTimeLimitExceeded,
 			"language_type":     "CPP",
 			"language_version":  "20",
-			"time_limits":       []int{20},
-			"memory_limits":     []int{512},
+			"time_limits":       timeLimits,
+			"memory_limits":     memoryLimits,
 			"chroot_dir_path":   fmt.Sprintf("%s/Task_1_1_%d", tests.MockTmpDir, tests.CPPFailedTimeLimitExceeded),
 			"use_chroot":        "false",
 		}
@@ -151,7 +153,10 @@ func isTimeLimitExceeded(actual ExpectedTaskResponse) bool {
 		strings.Contains(actual.Payload.Message, constants.SolutionMessageTimeout) &&
 		len(actual.Payload.TestResults) == 1 &&
 		!actual.Payload.TestResults[0].Passed &&
-		strings.Contains(actual.Payload.TestResults[0].ErrorMessage, "timed out")
+		strings.Contains(
+			actual.Payload.TestResults[0].ErrorMessage,
+			fmt.Sprintf(constants.TestCaseMessageTimeOut, timeLimits[0]),
+		)
 }
 
 func isCompilationError(actual ExpectedTaskResponse) bool {
@@ -357,7 +362,7 @@ func TestProcessTask(t *testing.T) {
 				if tt.testType == tests.CPPCompilationError {
 					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d", tt.testType)
 				} else {
-					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d/%s", tt.testType, actualResponse.Payload.OutputDir)
+					outputDir = fmt.Sprintf("./mock_files/tmp/Task_1_1_%d/%s", tt.testType, constants.UserOutputDirName)
 				}
 
 				if !validateErrFileContent(tt.testType, outputDir) {

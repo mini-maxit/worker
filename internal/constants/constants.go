@@ -19,6 +19,12 @@ const (
 	SolutionMessageInternalError       = "internal error occurred"
 )
 
+// TestCaseResult messages.
+const (
+	TestCaseMessageTimeOut             = "Solution timed out after %d s"
+	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d MB"
+)
+
 const (
 	ExitCodeDifference = 1
 )

@@ -155,15 +155,15 @@ func (r *runnerService) runAndEvaluateTestCases(
 
 	// Construct final message summarizing the results
 	var finalMessage string
-	solutionStatus := s.Success
+	finalStatus := s.Success
 	for _, status := range solutionStatuses {
 		if status != s.Success {
-			solutionStatus = s.TestFailed
+			finalStatus = s.TestFailed
 			break
 		}
 	}
 
-	if solutionStatus == s.Success {
+	if finalStatus == s.Success {
 		finalMessage = constants.SolutionMessageSuccess
 	} else {
 		for i, message := range solutionMessages {
@@ -177,7 +177,7 @@ func (r *runnerService) runAndEvaluateTestCases(
 
 	return s.Result{
 		OutputDir:   task.userOutputDirName,
-		StatusCode:  solutionStatus,
+		StatusCode:  finalStatus,
 		Message:     finalMessage,
 		TestResults: testCases,
 	}
@@ -225,7 +225,10 @@ func (r *runnerService) evaluateTestCase(
 		}, solutionStatus, solutionMessage
 
 	case constants.ExitCodeTimeLimitExceeded:
-		message := fmt.Sprintf("Solution timed out after %d s", task.timeLimit)
+		message := fmt.Sprintf(
+			constants.TestCaseMessageTimeOut,
+			task.timeLimit,
+		)
 		return s.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
@@ -235,7 +238,10 @@ func (r *runnerService) evaluateTestCase(
 		}, s.TestFailed, constants.SolutionMessageTimeout
 
 	case constants.ExitCodeMemoryLimitExceeded:
-		message := fmt.Sprintf("Solution exceeded memory limit of %d MB", task.memoryLimit)
+		message := fmt.Sprintf(
+			constants.TestCaseMessageMemoryLimitExceeded,
+			task.memoryLimit,
+		)
 		return s.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
