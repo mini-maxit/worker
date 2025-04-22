@@ -36,6 +36,13 @@ type TaskForRunner struct {
 	useChroot           bool
 }
 
+type TaskForEvaluation struct {
+	taskFilesDirPath string
+	outputDirName    string
+	timeLimit        int
+	memoryLimit      int
+}
+
 func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task TaskQueueMessage) {
 	defer func() {
 		if r := recover(); r != nil {
