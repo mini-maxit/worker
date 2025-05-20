@@ -23,6 +23,7 @@ const (
 const (
 	TestCaseMessageTimeOut             = "Solution timed out after %d s"
 	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d MB"
+	TestCaseMessageRuntimeError        = "Solution encountered a runtime error"
 )
 
 const (
@@ -42,8 +43,8 @@ const (
 const (
 	ExitCodeSuccess             = 0
 	ExitCodeInternalError       = 1
-	ExitCodeTimeLimitExceeded   = 124
-	ExitCodeMemoryLimitExceeded = 137
+	ExitCodeTimeLimitExceeded   = 143
+	ExitCodeMemoryLimitExceeded = 139
 )
 
 // Configuratioin constants.
@@ -60,6 +61,8 @@ const (
 	DefaultWorkerQueueName  = "worker_queue"
 	DefaultMaxWorkersStr    = "10"
 	UserOutputDirName       = "user-output"
+	RuntimeImagePrefix      = "runtime"
+	ExecResultFileName      = "result.txt"
 )
 
 // Utility constants.

@@ -26,7 +26,7 @@ The body of the message is a JSON object with the following structure:
 "message_id": "adsa",
 "payload":
 {
-  "task_id": 3,
+  "task_id": 1,
   "user_id": 1,
   "submission_number": 1,
   "language_type": "CPP",

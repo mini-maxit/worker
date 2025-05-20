@@ -276,7 +276,10 @@ func equalHandshskePayload(actualResponse []LanguageConfig, expectedPayload []La
 
 func setUp(t *testing.T, numberOfWorkers int) (services.QueueService, *amqp.Channel, *amqp.Connection) {
 	fs := tests.NewMockFileService(t)
-	rs := services.NewRunnerService()
+	rs, err := services.NewRunnerService()
+	if err != nil {
+		t.Fatalf("Failed to create runner service: %s", err)
+	}
 
 	config := config.NewConfig()
 	conn := rabbitmq.NewRabbitMqConnection(config)

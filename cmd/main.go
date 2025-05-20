@@ -31,7 +31,10 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
-	runnerService := services.NewRunnerService()
+	runnerService, err := services.NewRunnerService()
+	if err != nil {
+		logger.Fatalf("Failed to initialize runner service: %s", err.Error())
+	}
 	fileService := services.NewFilesService(config.FileStorageURL)
 	workerPool := services.NewWorkerPool(
 		workerChannel,
