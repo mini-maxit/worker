@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
 )
 
@@ -20,6 +21,16 @@ func (lt LanguageType) String() string {
 		}
 	}
 	return ""
+}
+
+func (lt LanguageType) GetDockerImage(version string) (string, error) {
+	switch lt {
+	case CPP:
+		image := constants.RuntimeImagePrefix + ":cpp" // no need for version
+		return image, nil
+	default:
+		return "", errors.ErrInvalidLanguageType
+	}
 }
 
 var LanguageTypeMap = map[string]LanguageType{

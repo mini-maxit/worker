@@ -163,10 +163,11 @@ func (r *runnerService) prepareAndValidateInputFiles(
 
 // Helper: runs the solution in Docker.
 func (r *runnerService) runSolutionInDocker(task *TaskForRunner, filePath, messageID string) error {
-	dockerImage := fmt.Sprintf("%s:%s-%s",
-		constants.RuntimeImagePrefix,
-		strings.ToLower(task.languageType.String()),
-		task.languageVersion)
+	dockerImage, err := task.languageType.GetDockerImage(task.languageVersion)
+	if err != nil {
+		r.logger.Errorf("Error getting Docker image [MsgID: %s]: %s", messageID, err.Error())
+		return err
+	}
 
 	r.logger.Infof("Running solution in Docker image %s [MsgID: %s]", dockerImage, messageID)
 	return r.executor.ExecuteCommand(filePath, messageID, executor.CommandConfig{
