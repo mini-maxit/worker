@@ -45,7 +45,7 @@ func (e *CppCompiler) Compile(sourceFilePath, dir, messageID string) (string, er
 			return "", err
 		}
 
-		e.logger.Infof("Writing error to sdterr file [MsgID: %s]", messageID)
+		e.logger.Infof("Writing error to stderr file [MsgID: %s]", messageID)
 		_, err = file.Write(stderr.Bytes())
 		if err != nil {
 			e.logger.Errorf("Error writing to file. %s [MsgID: %s]", err.Error(), messageID)
