@@ -64,7 +64,7 @@ func (e *CppCompiler) Compile(sourceFilePath, dir, messageID string) (string, er
 	return outFilePath, nil
 }
 
-func NewCppExecutor(version, messageID string) (*CppCompiler, error) {
+func NewCppCompiler(version, messageID string) (*CppCompiler, error) {
 	logger := logger.NewNamedLogger("cpp-executor")
 	versionFlag, err := languages.GetVersionFlag(languages.CPP, version)
 	if err != nil {

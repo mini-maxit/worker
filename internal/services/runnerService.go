@@ -62,7 +62,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 		}
 	}
 
-	r.logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
+	r.logger.Infof("Created user output directory [MsgID: %s]", messageID)
 
 	filePath, err := r.prepareSolutionFilePath(task, solutionCompiler, messageID)
 	if err != nil {
@@ -333,7 +333,7 @@ func initializeSolutionCompiler(
 ) (compiler.Compiler, error) {
 	switch languageType {
 	case languages.CPP:
-		return compiler.NewCppExecutor(languageVersion, messageID)
+		return compiler.NewCppCompiler(languageVersion, messageID)
 	default:
 		return nil, errors.ErrInvalidLanguageType
 	}
