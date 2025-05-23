@@ -237,7 +237,7 @@ func fileContains(dir, filename, content string) bool {
 	return strings.Contains(string(file), content)
 }
 
-func equalHandshskePayload(actualResponse []LanguageConfig, expectedPayload []LanguageConfig) bool {
+func equalHandshakePayload(actualResponse []LanguageConfig, expectedPayload []LanguageConfig) bool {
 	if len(actualResponse) != len(expectedPayload) {
 		return false
 	}
@@ -276,7 +276,10 @@ func equalHandshskePayload(actualResponse []LanguageConfig, expectedPayload []La
 
 func setUp(t *testing.T, numberOfWorkers int) (services.QueueService, *amqp.Channel, *amqp.Connection) {
 	fs := tests.NewMockFileService(t)
-	rs := services.NewRunnerService()
+	rs, err := services.NewRunnerService()
+	if err != nil {
+		t.Fatalf("Failed to create runner service: %s", err)
+	}
 
 	config := config.NewConfig()
 	conn := rabbitmq.NewRabbitMqConnection(config)
@@ -430,7 +433,7 @@ func TestProcessHandshake(t *testing.T) {
 				},
 			}
 
-			if !equalHandshskePayload(actualResponse.Payload.Languages, expectedPayload) {
+			if !equalHandshakePayload(actualResponse.Payload.Languages, expectedPayload) {
 				t.Fatalf("Unexpected response payload: %+v", actualResponse.Payload.Languages)
 			}
 

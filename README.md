@@ -26,7 +26,7 @@ The body of the message is a JSON object with the following structure:
 "message_id": "adsa",
 "payload":
 {
-  "task_id": 3,
+  "task_id": 1,
   "user_id": 1,
   "submission_number": 1,
   "language_type": "CPP",
@@ -330,7 +330,7 @@ In case of an error, the worker will return an error message structured as follo
 ### Solution Status Codes
 The `status_code` field in the response indicates the overall status of the solution execution. Below are the possible values:
 
-- **1 (Success)**: The solution executed successfully without any errors and all test casses passed.
+- **1 (Success)**: The solution executed successfully without any errors and all test cases passed.
 - **2 (TestFailed)**: Some test cases failed (e.g., output difference, timeout, memory limit exceeded, etc.).
 - **3 (CompilationError)**: The solution failed to compile.
 - **4 (InitializationError)**: The solution failed to initialize due to an invalid language, version, or other configuration issues.
