@@ -363,16 +363,18 @@ func (r *runnerService) parseInputFiles(inputDir string) ([]string, error) {
 func (r *runnerService) setupOutputErrorFiles(taskDirPath, outputDirName string, numberOfFiles int) error {
 	for i := 1; i <= numberOfFiles; i++ {
 		outputFilePath := fmt.Sprintf("%s/%s/%d.out", taskDirPath, outputDirName, i)
-		_, err := os.Create(outputFilePath)
+		outputFile, err := os.Create(outputFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
+		outputFile.Close()
 
 		errorFilePath := fmt.Sprintf("%s/%s/%d.err", taskDirPath, outputDirName, i)
-		_, err = os.Create(errorFilePath)
+		errorFile, err := os.Create(errorFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to create error file: %w", err)
 		}
+		errorFile.Close()
 	}
 	return nil
 }
