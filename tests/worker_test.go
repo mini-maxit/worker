@@ -237,7 +237,7 @@ func fileContains(dir, filename, content string) bool {
 	return strings.Contains(string(file), content)
 }
 
-func equalHandshskePayload(actualResponse []LanguageConfig, expectedPayload []LanguageConfig) bool {
+func equalHandshakePayload(actualResponse []LanguageConfig, expectedPayload []LanguageConfig) bool {
 	if len(actualResponse) != len(expectedPayload) {
 		return false
 	}
@@ -433,7 +433,7 @@ func TestProcessHandshake(t *testing.T) {
 				},
 			}
 
-			if !equalHandshskePayload(actualResponse.Payload.Languages, expectedPayload) {
+			if !equalHandshakePayload(actualResponse.Payload.Languages, expectedPayload) {
 				t.Fatalf("Unexpected response payload: %+v", actualResponse.Payload.Languages)
 			}
 
