@@ -65,7 +65,7 @@ func (e *CppCompiler) Compile(sourceFilePath, dir, messageID string) (string, er
 }
 
 func NewCppCompiler(version, messageID string) (*CppCompiler, error) {
-	logger := logger.NewNamedLogger("cpp-executor")
+	logger := logger.NewNamedLogger("cpp-compiler")
 	versionFlag, err := languages.GetVersionFlag(languages.CPP, version)
 	if err != nil {
 		logger.Errorf("Failed to get version flag. %s [MsgID: %s]", err.Error(), messageID)
