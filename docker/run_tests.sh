@@ -5,7 +5,7 @@ shopt -s nullglob
 
 # sanity checks
 if [[ -z "$INPUT_DIR" ]]; then
-  echo "ERROR: INPUT_DIR and SOLUTION_PATH must be set" >&2
+  echo "ERROR: INPUT_DIR must be set" >&2
   exit 1
 fi
 

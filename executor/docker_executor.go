@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/logger"
 )
 
@@ -50,7 +52,6 @@ func (d *DockerExecutor) ExecuteCommand(
 ) error {
 	log := logger.NewNamedLogger("docker-executor")
 	ctx := context.Background()
-	start := time.Now()
 
 	// --- 1) Build the run_tests invocation ---
 	bin := filepath.Base(solutionPath) // e.g. "solution"
@@ -78,12 +79,15 @@ func (d *DockerExecutor) ExecuteCommand(
 	}
 
 	// --- 3) Container config: run from cfg.WorkspaceDir (under /tmp) ---
+	stopTimeout := int(2)
 	containerCfg := &container.Config{
-		Image:      cfg.DockerImage,
-		Cmd:        []string{"bash", "-lc", runCmd},
-		WorkingDir: cfg.WorkspaceDir,
-		Env:        env,
-		User:       "0:0",
+		Image:       cfg.DockerImage,
+		Cmd:         []string{"bash", "-lc", runCmd},
+		WorkingDir:  cfg.WorkspaceDir,
+		Env:         env,
+		User:        "0:0",
+		StopTimeout: &stopTimeout,
+		StopSignal:  "SIGKILL",
 	}
 
 	// --- 4) Host config: mount the named volume over /tmp ---
@@ -120,6 +124,10 @@ func (d *DockerExecutor) ExecuteCommand(
 	log.Infof("Started container %s [MsgID: %s]", resp.ID, messageID)
 
 	// --- 6) Wait for it to exit ---
+	timeout := time.Duration(constants.ContainerMaxRunTime) * time.Second
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 	var exitCode int
 	select {
@@ -128,10 +136,21 @@ func (d *DockerExecutor) ExecuteCommand(
 		return err
 	case status := <-statusCh:
 		exitCode = int(status.StatusCode)
+	case <-timer.C:
+		log.Errorf("Container runtime exceeded %d seconds, killing... [MsgID: %s]", constants.ContainerMaxRunTime, messageID)
+		err := d.cli.ContainerKill(ctx, resp.ID, "SIGKILL")
+		if err != nil {
+			log.Errorf("Failed to kill container: %s [MsgID: %s]", err, messageID)
+		}
+		return errors.ErrContainerTimeout
 	}
 
-	duration := time.Since(start).Seconds()
-	log.Infof("Finished (exit=%d, dur=%.3fs) [MsgID: %s]", exitCode, duration, messageID)
+	if exitCode == 1 {
+		log.Errorf("Internal error [MsgID: %s]", messageID)
+		return errors.ErrContainerFailed
+	}
+
+	log.Infof("Finished container %s [MsgID: %s]", resp.ID, messageID)
 	return nil
 }
 

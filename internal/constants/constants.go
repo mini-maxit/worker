@@ -47,7 +47,7 @@ const (
 	ExitCodeMemoryLimitExceeded = 139
 )
 
-// Configuratioin constants.
+// Configuration constants.
 const (
 	DefaultRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
@@ -63,6 +63,7 @@ const (
 	UserOutputDirName       = "user-output"
 	RuntimeImagePrefix      = "runtime"
 	ExecResultFileName      = "result.txt"
+	ContainerMaxRunTime     = 30
 )
 
 // Utility constants.

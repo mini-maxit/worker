@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +8,7 @@ import (
 	"github.com/mini-maxit/worker/compiler"
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
-	myErrors "github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	s "github.com/mini-maxit/worker/internal/solution"
@@ -117,9 +116,13 @@ func (r *runnerService) runAndEvaluateTestCases(
 	task *TaskForRunner,
 	filePath, messageID string,
 ) s.Result {
-	inputFiles, inputErrResult, err := r.prepareAndValidateInputFiles(task, messageID)
+	inputFiles, err := r.prepareAndValidateInputFiles(task, messageID)
 	if err != nil {
-		return *inputErrResult
+		return s.Result{
+			OutputDir:  task.userOutputDirName,
+			StatusCode: s.InternalError,
+			Message:    err.Error(),
+		}
 	}
 
 	err = r.runSolutionInDocker(task, filePath, messageID)
@@ -140,25 +143,17 @@ func (r *runnerService) runAndEvaluateTestCases(
 func (r *runnerService) prepareAndValidateInputFiles(
 	task *TaskForRunner,
 	messageID string,
-) ([]string, *s.Result, error) {
+) ([]string, error) {
 	inputPath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.inputDirName)
 	r.logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
 	inputFiles, err := r.parseInputFiles(inputPath)
 	if err != nil {
-		return nil, &s.Result{
-			OutputDir:  task.userOutputDirName,
-			StatusCode: s.InternalError,
-			Message:    err.Error(),
-		}, err
+		return nil, err
 	}
 	if len(inputFiles) != len(task.timeLimits) || len(inputFiles) != len(task.memoryLimits) {
-		return nil, &s.Result{
-			OutputDir:  task.userOutputDirName,
-			StatusCode: s.InternalError,
-			Message:    constants.SolutionMessageLimitsMismatch,
-		}, errors.New(constants.SolutionMessageLimitsMismatch)
+		return nil, errors.ErrInputOutputMismatch
 	}
-	return inputFiles, nil, nil
+	return inputFiles, nil
 }
 
 // Helper: runs the solution in Docker.
@@ -340,7 +335,7 @@ func initializeSolutionCompiler(
 	case languages.CPP:
 		return compiler.NewCppExecutor(languageVersion, messageID)
 	default:
-		return nil, myErrors.ErrInvalidLanguageType
+		return nil, errors.ErrInvalidLanguageType
 	}
 }
 
@@ -359,7 +354,7 @@ func (r *runnerService) parseInputFiles(inputDir string) ([]string, error) {
 		}
 	}
 	if len(result) == 0 {
-		return nil, myErrors.ErrEmptyInputDirectory
+		return nil, errors.ErrEmptyInputDirectory
 	}
 
 	return result, nil
