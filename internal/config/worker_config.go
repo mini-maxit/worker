@@ -16,6 +16,7 @@ type Config struct {
 	FileStorageURL  string
 	WorkerQueueName string
 	MaxWorkers      int
+	JobsDataVolume  string
 }
 
 func NewConfig() *Config {
@@ -39,12 +40,14 @@ func NewConfig() *Config {
 	rabbitmqURL := rabbitmqConfig()
 	fileStorageURL := fileStorageConfig()
 	workerQueueName, maxWorkers := workerConfig()
+	jobsDataVolume := dockerConfig()
 
 	return &Config{
 		RabbitMQURL:     rabbitmqURL,
 		FileStorageURL:  fileStorageURL,
 		WorkerQueueName: workerQueueName,
 		MaxWorkers:      int(maxWorkers),
+		JobsDataVolume:  jobsDataVolume,
 	}
 }
 
@@ -123,4 +126,16 @@ func workerConfig() (string, int64) {
 	}
 
 	return workerQueueName, maxWorkers
+}
+
+func dockerConfig() string {
+	logger := logger.NewNamedLogger("config")
+
+	jobsDataVolume := os.Getenv("JOBS_DATA_VOLUME")
+	if jobsDataVolume == "" {
+		jobsDataVolume = constants.DefaultJobsDataVolume
+		logger.Warnf("JOBS_DATA_VOLUME is not set, using default value %s", constants.DefaultJobsDataVolume)
+	}
+
+	return jobsDataVolume
 }

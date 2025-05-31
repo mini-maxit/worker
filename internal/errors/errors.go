@@ -17,4 +17,7 @@ var (
 	ErrUnknownMessageType           = errors.New("unknown message type")
 	ErrInvalidFilePath              = errors.New("invalid file path")
 	ErrEmptyInputDirectory          = errors.New("empty input directory")
+	ErrContainerTimeout             = errors.New("container runtime timed out")
+	ErrContainerFailed              = errors.New("container failed to execute")
+	ErrInputOutputMismatch          = errors.New("input output mismatch")
 )

@@ -32,8 +32,6 @@ type TaskForRunner struct {
 	userOutputDirName   string
 	timeLimits          []int
 	memoryLimits        []int
-	chrootDirPath       string
-	useChroot           bool
 }
 
 type TaskForEvaluation struct {
@@ -70,12 +68,6 @@ func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task T
 		}
 	}()
 
-	chrootPath := task.ChrootDirPath
-	if chrootPath == "" {
-		chrootPath = constants.BaseChrootDir
-	}
-	useChroot := task.UseChroot != "false"
-
 	taskForRunner := &TaskForRunner{
 		taskFilesDirPath:    dc.TaskFilesDirPath,
 		userSolutionDirPath: dc.UserSolutionDirPath,
@@ -87,8 +79,6 @@ func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task T
 		userOutputDirName:   constants.UserOutputDirName,
 		timeLimits:          task.TimeLimits,
 		memoryLimits:        task.MemoryLimits,
-		chrootDirPath:       chrootPath,
-		useChroot:           useChroot,
 	}
 
 	solutionResult := ws.runnerService.RunSolution(taskForRunner, messageID)
