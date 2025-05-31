@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/logger"
@@ -33,10 +34,11 @@ type ExecutionResult struct {
 }
 
 type DockerExecutor struct {
-	cli *client.Client
+	cli            *client.Client
+	jobsDataVolume string
 }
 
-func NewDockerExecutor() (*DockerExecutor, error) {
+func NewDockerExecutor(volume string) (*DockerExecutor, error) {
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -44,7 +46,7 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DockerExecutor{cli: cli}, nil
+	return &DockerExecutor{cli: cli, jobsDataVolume: volume}, nil
 }
 
 func (d *DockerExecutor) ExecuteCommand(
@@ -102,7 +104,7 @@ func (d *DockerExecutor) ExecuteCommand(
 		},
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
-			Source: "worker_jobs-data",
+			Source: d.jobsDataVolume,
 			Target: "/tmp",
 		}},
 		SecurityOpt:  []string{"no-new-privileges"},

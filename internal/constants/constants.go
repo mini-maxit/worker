@@ -44,7 +44,7 @@ const (
 	ExitCodeSuccess             = 0
 	ExitCodeInternalError       = 1
 	ExitCodeTimeLimitExceeded   = 143
-	ExitCodeMemoryLimitExceeded = 139
+	ExitCodeMemoryLimitExceeded = 134
 )
 
 // Configuration constants.
@@ -64,6 +64,7 @@ const (
 	RuntimeImagePrefix      = "runtime"
 	ExecResultFileName      = "result.txt"
 	ContainerMaxRunTime     = 30
+	DefaultJobsDataVolume   = "maxit_worker_jobs-data"
 )
 
 // Utility constants.

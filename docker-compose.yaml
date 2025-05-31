@@ -14,7 +14,7 @@ services:
       dockerfile: Dockerfile
     container_name: go_app
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - jobs-data:/tmp
     environment:
       - RABBITMQ_HOST=rabbitmq
@@ -24,6 +24,7 @@ services:
       - FILESTORAGE_HOST=file-storage
       - FILESTORAGE_PORT=8888
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - JOBS_DATA_VOLUME=worker_jobs-data
   file-storage:
     image: file-storage
     pull_policy: never

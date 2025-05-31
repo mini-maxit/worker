@@ -32,28 +32,26 @@ for idx in "${!inputs[@]}"; do
   out="${OUTPUT_DIR}/${testno}.out"
   err="${OUTPUT_DIR}/${testno}.err"
 
-  # Measure start time in nanoseconds
-  start_ns=$(date +%s%N)
-
   # run in subshell to isolate failure
   (
+    start_ns=$(date +%s%N)
+
     timeout --preserve-status "${tsec}s" bash -c \
       "ulimit -v ${mlimit_kb} && exec \"$1\" < \"${infile}\"" \
       > "${out}" 2> "${err}"
     code=$?
     if   (( code == 143 )); then
-      echo "Time Limit Exceeded"    >> "${err}"
-    elif (( code == 139 )); then
-      echo "Memory Limit Exceeded"  >> "${err}"
+      echo "Time limit exceeded after ${tsec}s"    >> "${err}"
+    elif (( code == 134 )); then
+      echo "Memory limit exceeded max ${mlimit_kb}KB"  >> "${err}"
     fi
+
+    end_ns=$(date +%s%N)
+    duration_ns=$((end_ns - start_ns))
+    duration_sec=$(awk "BEGIN {printf \"%.6f\", ${duration_ns}/1000000000}")
+
+    # Write exit code and duration to exec result file
+    echo "$code $duration_sec" >> "${OUTPUT_DIR}/${EXEC_RESULT_FILE}"
   )
 
-  code=$?
-  # Measure end time and calculate duration in seconds with microsecond precision
-  end_ns=$(date +%s%N)
-  duration_ns=$((end_ns - start_ns))
-  duration_sec=$(awk "BEGIN {printf \"%.6f\", ${duration_ns}/1000000000}")
-
-  # Write exit code and duration to exec result file
-  echo "$code $duration_sec" >> "${OUTPUT_DIR}/${EXEC_RESULT_FILE}"
 done

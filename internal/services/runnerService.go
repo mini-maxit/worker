@@ -26,16 +26,11 @@ type runnerService struct {
 	executor *executor.DockerExecutor
 }
 
-func NewRunnerService() (RunnerService, error) {
+func NewRunnerService(dockerExecutor *executor.DockerExecutor) (RunnerService, error) {
 	logger := logger.NewNamedLogger("runnerService")
-	executor, err := executor.NewDockerExecutor()
-	if err != nil {
-		logger.Errorf("Error creating Docker executor: %s", err.Error())
-		return nil, err
-	}
 	return &runnerService{
 		logger:   logger,
-		executor: executor,
+		executor: dockerExecutor,
 	}, nil
 }
 
