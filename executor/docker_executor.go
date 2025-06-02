@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
@@ -201,17 +202,22 @@ func (d *DockerExecutor) waitForContainer(
 // Helper function to prepare the Docker image by pulling it if not present.
 func (d *DockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg CommandConfig) error {
 	// Check if the image is already present
-	if _, err := d.cli.ImageInspect(ctx, cfg.DockerImage); err != nil {
-		if client.IsErrNotFound(err) {
-			d.logger.Infof("Image %s not found, pulling...", cfg.DockerImage)
-			// Pull the image
-			_, err := d.cli.ImagePull(ctx, cfg.DockerImage, image.PullOptions{})
-			if err != nil {
-				return err
-			}
-		}
+	_, err := d.cli.ImageInspect(ctx, cfg.DockerImage)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+
+	d.logger.Infof("Image %s not found, pulling...", cfg.DockerImage)
+	reader, err := d.cli.ImagePull(ctx, cfg.DockerImage, image.PullOptions{})
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	_, err = io.Copy(io.Discard, reader)
+	return err
 }
 
 // maxIntSlice returns the larger of the values in a, or min if all are smaller.
