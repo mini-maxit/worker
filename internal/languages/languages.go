@@ -26,7 +26,8 @@ func (lt LanguageType) String() string {
 func (lt LanguageType) GetDockerImage(version string) (string, error) {
 	switch lt {
 	case CPP:
-		image := constants.RuntimeImagePrefix + ":cpp" // no need for version
+		// C++ compiler does not require versioning, so a single runtime Docker image is used for all versions.
+		image := constants.RuntimeImagePrefix + ":cpp"
 		return image, nil
 	default:
 		return "", errors.ErrInvalidLanguageType

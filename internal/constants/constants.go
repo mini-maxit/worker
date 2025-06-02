@@ -61,7 +61,7 @@ const (
 	DefaultWorkerQueueName  = "worker_queue"
 	DefaultMaxWorkersStr    = "10"
 	UserOutputDirName       = "user-output"
-	RuntimeImagePrefix      = "runtime"
+	RuntimeImagePrefix      = "seber/runtime"
 	ExecResultFileName      = "result.txt"
 	ContainerMaxRunTime     = 30
 	DefaultJobsDataVolume   = "maxit_worker_jobs-data"
