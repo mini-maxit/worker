@@ -10,8 +10,10 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"go.uber.org/zap"
 
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
@@ -34,11 +36,13 @@ type ExecutionResult struct {
 }
 
 type DockerExecutor struct {
+	logger         *zap.SugaredLogger
 	cli            *client.Client
 	jobsDataVolume string
 }
 
 func NewDockerExecutor(volume string) (*DockerExecutor, error) {
+	logger := logger.NewNamedLogger("docker-executor")
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -46,20 +50,48 @@ func NewDockerExecutor(volume string) (*DockerExecutor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DockerExecutor{cli: cli, jobsDataVolume: volume}, nil
+	return &DockerExecutor{cli: cli, jobsDataVolume: volume, logger: logger}, nil
 }
 
 func (d *DockerExecutor) ExecuteCommand(
 	solutionPath, messageID string, cfg CommandConfig,
 ) error {
-	log := logger.NewNamedLogger("docker-executor")
 	ctx := context.Background()
 
-	// --- 1) Build the run_tests invocation ---
-	bin := filepath.Base(solutionPath) // e.g. "solution"
-	runCmd := fmt.Sprintf("run_tests.sh ./%s", bin)
+	// Build the run_tests invocation
+	runCmd := d.buildRunCommand(solutionPath)
 
-	// --- 2) Build the TIME_LIMITS and MEM_LIMITS env lines ---
+	// Build environment variables
+	env := d.buildEnvironmentVariables(cfg)
+
+	// Container configuration
+	containerCfg := d.buildContainerConfig(cfg, runCmd, env)
+
+	// Host configuration
+	hostCfg := d.buildHostConfig(cfg)
+
+	// Prepare the Docker image
+	if err := d.PrepareImageIfNotPresent(ctx, cfg); err != nil {
+		d.logger.Errorf("Failed to prepare image %s: %s [MsgID: %s]", cfg.DockerImage, err, messageID)
+		return err
+	}
+
+	// Create and start the container
+	resp, err := d.createAndStartContainer(ctx, containerCfg, hostCfg, messageID)
+	if err != nil {
+		return err
+	}
+
+	// Wait for the container to exit
+	return d.waitForContainer(ctx, resp.ID, messageID)
+}
+
+func (d *DockerExecutor) buildRunCommand(solutionPath string) string {
+	bin := filepath.Base(solutionPath) // e.g. "solution"
+	return fmt.Sprintf("run_tests.sh ./%s", bin)
+}
+
+func (d *DockerExecutor) buildEnvironmentVariables(cfg CommandConfig) []string {
 	const minMemKB = 128 * 1024 // 128 MB minimum per-test
 	timeEnv := make([]string, len(cfg.TimeLimits))
 	for i, s := range cfg.TimeLimits {
@@ -72,17 +104,18 @@ func (d *DockerExecutor) ExecuteCommand(
 		}
 		memEnv[i] = strconv.Itoa(kb)
 	}
-	env := []string{
+	return []string{
 		"TIME_LIMITS=" + strings.Join(timeEnv, " "),
 		"MEM_LIMITS=" + strings.Join(memEnv, " "),
 		"INPUT_DIR=" + cfg.InputDirName,
 		"OUTPUT_DIR=" + cfg.OutputDirName,
 		"EXEC_RESULT_FILE=" + cfg.ExecResultFileName,
 	}
+}
 
-	// --- 3) Container config: run from cfg.WorkspaceDir (under /tmp) ---
+func (d *DockerExecutor) buildContainerConfig(cfg CommandConfig, runCmd string, env []string) *container.Config {
 	stopTimeout := int(2)
-	containerCfg := &container.Config{
+	return &container.Config{
 		Image:       cfg.DockerImage,
 		Cmd:         []string{"bash", "-lc", runCmd},
 		WorkingDir:  cfg.WorkspaceDir,
@@ -91,9 +124,10 @@ func (d *DockerExecutor) ExecuteCommand(
 		StopTimeout: &stopTimeout,
 		StopSignal:  "SIGKILL",
 	}
+}
 
-	// --- 4) Host config: mount the named volume over /tmp ---
-	hostCfg := &container.HostConfig{
+func (d *DockerExecutor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
+	return &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
@@ -111,48 +145,72 @@ func (d *DockerExecutor) ExecuteCommand(
 		CgroupnsMode: container.CgroupnsModePrivate,
 		IpcMode:      container.IpcMode("private"),
 	}
+}
 
-	// --- 5) Create & Start ---
+func (d *DockerExecutor) createAndStartContainer(
+	ctx context.Context, containerCfg *container.Config, hostCfg *container.HostConfig, messageID string,
+) (*container.CreateResponse, error) {
 	name := fmt.Sprintf("submission-%s", messageID)
 	resp, err := d.cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, name)
 	if err != nil {
-		log.Errorf("Create failed: %s [MsgID: %s]", err, messageID)
-		return err
+		d.logger.Errorf("Create failed: %s [MsgID: %s]", err, messageID)
+		return nil, err
 	}
 	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		log.Errorf("Start failed: %s [MsgID: %s]", err, messageID)
-		return err
+		d.logger.Errorf("Start failed: %s [MsgID: %s]", err, messageID)
+		return nil, err
 	}
-	log.Infof("Started container %s [MsgID: %s]", resp.ID, messageID)
+	d.logger.Infof("Started container %s [MsgID: %s]", resp.ID, messageID)
+	return &resp, nil
+}
 
-	// --- 6) Wait for it to exit ---
+func (d *DockerExecutor) waitForContainer(
+	ctx context.Context, containerID, messageID string,
+) error {
 	timeout := time.Duration(constants.ContainerMaxRunTime) * time.Second
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	statusCh, errCh := d.cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 	var exitCode int
 	select {
 	case err := <-errCh:
-		log.Errorf("Wait error: %s [MsgID: %s]", err, messageID)
+		d.logger.Errorf("Wait error: %s [MsgID: %s]", err, messageID)
 		return err
 	case status := <-statusCh:
 		exitCode = int(status.StatusCode)
 	case <-timer.C:
-		log.Errorf("Container runtime exceeded %d seconds, killing... [MsgID: %s]", constants.ContainerMaxRunTime, messageID)
-		err := d.cli.ContainerKill(ctx, resp.ID, "SIGKILL")
+		d.logger.Errorf("Container runtime exceeded %d seconds, killing... [MsgID: %s]",
+			constants.ContainerMaxRunTime, messageID)
+		err := d.cli.ContainerKill(ctx, containerID, "SIGKILL")
 		if err != nil {
-			log.Errorf("Failed to kill container: %s [MsgID: %s]", err, messageID)
+			d.logger.Errorf("Failed to kill container: %s [MsgID: %s]", err, messageID)
 		}
 		return errors.ErrContainerTimeout
 	}
 
 	if exitCode == 1 {
-		log.Errorf("Internal error [MsgID: %s]", messageID)
+		d.logger.Errorf("Internal error [MsgID: %s]", messageID)
 		return errors.ErrContainerFailed
 	}
 
-	log.Infof("Finished container %s [MsgID: %s]", resp.ID, messageID)
+	d.logger.Infof("Finished container %s [MsgID: %s]", containerID, messageID)
+	return nil
+}
+
+// Helper function to prepare the Docker image by pulling it if not present.
+func (d *DockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg CommandConfig) error {
+	// Check if the image is already present
+	if _, err := d.cli.ImageInspect(ctx, cfg.DockerImage); err != nil {
+		if client.IsErrNotFound(err) {
+			d.logger.Infof("Image %s not found, pulling...", cfg.DockerImage)
+			// Pull the image
+			_, err := d.cli.ImagePull(ctx, cfg.DockerImage, image.PullOptions{})
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
