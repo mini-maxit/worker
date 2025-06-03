@@ -23,10 +23,10 @@ type RunnerService interface {
 
 type runnerService struct {
 	logger   *zap.SugaredLogger
-	executor *executor.DockerExecutor
+	executor executor.Executor
 }
 
-func NewRunnerService(dockerExecutor *executor.DockerExecutor) (RunnerService, error) {
+func NewRunnerService(dockerExecutor executor.Executor) (RunnerService, error) {
 	logger := logger.NewNamedLogger("runnerService")
 	return &runnerService{
 		logger:   logger,

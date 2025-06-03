@@ -21,28 +21,13 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 )
 
-type CommandConfig struct {
-	WorkspaceDir       string // host path to bind to /workspace
-	InputDirName       string
-	OutputDirName      string
-	ExecResultFileName string
-	DockerImage        string
-	TimeLimits         []int
-	MemoryLimits       []int
-}
-
-type ExecutionResult struct {
-	ExitCode int
-	ExecTime float64
-}
-
-type DockerExecutor struct {
+type dockerExecutor struct {
 	logger         *zap.SugaredLogger
 	cli            *client.Client
 	jobsDataVolume string
 }
 
-func NewDockerExecutor(volume string) (*DockerExecutor, error) {
+func NewDockerExecutor(volume string) (Executor, error) {
 	logger := logger.NewNamedLogger("docker-executor")
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -51,10 +36,10 @@ func NewDockerExecutor(volume string) (*DockerExecutor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DockerExecutor{cli: cli, jobsDataVolume: volume, logger: logger}, nil
+	return &dockerExecutor{cli: cli, jobsDataVolume: volume, logger: logger}, nil
 }
 
-func (d *DockerExecutor) ExecuteCommand(
+func (d *dockerExecutor) ExecuteCommand(
 	solutionPath, messageID string, cfg CommandConfig,
 ) error {
 	ctx := context.Background()
@@ -87,12 +72,12 @@ func (d *DockerExecutor) ExecuteCommand(
 	return d.waitForContainer(ctx, resp.ID, messageID)
 }
 
-func (d *DockerExecutor) buildRunCommand(solutionPath string) string {
+func (d *dockerExecutor) buildRunCommand(solutionPath string) string {
 	bin := filepath.Base(solutionPath) // e.g. "solution"
 	return fmt.Sprintf("run_tests.sh ./%s", bin)
 }
 
-func (d *DockerExecutor) buildEnvironmentVariables(cfg CommandConfig) []string {
+func (d *dockerExecutor) buildEnvironmentVariables(cfg CommandConfig) []string {
 	const minMemKB = 128 * 1024 // 128 MB minimum per-test
 	timeEnv := make([]string, len(cfg.TimeLimits))
 	for i, s := range cfg.TimeLimits {
@@ -114,7 +99,7 @@ func (d *DockerExecutor) buildEnvironmentVariables(cfg CommandConfig) []string {
 	}
 }
 
-func (d *DockerExecutor) buildContainerConfig(cfg CommandConfig, runCmd string, env []string) *container.Config {
+func (d *dockerExecutor) buildContainerConfig(cfg CommandConfig, runCmd string, env []string) *container.Config {
 	stopTimeout := int(2)
 	return &container.Config{
 		Image:       cfg.DockerImage,
@@ -127,7 +112,7 @@ func (d *DockerExecutor) buildContainerConfig(cfg CommandConfig, runCmd string, 
 	}
 }
 
-func (d *DockerExecutor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
+func (d *dockerExecutor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	return &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode("none"),
@@ -148,7 +133,7 @@ func (d *DockerExecutor) buildHostConfig(cfg CommandConfig) *container.HostConfi
 	}
 }
 
-func (d *DockerExecutor) createAndStartContainer(
+func (d *dockerExecutor) createAndStartContainer(
 	ctx context.Context, containerCfg *container.Config, hostCfg *container.HostConfig, messageID string,
 ) (*container.CreateResponse, error) {
 	name := fmt.Sprintf("submission-%s", messageID)
@@ -165,7 +150,7 @@ func (d *DockerExecutor) createAndStartContainer(
 	return &resp, nil
 }
 
-func (d *DockerExecutor) waitForContainer(
+func (d *dockerExecutor) waitForContainer(
 	ctx context.Context, containerID, messageID string,
 ) error {
 	timeout := time.Duration(constants.ContainerMaxRunTime) * time.Second
@@ -190,8 +175,8 @@ func (d *DockerExecutor) waitForContainer(
 		return errors.ErrContainerTimeout
 	}
 
-	if exitCode == 1 {
-		d.logger.Errorf("Internal error [MsgID: %s]", messageID)
+	if exitCode != 0 {
+		d.logger.Errorf("Container exited with non-zero code %d [MsgID: %s]", exitCode, messageID)
 		return errors.ErrContainerFailed
 	}
 
@@ -200,7 +185,7 @@ func (d *DockerExecutor) waitForContainer(
 }
 
 // Helper function to prepare the Docker image by pulling it if not present.
-func (d *DockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg CommandConfig) error {
+func (d *dockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg CommandConfig) error {
 	// Check if the image is already present
 	_, err := d.cli.ImageInspect(ctx, cfg.DockerImage)
 	if err == nil {
