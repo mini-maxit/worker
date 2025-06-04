@@ -7,18 +7,14 @@ import (
 	"github.com/mini-maxit/worker/internal/languages"
 	"github.com/mini-maxit/worker/internal/solution"
 	"github.com/mini-maxit/worker/utils"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
 
-type Worker struct {
-	id                  int
-	status              string
-	processingMessageID string
-	channel             *amqp.Channel
-	fileService         FileService
-	runnerService       RunnerService
-	logger              *zap.SugaredLogger
+type workerService struct {
+	queueService  QueueService
+	fileService   FileService
+	runnerService RunnerService
+	logger        *zap.SugaredLogger
 }
 
 type TaskForRunner struct {
@@ -43,7 +39,11 @@ type TaskForEvaluation struct {
 	memoryLimit      int
 }
 
-func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task TaskQueueMessage) {
+type WorkerService interface {
+	ProcessTask(responseQueueName string, messageID string, task TaskQueueMessage)
+}
+
+func (ws *workerService) ProcessTask(responseQueueName string, messageID string, task TaskQueueMessage) {
 	defer func() {
 		if r := recover(); r != nil {
 			ws.logger.Errorf("Worker panicked: %v", r)
@@ -56,8 +56,6 @@ func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task T
 	}()
 
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
-	ws.processingMessageID = messageID
-	defer func() { ws.processingMessageID = "" }()
 
 	dc, solutionFileName, langType, err := ws.prepareTaskEnvironment(task)
 	if err != nil {
@@ -100,7 +98,7 @@ func (ws *Worker) ProcessTask(responseQueueName string, messageID string, task T
 		responseQueueName)
 }
 
-func (ws *Worker) prepareTaskEnvironment(task TaskQueueMessage,
+func (ws *workerService) prepareTaskEnvironment(task TaskQueueMessage,
 ) (*TaskDirConfig, string, languages.LanguageType, error) {
 	dc, err := ws.fileService.HandleTaskPackage(task.TaskID, task.UserID, task.SubmissionNumber)
 	if err != nil {
@@ -120,15 +118,15 @@ func (ws *Worker) prepareTaskEnvironment(task TaskQueueMessage,
 	return dc, solutionFileName, langType, nil
 }
 
-func (ws *Worker) publishError(queue, messageID string, err error) {
+func (ws *workerService) publishError(queue, messageID string, err error) {
 	ws.logger.Errorf("Error: %s", err)
-	publishErr := PublishErrorToResponseQueue(ws.channel, queue, constants.QueueMessageTypeTask, messageID, err)
+	publishErr := ws.queueService.PublishErrorToQueue(queue, messageID, constants.QueueMessageTypeTask, err)
 	if publishErr != nil {
 		ws.logger.Errorf("Failed to publish error to response queue: %s", publishErr)
 	}
 }
 
-func (ws *Worker) storeAndPublishSolutionResult(
+func (ws *workerService) storeAndPublishSolutionResult(
 	solutionResult solution.Result,
 	dc TaskDirConfig,
 	task TaskQueueMessage,
@@ -158,8 +156,22 @@ func (ws *Worker) storeAndPublishSolutionResult(
 	}
 
 	ws.logger.Infof("Publishing solution result [MsgID: %s]", messageID)
-	err = PublishSucessToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, payload)
+	err = ws.queueService.PublishSuccessToQueue(responseQueueName, messageID, constants.QueueMessageTypeTask, payload)
 	if err != nil {
 		ws.publishError(responseQueueName, messageID, err)
+	}
+}
+
+func NewWorkerService(
+	fileService FileService,
+	runnerService RunnerService,
+	queueService QueueService,
+	logger *zap.SugaredLogger,
+) WorkerService {
+	return &workerService{
+		fileService:   fileService,
+		runnerService: runnerService,
+		logger:        logger,
+		queueService:  queueService,
 	}
 }

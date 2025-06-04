@@ -11,6 +11,13 @@ import (
 	"go.uber.org/zap"
 )
 
+type Worker struct {
+	id                  int
+	status              string
+	processingMessageID string
+	worker              WorkerService
+}
+
 type WorkerPool struct {
 	mu               sync.Mutex
 	busyWorkersCount int
@@ -27,16 +34,21 @@ func NewWorkerPool(
 	maxWorkers int,
 	fileService FileService,
 	runnerService RunnerService,
+	queueService QueueService,
 ) *WorkerPool {
 	workers := make(map[int]*Worker, maxWorkers)
 	for i := range maxWorkers {
+		workerService := NewWorkerService(
+			fileService,
+			runnerService,
+			queueService,
+			logger.NewNamedLogger(fmt.Sprintf("worker-%d", i)),
+		)
 		workers[i] = &Worker{
-			id:            i,
-			status:        constants.WorkerStatusIdle,
-			channel:       workerChannel,
-			fileService:   fileService,
-			runnerService: runnerService,
-			logger:        logger.NewNamedLogger(fmt.Sprintf("worker-%d", i)),
+			id:                  i,
+			status:              constants.WorkerStatusIdle,
+			processingMessageID: "",
+			worker:              workerService,
 		}
 	}
 
@@ -105,7 +117,7 @@ func (wp *WorkerPool) ProcessTask(responseQueueName, messageID string, task Task
 			}
 		}()
 
-		w.ProcessTask(responseQueueName, messageID, task)
+		w.worker.ProcessTask(responseQueueName, messageID, task)
 	}(worker)
 
 	return nil
