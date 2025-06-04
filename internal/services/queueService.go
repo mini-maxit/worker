@@ -9,7 +9,7 @@ import (
 )
 
 type QueueService interface {
-	DeclareQueue(queueName string) error
+	DeclareQueue(queueName string, queuePriority int) error
 	PublishErrorToQueue(responseQueueName, messageID, messageType string, err error) error
 	PublishSuccessToQueue(responseQueueName, messageID, messageType string, payload []byte) error
 	RequeueTaskWithPriority2(queueName string, queueMessage QueueMessage) error
@@ -29,10 +29,10 @@ func NewQueueService(channel *amqp.Channel) QueueService {
 	}
 }
 
-func (qs *queueService) DeclareQueue(queueName string) error {
+func (qs *queueService) DeclareQueue(queueName string, queuePriority int) error {
 	qs.logger.Infof("Declaring queue: %s", queueName)
 	args := make(amqp.Table)
-	args["x-max-priority"] = 3
+	args["x-max-priority"] = queuePriority
 	_, err := qs.channel.QueueDeclare(queueName, true, false, false, false, args)
 	if err != nil {
 		qs.logger.Panicf("Failed to declare queue %s: %s", queueName, err)

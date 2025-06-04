@@ -60,6 +60,7 @@ const (
 	DefaultWorkerQueueName  = "worker_queue"
 	DefaultMaxWorkersStr    = "10"
 	UserOutputDirName       = "user-output"
+	WorkerQueuePriority     = 3
 )
 
 // Utility constants.

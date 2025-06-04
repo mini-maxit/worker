@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/mini-maxit/worker/internal/config"
+	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/services"
 	"github.com/mini-maxit/worker/rabbitmq"
@@ -31,6 +32,7 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
+	queueService := services.NewQueueService(workerChannel)
 	runnerService := services.NewRunnerService()
 	fileService := services.NewFilesService(config.FileStorageURL)
 	workerPool := services.NewWorkerPool(
@@ -38,11 +40,22 @@ func main() {
 		config.WorkerQueueName,
 		config.MaxWorkers,
 		fileService,
-		runnerService)
+		runnerService,
+		queueService)
 
-	queueService := services.NewQueueService(workerChannel, config.WorkerQueueName, workerPool)
+	listenerService := services.NewListenerService(
+		workerChannel,
+		workerPool,
+		queueService,
+	)
+
+	// Declare the worker queue
+	err := queueService.DeclareQueue(config.WorkerQueueName, constants.WorkerQueuePriority)
+	if err != nil {
+		logger.Panic("Failed to declare worker queue", err)
+	}
 
 	logger.Info("Listening for messages")
 	// Start listening for messages
-	queueService.Listen()
+	listenerService.Listen(config.WorkerQueueName)
 }
