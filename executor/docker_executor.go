@@ -42,7 +42,9 @@ func NewDockerExecutor(volume string) (Executor, error) {
 func (d *dockerExecutor) ExecuteCommand(
 	solutionPath, messageID string, cfg CommandConfig,
 ) error {
-	ctx := context.Background()
+	// Create a context with a timeout to avoid indefinite execution
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(constants.ContainerMaxRunTime)*time.Second)
+	defer cancel()
 
 	// Build the run_tests invocation
 	runCmd := d.buildRunCommand(solutionPath)
