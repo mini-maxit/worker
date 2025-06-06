@@ -11,10 +11,10 @@ import (
 )
 
 type workerService struct {
-	queueService  QueueService
-	fileService   FileService
-	runnerService RunnerService
-	logger        *zap.SugaredLogger
+	messageService  MessageService
+	fileService     FileService
+	runnerService   RunnerService
+	logger          *zap.SugaredLogger
 }
 
 type TaskForRunner struct {
@@ -110,7 +110,7 @@ func (ws *workerService) prepareTaskEnvironment(task TaskQueueMessage,
 
 func (ws *workerService) publishError(queue, messageID string, err error) {
 	ws.logger.Errorf("Error: %s", err)
-	publishErr := ws.queueService.PublishErrorToQueue(queue, messageID, constants.QueueMessageTypeTask, err)
+	publishErr := ws.messageService.PublishErrorToQueue(queue, messageID, constants.QueueMessageTypeTask, err)
 	if publishErr != nil {
 		ws.logger.Errorf("Failed to publish error to response queue: %s", publishErr)
 	}
@@ -146,7 +146,7 @@ func (ws *workerService) storeAndPublishSolutionResult(
 	}
 
 	ws.logger.Infof("Publishing solution result [MsgID: %s]", messageID)
-	err = ws.queueService.PublishSuccessToQueue(responseQueueName, messageID, constants.QueueMessageTypeTask, payload)
+	err = ws.messageService.PublishSuccessToQueue(responseQueueName, messageID, constants.QueueMessageTypeTask, payload)
 	if err != nil {
 		ws.publishError(responseQueueName, messageID, err)
 	}
@@ -155,13 +155,13 @@ func (ws *workerService) storeAndPublishSolutionResult(
 func NewWorkerService(
 	fileService FileService,
 	runnerService RunnerService,
-	queueService QueueService,
+	messageService MessageService,
 	logger *zap.SugaredLogger,
 ) WorkerService {
 	return &workerService{
 		fileService:   fileService,
 		runnerService: runnerService,
 		logger:        logger,
-		queueService:  queueService,
+		messageService: messageService,
 	}
 }

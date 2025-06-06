@@ -34,14 +34,14 @@ func NewWorkerPool(
 	maxWorkers int,
 	fileService FileService,
 	runnerService RunnerService,
-	queueService QueueService,
+	messageService MessageService,
 ) *WorkerPool {
 	workers := make(map[int]*Worker, maxWorkers)
 	for i := range maxWorkers {
 		workerService := NewWorkerService(
 			fileService,
 			runnerService,
-			queueService,
+			messageService,
 			logger.NewNamedLogger(fmt.Sprintf("worker-%d", i)),
 		)
 		workers[i] = &Worker{

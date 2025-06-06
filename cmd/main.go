@@ -33,15 +33,14 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
-	queueService := services.NewQueueService(workerChannel)
+	messageService := services.NewMessageService(workerChannel)
+	testCaseService := services.NewTestCaseService()
 	dockerService, err := executor.NewDockerExecutor(config.JobsDataVolume)
 	if err != nil {
 		logger.Fatalf("Failed to initialize Docker service: %s", err.Error())
 	}
-	runnerService, err := services.NewRunnerService(dockerService)
-	if err != nil {
-		logger.Fatalf("Failed to initialize runner service: %s", err.Error())
-	}
+	runnerService := services.NewRunnerService(dockerService, testCaseService)
+
 	fileService := services.NewFilesService(config.FileStorageURL)
 	workerPool := services.NewWorkerPool(
 		workerChannel,
@@ -49,16 +48,16 @@ func main() {
 		config.MaxWorkers,
 		fileService,
 		runnerService,
-		queueService)
+		messageService)
 
 	listenerService := services.NewListenerService(
 		workerChannel,
 		workerPool,
-		queueService,
+		messageService,
 	)
 
 	// Declare the worker queue
-	err = queueService.DeclareQueue(config.WorkerQueueName, constants.WorkerQueuePriority)
+	err = messageService.DeclareQueue(config.WorkerQueueName, constants.WorkerQueuePriority)
 	if err != nil {
 		logger.Panic("Failed to declare worker queue", err)
 	}

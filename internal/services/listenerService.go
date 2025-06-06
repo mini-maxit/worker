@@ -20,7 +20,7 @@ type ListenerService interface {
 type listenerService struct {
 	channel      *amqp.Channel
 	workerPool   *WorkerPool
-	queueService QueueService
+	messageService MessageService
 	logger       *zap.SugaredLogger
 }
 
@@ -49,13 +49,13 @@ type TaskQueueMessage struct {
 	UseChroot        string `json:"use_chroot,omitempty"`      // Optional for test purposes
 }
 
-func NewListenerService(mainChannel *amqp.Channel, workerPool *WorkerPool, queueService QueueService) ListenerService {
+func NewListenerService(mainChannel *amqp.Channel, workerPool *WorkerPool, messageService MessageService) ListenerService {
 	logger := logger.NewNamedLogger("listenerService")
 
 	return &listenerService{
 		channel:      mainChannel,
 		workerPool:   workerPool,
-		queueService: queueService,
+		messageService: messageService,
 		logger:       logger,
 	}
 }
@@ -73,7 +73,7 @@ func (ls *listenerService) Listen(queueName string) {
 		err := json.Unmarshal(msg.Body, &queueMessage)
 		if err != nil {
 			ls.logger.Errorf("Failed to unmarshal message: %s", err)
-			err = ls.queueService.PublishErrorToQueue(msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
+			err = ls.messageService.PublishErrorToQueue(msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
 			if err != nil {
 				ls.logger.Errorf("Failed to publish error message: %s", err)
 			}
@@ -92,7 +92,7 @@ func (ls *listenerService) Listen(queueName string) {
 			ls.handleHandshakeMessage(queueMessage, msg.ReplyTo)
 		default:
 			ls.logger.Errorf("Unknown message type: %s", queueMessage.Type)
-			err = ls.queueService.PublishErrorToQueue(
+			err = ls.messageService.PublishErrorToQueue(
 				msg.ReplyTo,
 				queueMessage.MessageID,
 				queueMessage.Type,
@@ -111,7 +111,7 @@ func (ls *listenerService) handleTaskMessage(queueMessage QueueMessage, replyTo 
 	var task TaskQueueMessage
 	if err := json.Unmarshal(queueMessage.Payload, &task); err != nil {
 		ls.logger.Errorf("Failed to unmarshal task message: %s", err)
-		pubErr := ls.queueService.PublishErrorToQueue(
+		pubErr := ls.messageService.PublishErrorToQueue(
 			replyTo,
 			queueMessage.MessageID,
 			queueMessage.Type,
@@ -130,14 +130,14 @@ func (ls *listenerService) handleTaskMessage(queueMessage QueueMessage, replyTo 
 	ls.logger.Errorf("Failed to process task message: %s", err)
 
 	if e.Is(err, errors.ErrFailedToGetFreeWorker) {
-		requeueErr := ls.queueService.RequeueTaskWithPriority2(replyTo, queueMessage)
+		requeueErr := ls.messageService.RequeueTaskWithPriority2(replyTo, queueMessage)
 		if requeueErr != nil {
 			ls.logger.Errorf("Failed to requeue task with higher priority: %s", requeueErr)
 		}
 		return
 	}
 
-	pubErr := ls.queueService.PublishErrorToQueue(
+	pubErr := ls.messageService.PublishErrorToQueue(
 		replyTo,
 		queueMessage.MessageID,
 		queueMessage.Type,
@@ -154,16 +154,16 @@ func (ls *listenerService) handleStatusMessage(queueMessage QueueMessage, replyT
 	payload, err := json.Marshal(status)
 	if err != nil {
 		ls.logger.Errorf("Failed to marshal status message: %s", err)
-		err = ls.queueService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
+		err = ls.messageService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
 		if err != nil {
 			ls.logger.Errorf("Failed to publish error message: %s", err)
 		}
 	}
 
-	err = ls.queueService.PublishSuccessToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, payload)
+	err = ls.messageService.PublishSuccessToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, payload)
 	if err != nil {
 		ls.logger.Errorf("Failed to publish status message: %s", err)
-		err = ls.queueService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
+		err = ls.messageService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
 		if err != nil {
 			ls.logger.Errorf("Failed to publish error message: %s", err)
 		}
@@ -188,16 +188,16 @@ func (ls *listenerService) handleHandshakeMessage(queueMessage QueueMessage, rep
 	})
 	if err != nil {
 		ls.logger.Errorf("Failed to marshal supported languages: %s", err)
-		err = ls.queueService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
+		err = ls.messageService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
 		if err != nil {
 			ls.logger.Errorf("Failed to publish error message: %s", err)
 		}
 	}
 
-	err = ls.queueService.PublishSuccessToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, payload)
+	err = ls.messageService.PublishSuccessToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, payload)
 	if err != nil {
 		ls.logger.Errorf("Failed to publish supported languages: %s", err)
-		err = ls.queueService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
+		err = ls.messageService.PublishErrorToQueue(replyTo, queueMessage.MessageID, queueMessage.Type, err)
 		if err != nil {
 			ls.logger.Errorf("Failed to publish error message: %s", err)
 		}
