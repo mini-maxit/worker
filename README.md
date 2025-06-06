@@ -1,5 +1,7 @@
 # Worker Service
 
+Version 1.0.0 - chroot isolatioed execution
+
 ## Overview
 
 The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are stored using the file storage service and sent back to the backend service.
