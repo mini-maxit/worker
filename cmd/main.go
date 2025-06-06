@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/logger"
@@ -33,7 +34,14 @@ func main() {
 
 	// Initialize the services
 	queueService := services.NewQueueService(workerChannel)
-	runnerService := services.NewRunnerService()
+	dockerService, err := executor.NewDockerExecutor(config.JobsDataVolume)
+	if err != nil {
+		logger.Fatalf("Failed to initialize Docker service: %s", err.Error())
+	}
+	runnerService, err := services.NewRunnerService(dockerService)
+	if err != nil {
+		logger.Fatalf("Failed to initialize runner service: %s", err.Error())
+	}
 	fileService := services.NewFilesService(config.FileStorageURL)
 	workerPool := services.NewWorkerPool(
 		workerChannel,
@@ -50,7 +58,7 @@ func main() {
 	)
 
 	// Declare the worker queue
-	err := queueService.DeclareQueue(config.WorkerQueueName, constants.WorkerQueuePriority)
+	err = queueService.DeclareQueue(config.WorkerQueueName, constants.WorkerQueuePriority)
 	if err != nil {
 		logger.Panic("Failed to declare worker queue", err)
 	}

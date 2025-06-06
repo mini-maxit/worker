@@ -1,3 +1,4 @@
+version: '3.8'
 services:
   rabbitmq:
     image: rabbitmq:3.13-management
@@ -12,6 +13,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: go_app
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - jobs-data:/tmp
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=guest
@@ -19,6 +23,8 @@ services:
       - RABBITMQ_PORT=5672
       - FILESTORAGE_HOST=file-storage
       - FILESTORAGE_PORT=8888
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - JOBS_DATA_VOLUME=worker_jobs-data
   file-storage:
     image: file-storage
     pull_policy: never
@@ -28,3 +34,4 @@ services:
 
 volumes:
   rabbitmq_data:
+  jobs-data:

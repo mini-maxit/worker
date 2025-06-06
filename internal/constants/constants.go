@@ -23,6 +23,7 @@ const (
 const (
 	TestCaseMessageTimeOut             = "Solution timed out after %d s"
 	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d MB"
+	TestCaseMessageRuntimeError        = "Solution encountered a runtime error"
 )
 
 const (
@@ -42,11 +43,11 @@ const (
 const (
 	ExitCodeSuccess             = 0
 	ExitCodeInternalError       = 1
-	ExitCodeTimeLimitExceeded   = 124
-	ExitCodeMemoryLimitExceeded = 137
+	ExitCodeTimeLimitExceeded   = 143
+	ExitCodeMemoryLimitExceeded = 134
 )
 
-// Configuratioin constants.
+// Configuration constants.
 const (
 	DefaultRabbitmqHost     = "localhost"
 	DefaultRabbitmqUser     = "guest"
@@ -61,6 +62,10 @@ const (
 	DefaultMaxWorkersStr    = "10"
 	UserOutputDirName       = "user-output"
 	WorkerQueuePriority     = 3
+	RuntimeImagePrefix      = "seber/runtime"
+	ExecResultFileName      = "result.txt"
+	ContainerMaxRunTime     = 30
+	DefaultJobsDataVolume   = "maxit_worker_jobs-data"
 )
 
 // Utility constants.

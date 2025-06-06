@@ -305,3 +305,28 @@ func RemoveEmptyErrFiles(dir string) error {
 
 	return nil
 }
+
+func RemoveExecutionResultFile(dir string) error {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		filePath := path.Join(dir, file.Name())
+		if filepath.Base(filePath) != constants.ExecResultFileName {
+			continue
+		}
+
+		err := os.Remove(filePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
