@@ -11,10 +11,10 @@ import (
 )
 
 type workerService struct {
-	messageService  MessageService
-	fileService     FileService
-	runnerService   RunnerService
-	logger          *zap.SugaredLogger
+	messageService MessageService
+	fileService    FileService
+	runnerService  RunnerService
+	logger         *zap.SugaredLogger
 }
 
 type TaskForRunner struct {
@@ -159,9 +159,9 @@ func NewWorkerService(
 	logger *zap.SugaredLogger,
 ) WorkerService {
 	return &workerService{
-		fileService:   fileService,
-		runnerService: runnerService,
-		logger:        logger,
+		fileService:    fileService,
+		runnerService:  runnerService,
+		logger:         logger,
 		messageService: messageService,
 	}
 }

@@ -18,10 +18,10 @@ type ListenerService interface {
 }
 
 type listenerService struct {
-	channel      *amqp.Channel
-	workerPool   *WorkerPool
+	channel        *amqp.Channel
+	workerPool     *WorkerPool
 	messageService MessageService
-	logger       *zap.SugaredLogger
+	logger         *zap.SugaredLogger
 }
 
 type QueueMessage struct {
@@ -49,14 +49,17 @@ type TaskQueueMessage struct {
 	UseChroot        string `json:"use_chroot,omitempty"`      // Optional for test purposes
 }
 
-func NewListenerService(mainChannel *amqp.Channel, workerPool *WorkerPool, messageService MessageService) ListenerService {
+func NewListenerService(mainChannel *amqp.Channel,
+	workerPool *WorkerPool,
+	messageService MessageService,
+) ListenerService {
 	logger := logger.NewNamedLogger("listenerService")
 
 	return &listenerService{
-		channel:      mainChannel,
-		workerPool:   workerPool,
+		channel:        mainChannel,
+		workerPool:     workerPool,
 		messageService: messageService,
-		logger:       logger,
+		logger:         logger,
 	}
 }
 

@@ -62,7 +62,11 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 
 	r.logger.Infof("Created user output directory [MsgID: %s]", messageID)
 
-	filePath, err := utils.PrepareSolutionFilePath(task.taskFilesDirPath, task.solutionFileName, solutionCompiler, messageID)
+	filePath, err := utils.PrepareSolutionFilePath(
+		task.taskFilesDirPath,
+		task.solutionFileName,
+		solutionCompiler,
+		messageID)
 	if err != nil {
 		r.logger.Errorf("Error preparing solution file path [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{

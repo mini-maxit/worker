@@ -315,4 +315,3 @@ func copyAndRemove(src, dst string) error {
 	// delete the original
 	return os.Remove(src)
 }
-

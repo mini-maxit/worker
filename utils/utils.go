@@ -419,5 +419,3 @@ func ReadExecutionResultFile(
 	}
 	return results, nil
 }
-
-
