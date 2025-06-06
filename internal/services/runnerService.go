@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mini-maxit/worker/compiler"
 	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/errors"
@@ -21,23 +22,24 @@ type RunnerService interface {
 }
 
 type runnerService struct {
-	logger *zap.SugaredLogger
+	logger   *zap.SugaredLogger
+	executor executor.Executor
 }
 
-func NewRunnerService() RunnerService {
+func NewRunnerService(dockerExecutor executor.Executor) (RunnerService, error) {
 	logger := logger.NewNamedLogger("runnerService")
-
 	return &runnerService{
-		logger: logger,
-	}
+		logger:   logger,
+		executor: dockerExecutor,
+	}, nil
 }
 
 func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Result {
-	r.logger.Infof("Initializing solutionExecutor [MsgID: %s]", messageID)
-	// Init appropriate solutionExecutor
-	solutionExecutor, err := initializeSolutionExecutor(task.languageType, task.languageVersion, messageID)
+	r.logger.Infof("Initializing solutionCompiler [MsgID: %s]", messageID)
+	// Init appropriate solutionCompiler
+	solutionCompiler, err := initializeSolutionCompiler(task.languageType, task.languageVersion, messageID)
 	if err != nil {
-		r.logger.Errorf("Error initializing solutionExecutor [MsgID: %s]: %s", messageID, err.Error())
+		r.logger.Errorf("Error initializing solutionCompiler [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{
 			StatusCode: s.InitializationError,
 			Message:    err.Error(),
@@ -55,9 +57,9 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 		}
 	}
 
-	r.logger.Infof("Creaed user output directory [MsgID: %s]", messageID)
+	r.logger.Infof("Created user output directory [MsgID: %s]", messageID)
 
-	filePath, err := r.prepareSolutionFilePath(task, solutionExecutor, messageID)
+	filePath, err := r.prepareSolutionFilePath(task, solutionCompiler, messageID)
 	if err != nil {
 		r.logger.Errorf("Error preparing solution file path [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{
@@ -67,22 +69,33 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 		}
 	}
 
+	err = r.setupOutputErrorFiles(task.taskFilesDirPath, task.userOutputDirName, len(task.timeLimits))
+	if err != nil {
+		r.logger.Errorf("Error setting up IO files [MsgID: %s]: %s", messageID, err.Error())
+		return s.Result{
+			OutputDir:  task.userOutputDirName,
+			StatusCode: s.InternalError,
+			Message:    err.Error(),
+		}
+	}
+	r.logger.Infof("Created output and error files [MsgID: %s]", messageID)
+
 	r.logger.Infof("Running and evaluating test cases [MsgID: %s]", messageID)
-	solutionResult := r.runAndEvaluateTestCases(solutionExecutor, task, filePath, messageID)
+	solutionResult := r.runAndEvaluateTestCases(task, filePath, messageID)
 	return solutionResult
 }
 
 func (r *runnerService) prepareSolutionFilePath(
 	task *TaskForRunner,
-	solutionExecutor executor.Executor,
+	solutionCompiler compiler.Compiler,
 	messageID string,
 ) (string, error) {
 	var filePath string
 	var err error
 	solutionFilePath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.solutionFileName)
-	if solutionExecutor.RequiresCompilation() {
+	if solutionCompiler.RequiresCompilation() {
 		r.logger.Infof("Compiling solution file %s [MsgID: %s]", solutionFilePath, messageID)
-		filePath, err = solutionExecutor.Compile(solutionFilePath, task.taskFilesDirPath, messageID)
+		filePath, err = solutionCompiler.Compile(solutionFilePath, task.taskFilesDirPath, messageID)
 		if err != nil {
 			r.logger.Errorf("Error compiling solution file %s [MsgID: %s]: %s", solutionFilePath, messageID, err.Error())
 			return "", err
@@ -95,13 +108,10 @@ func (r *runnerService) prepareSolutionFilePath(
 }
 
 func (r *runnerService) runAndEvaluateTestCases(
-	solutionExecutor executor.Executor,
 	task *TaskForRunner,
 	filePath, messageID string,
 ) s.Result {
-	inputPath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.inputDirName)
-	r.logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
-	inputFiles, err := r.parseInputFiles(inputPath)
+	inputFiles, err := r.prepareAndValidateInputFiles(task, messageID)
 	if err != nil {
 		return s.Result{
 			OutputDir:  task.userOutputDirName,
@@ -110,30 +120,81 @@ func (r *runnerService) runAndEvaluateTestCases(
 		}
 	}
 
-	if len(inputFiles) != len(task.timeLimits) || len(inputFiles) != len(task.memoryLimits) {
+	err = r.runSolutionInDocker(task, filePath, messageID)
+	if err != nil {
+		r.logger.Errorf("Error executing command [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{
 			OutputDir:  task.userOutputDirName,
 			StatusCode: s.InternalError,
-			Message:    constants.SolutionMessageLimitsMismatch,
+			Message:    err.Error(),
 		}
 	}
+	r.logger.Infof("Execution completed [MsgID: %s]", messageID)
 
+	return r.evaluateAllTestCases(task, messageID, inputFiles)
+}
+
+// Helper: prepares and validates input files, returns ([]string, *s.Result, error).
+func (r *runnerService) prepareAndValidateInputFiles(
+	task *TaskForRunner,
+	messageID string,
+) ([]string, error) {
+	inputPath := fmt.Sprintf("%s/%s", task.taskFilesDirPath, task.inputDirName)
+	r.logger.Infof("Reading input files from %s [MsgID: %s]", inputPath, messageID)
+	inputFiles, err := r.parseInputFiles(inputPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(inputFiles) != len(task.timeLimits) || len(inputFiles) != len(task.memoryLimits) {
+		return nil, errors.ErrInputOutputMismatch
+	}
+	return inputFiles, nil
+}
+
+// Helper: runs the solution in Docker.
+func (r *runnerService) runSolutionInDocker(task *TaskForRunner, filePath, messageID string) error {
+	dockerImage, err := task.languageType.GetDockerImage(task.languageVersion)
+	if err != nil {
+		r.logger.Errorf("Error getting Docker image [MsgID: %s]: %s", messageID, err.Error())
+		return err
+	}
+
+	r.logger.Infof("Running solution in Docker image %s [MsgID: %s]", dockerImage, messageID)
+	return r.executor.ExecuteCommand(filePath, messageID, executor.CommandConfig{
+		WorkspaceDir:       task.taskFilesDirPath,
+		InputDirName:       task.inputDirName,
+		OutputDirName:      task.userOutputDirName,
+		ExecResultFileName: constants.ExecResultFileName,
+		DockerImage:        dockerImage,
+		TimeLimits:         task.timeLimits,
+		MemoryLimits:       task.memoryLimits,
+	})
+}
+
+// Helper: evaluates all test cases and constructs the result.
+func (r *runnerService) evaluateAllTestCases(task *TaskForRunner, messageID string, inputFiles []string) s.Result {
 	verifier := verifier.NewDefaultVerifier([]string{"-w"})
 	testCases := make([]s.TestResult, len(inputFiles))
 	solutionStatuses := make([]s.ResultStatus, len(inputFiles))
 	solutionMessages := make([]string, len(inputFiles))
-	for i, inputPath := range inputFiles {
+
+	execResultsFilePath := fmt.Sprintf("%s/%s/%s",
+		task.taskFilesDirPath,
+		task.userOutputDirName,
+		constants.ExecResultFileName)
+	execResults, err := r.ReadExecutionResultFile(execResultsFilePath, len(inputFiles))
+	if err != nil {
+		r.logger.Errorf("Error reading execution result file [MsgID: %s]: %s", messageID, err.Error())
+		return s.Result{
+			OutputDir:  task.userOutputDirName,
+			StatusCode: s.InternalError,
+			Message:    err.Error(),
+		}
+	}
+
+	for i := range inputFiles {
 		outputPath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%s/%d.err", task.taskFilesDirPath, task.userOutputDirName, (i + 1))
-		commandConfig := executor.CommandConfig{
-			StdinPath:     inputPath,
-			StdoutPath:    outputPath,
-			StderrPath:    stderrPath,
-			TimeLimit:     task.timeLimits[i],
-			MemoryLimit:   task.memoryLimits[i],
-			ChrootDirPath: task.chrootDirPath,
-			UseChroot:     task.useChroot,
-		}
 
 		taskForEvaluation := &TaskForEvaluation{
 			taskFilesDirPath: task.taskFilesDirPath,
@@ -142,9 +203,8 @@ func (r *runnerService) runAndEvaluateTestCases(
 			memoryLimit:      task.memoryLimits[i],
 		}
 
-		execResult := solutionExecutor.ExecuteCommand(filePath, messageID, commandConfig)
 		testCases[i], solutionStatuses[i], solutionMessages[i] = r.evaluateTestCase(
-			execResult,
+			execResults[i],
 			verifier,
 			taskForEvaluation,
 			outputPath,
@@ -255,20 +315,20 @@ func (r *runnerService) evaluateTestCase(
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
 			StatusCode:    s.RuntimeError,
-			ErrorMessage:  execResult.Message,
+			ErrorMessage:  constants.TestCaseMessageRuntimeError,
 			Order:         testCase,
 		}, s.TestFailed, constants.SolutionMessageRuntimeError
 	}
 }
 
-func initializeSolutionExecutor(
+func initializeSolutionCompiler(
 	languageType languages.LanguageType,
 	languageVersion,
 	messageID string,
-) (executor.Executor, error) {
+) (compiler.Compiler, error) {
 	switch languageType {
 	case languages.CPP:
-		return executor.NewCppExecutor(languageVersion, messageID)
+		return compiler.NewCppCompiler(languageVersion, messageID)
 	default:
 		return nil, errors.ErrInvalidLanguageType
 	}
@@ -293,4 +353,50 @@ func (r *runnerService) parseInputFiles(inputDir string) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func (r *runnerService) setupOutputErrorFiles(taskDirPath, outputDirName string, numberOfFiles int) error {
+	for i := 1; i <= numberOfFiles; i++ {
+		outputFilePath := fmt.Sprintf("%s/%s/%d.out", taskDirPath, outputDirName, i)
+		outputFile, err := os.Create(outputFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		outputFile.Close()
+
+		errorFilePath := fmt.Sprintf("%s/%s/%d.err", taskDirPath, outputDirName, i)
+		errorFile, err := os.Create(errorFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to create error file: %w", err)
+		}
+		errorFile.Close()
+	}
+	return nil
+}
+
+func (r *runnerService) ReadExecutionResultFile(
+	filePath string,
+	numberOfTest int,
+) ([]*executor.ExecutionResult, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	results := make([]*executor.ExecutionResult, numberOfTest)
+	for i := range results {
+		var exitCode int
+		var execTime float64
+		_, err := fmt.Fscanf(file, "%d %f\n", &exitCode, &execTime)
+		if err != nil {
+			r.logger.Errorf("Failed to read line %d: %s", i, err)
+			return nil, err
+		}
+		results[i] = &executor.ExecutionResult{
+			ExitCode: exitCode,
+			ExecTime: execTime,
+		}
+	}
+	return results, nil
 }

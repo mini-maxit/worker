@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -116,7 +117,7 @@ func (fs *fileService) UnconpressPackage(zipFilePath string) (*TaskDirConfig, er
 		return nil, err
 	}
 
-	err = os.Rename(zipFilePath, path+"/file.tar.gz")
+	err = moveFile(zipFilePath, path+"/file.tar.gz")
 	if err != nil {
 		fs.logger.Errorf("Failed to rename file. %s", err)
 		errRemove := utils.RemoveIO(path, true, true)
@@ -163,6 +164,10 @@ func (fs *fileService) StoreSolutionResult(
 	}
 
 	if err := utils.RemoveEmptyErrFiles(outputsFolderPath); err != nil {
+		return err
+	}
+
+	if err := utils.RemoveExecutionResultFile(outputsFolderPath); err != nil {
 		return err
 	}
 
@@ -271,4 +276,42 @@ func (fs *fileService) sendRequestAndHandleResponse(req *http.Request) error {
 	}
 
 	return nil
+}
+
+// moveFile tries os.Rename and falls back to copy+delete on EXDEV.
+func moveFile(src, dst string) error {
+	err := os.Rename(src, dst)
+	if err == nil {
+		return nil
+	}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) && errors.Is(linkErr.Err, syscall.EXDEV) {
+		return copyAndRemove(src, dst)
+	}
+	return err
+}
+
+// copyAndRemove copies src to dst and removes src. Used as a fallback for moveFile on EXDEV.
+func copyAndRemove(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	// ensure data is flushed
+	if err := out.Sync(); err != nil {
+		return err
+	}
+	// delete the original
+	return os.Remove(src)
 }

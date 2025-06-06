@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/services"
@@ -31,7 +32,14 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
-	runnerService := services.NewRunnerService()
+	dockerService, err := executor.NewDockerExecutor(config.JobsDataVolume)
+	if err != nil {
+		logger.Fatalf("Failed to initialize Docker service: %s", err.Error())
+	}
+	runnerService, err := services.NewRunnerService(dockerService)
+	if err != nil {
+		logger.Fatalf("Failed to initialize runner service: %s", err.Error())
+	}
 	fileService := services.NewFilesService(config.FileStorageURL)
 	workerPool := services.NewWorkerPool(
 		workerChannel,
