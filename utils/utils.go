@@ -12,8 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mini-maxit/worker/compiler"
-	"github.com/mini-maxit/worker/executor"
 	"github.com/mini-maxit/worker/internal/constants"
 	e "github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/logger"
@@ -308,52 +306,6 @@ func RemoveEmptyErrFiles(dir string) error {
 	return nil
 }
 
-func RemoveExecutionResultFile(dir string) error {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		filePath := path.Join(dir, file.Name())
-		if filepath.Base(filePath) != constants.ExecResultFileName {
-			continue
-		}
-
-		err := os.Remove(filePath)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func PrepareSolutionFilePath(
-	taskFilesDirPath string,
-	solutionFileName string,
-	solutionCompiler compiler.Compiler,
-	messageID string,
-) (string, error) {
-	var filePath string
-	var err error
-	solutionFilePath := fmt.Sprintf("%s/%s", taskFilesDirPath, solutionFileName)
-	if solutionCompiler.RequiresCompilation() {
-		filePath, err = solutionCompiler.Compile(solutionFilePath, taskFilesDirPath, messageID)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		filePath = solutionFilePath
-	}
-
-	return filePath, nil
-}
-
 func ParseInputFiles(inputDir string) ([]string, error) {
 	dirEntries, err := os.ReadDir(inputDir)
 	if err != nil {
@@ -373,49 +325,4 @@ func ParseInputFiles(inputDir string) ([]string, error) {
 	}
 
 	return result, nil
-}
-
-func SetupOutputErrorFiles(taskDirPath, outputDirName string, numberOfFiles int) error {
-	for i := 1; i <= numberOfFiles; i++ {
-		outputFilePath := fmt.Sprintf("%s/%s/%d.out", taskDirPath, outputDirName, i)
-		outputFile, err := os.Create(outputFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
-		}
-		outputFile.Close()
-
-		errorFilePath := fmt.Sprintf("%s/%s/%d.err", taskDirPath, outputDirName, i)
-		errorFile, err := os.Create(errorFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to create error file: %w", err)
-		}
-		errorFile.Close()
-	}
-	return nil
-}
-
-func ReadExecutionResultFile(
-	filePath string,
-	numberOfTest int,
-) ([]*executor.ExecutionResult, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	results := make([]*executor.ExecutionResult, numberOfTest)
-	for i := range results {
-		var exitCode int
-		var execTime float64
-		_, err := fmt.Fscanf(file, "%d %f\n", &exitCode, &execTime)
-		if err != nil {
-			return nil, err
-		}
-		results[i] = &executor.ExecutionResult{
-			ExitCode: exitCode,
-			ExecTime: execTime,
-		}
-	}
-	return results, nil
 }

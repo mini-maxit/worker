@@ -33,15 +33,16 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
+	solutionService := services.NewSolutionService()
 	messageService := services.NewMessageService(workerChannel)
-	testCaseService := services.NewTestCaseService()
+	testCaseService := services.NewTestCaseService(solutionService)
 	dockerService, err := executor.NewDockerExecutor(config.JobsDataVolume)
 	if err != nil {
 		logger.Fatalf("Failed to initialize Docker service: %s", err.Error())
 	}
-	runnerService := services.NewRunnerService(dockerService, testCaseService)
+	runnerService := services.NewRunnerService(dockerService, testCaseService, solutionService)
 
-	fileService := services.NewFilesService(config.FileStorageURL)
+	fileService := services.NewFilesService(config.FileStorageURL, solutionService)
 	workerPool := services.NewWorkerPool(
 		workerChannel,
 		config.WorkerQueueName,

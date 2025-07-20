@@ -23,16 +23,19 @@ type runnerService struct {
 	logger          *zap.SugaredLogger
 	executor        executor.Executor
 	testCaseService TestCaseService
+	solutionService SolutionService
 }
 
 func NewRunnerService(
 	executor executor.Executor,
 	testCaseService TestCaseService,
+	solutionService SolutionService,
 ) RunnerService {
 	logger := logger.NewNamedLogger("runnerService")
 	return &runnerService{
 		executor:        executor,
 		testCaseService: testCaseService,
+		solutionService: solutionService,
 		logger:          logger,
 	}
 }
@@ -62,7 +65,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 
 	r.logger.Infof("Created user output directory [MsgID: %s]", messageID)
 
-	filePath, err := utils.PrepareSolutionFilePath(
+	filePath, err := r.solutionService.PrepareSolutionFilePath(
 		task.taskFilesDirPath,
 		task.solutionFileName,
 		solutionCompiler,
@@ -76,7 +79,7 @@ func (r *runnerService) RunSolution(task *TaskForRunner, messageID string) s.Res
 		}
 	}
 
-	err = utils.SetupOutputErrorFiles(task.taskFilesDirPath, task.userOutputDirName, len(task.timeLimits))
+	err = r.solutionService.SetupOutputErrorFiles(task.taskFilesDirPath, task.userOutputDirName, len(task.timeLimits))
 	if err != nil {
 		r.logger.Errorf("Error setting up IO files [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{

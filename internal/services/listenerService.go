@@ -19,7 +19,7 @@ type ListenerService interface {
 
 type listenerService struct {
 	channel        *amqp.Channel
-	workerPool     *WorkerPool
+	workerPool     WorkerPoolService
 	messageService MessageService
 	logger         *zap.SugaredLogger
 }
@@ -50,7 +50,7 @@ type TaskQueueMessage struct {
 }
 
 func NewListenerService(mainChannel *amqp.Channel,
-	workerPool *WorkerPool,
+	workerPool WorkerPoolService,
 	messageService MessageService,
 ) ListenerService {
 	logger := logger.NewNamedLogger("listenerService")

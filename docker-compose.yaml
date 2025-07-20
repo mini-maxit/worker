@@ -26,8 +26,7 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - JOBS_DATA_VOLUME=worker_jobs-data
   file-storage:
-    image: file-storage
-    pull_policy: never
+    image: seber/maxit-file-storage
     container_name: file-storage
     ports:
       - "8888:8888"

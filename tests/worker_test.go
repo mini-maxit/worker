@@ -1,4 +1,4 @@
-package tests_test
+package mock_services
 
 // import (
 // 	"encoding/json"

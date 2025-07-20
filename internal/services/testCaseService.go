@@ -7,7 +7,6 @@ import (
 	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/logger"
 	s "github.com/mini-maxit/worker/internal/solution"
-	"github.com/mini-maxit/worker/utils"
 	"github.com/mini-maxit/worker/verifier"
 	"go.uber.org/zap"
 )
@@ -17,13 +16,15 @@ type TestCaseService interface {
 }
 
 type testCaseService struct {
-	logger *zap.SugaredLogger
+	solutionService SolutionService
+	logger          *zap.SugaredLogger
 }
 
-func NewTestCaseService() TestCaseService {
+func NewTestCaseService(solutionService SolutionService) TestCaseService {
 	logger := logger.NewNamedLogger("TestCaseService")
 	return &testCaseService{
-		logger: logger,
+		solutionService: solutionService,
+		logger:          logger,
 	}
 }
 
@@ -37,7 +38,7 @@ func (t *testCaseService) EvaluateAllTestCases(task *TaskForRunner, messageID st
 		task.taskFilesDirPath,
 		task.userOutputDirName,
 		constants.ExecResultFileName)
-	execResults, err := utils.ReadExecutionResultFile(execResultsFilePath, len(inputFiles))
+	execResults, err := t.solutionService.ReadExecutionResultFile(execResultsFilePath, len(inputFiles))
 	if err != nil {
 		t.logger.Errorf("Error reading execution result file [MsgID: %s]: %s", messageID, err.Error())
 		return s.Result{

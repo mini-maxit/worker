@@ -1,140 +1,141 @@
-package tests
+package mock_services
 
-import (
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"testing"
+// import (
+// 	"errors"
+// 	"fmt"
+// 	"io/fs"
+// 	"os"
+// 	"path/filepath"
+// 	"testing"
 
-	"github.com/mini-maxit/worker/internal/services"
-	"github.com/mini-maxit/worker/internal/solution"
-	"github.com/mini-maxit/worker/utils"
-)
+// 	"github.com/mini-maxit/worker/internal/services"
+// 	"github.com/mini-maxit/worker/internal/solution"
+// 	"github.com/mini-maxit/worker/utils"
+// )
 
-const (
-	mockFilesDir        = "./mock_files/"
-	mockTaskFilesDir    = mockFilesDir + "Task"
-	mockUserSolutionDir = mockFilesDir + "solutions/"
-	MockTmpDir          = mockFilesDir + "tmp"
-)
+// const (
+// 	mockFilesDir        = "./mock_files/"
+// 	mockTaskFilesDir    = mockFilesDir + "Task"
+// 	mockUserSolutionDir = mockFilesDir + "solutions/"
+// 	MockTmpDir          = mockFilesDir + "tmp"
+// )
 
-type TestType int
+// type TestType int
 
-const (
-	CPPSuccess TestType = iota + 1
-	CPPFailedTimeLimitExceeded
-	CPPCompilationError
-	CPPTestCaseFailed
-	Handshake
-	LongTaskMessage
-	Status
-)
+// const (
+// 	CPPSuccess TestType = iota + 1
+// 	CPPFailedTimeLimitExceeded
+// 	CPPCompilationError
+// 	CPPTestCaseFailed
+// 	Handshake
+// 	LongTaskMessage
+// 	Status
+// )
 
-var testTypeSolutionMap = map[TestType]string{
-	CPPSuccess:                 "CPPSuccessSolution.cpp",
-	CPPFailedTimeLimitExceeded: "CPPFailedTimeLimitExceededSolution.cpp",
-	CPPCompilationError:        "CPPCompilationErrorSolution.cpp",
-	CPPTestCaseFailed:          "CPPTestCaseFailedSolution.cpp",
-	LongTaskMessage:            "CPPFailedTimeLimitExceededSolution.cpp",
-	Handshake:                  "", // Linter needs this
-	Status:                     "",
-}
+// var testTypeSolutionMap = map[TestType]string{
+// 	CPPSuccess:                 "CPPSuccessSolution.cpp",
+// 	CPPFailedTimeLimitExceeded: "CPPFailedTimeLimitExceededSolution.cpp",
+// 	CPPCompilationError:        "CPPCompilationErrorSolution.cpp",
+// 	CPPTestCaseFailed:          "CPPTestCaseFailedSolution.cpp",
+// 	LongTaskMessage:            "CPPFailedTimeLimitExceededSolution.cpp",
+// 	Handshake:                  "", // Linter needs this
+// 	Status:                     "",
+// }
 
-type MockFileService struct {
-	t *testing.T
-}
+// type MockFileService struct {
+// 	t *testing.T
+// }
 
-func NewMockFileService(t *testing.T) services.FileService {
-	return &MockFileService{
-		t: t,
-	}
-}
+// func NewMockFileService(t *testing.T) services.FileService {
+// 	return &MockFileService{
+// 		t: t,
+// 	}
+// }
 
-func (mfs *MockFileService) HandleTaskPackage(taskID, userID, submissionNumber int64) (*services.TaskDirConfig, error) {
-	if _, err := os.Stat(MockTmpDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("temporary directory does not exist: %s", MockTmpDir)
-	}
+// func (mfs *MockFileService) HandleTaskPackage(
+// taskID, userID, submissionNumber int64) (*services.TaskDirConfig, error) {
+// 	if _, err := os.Stat(MockTmpDir); os.IsNotExist(err) {
+// 		return nil, fmt.Errorf("temporary directory does not exist: %s", MockTmpDir)
+// 	}
 
-	dirName := fmt.Sprintf("Task_%d_%d_%d", taskID, userID, submissionNumber)
-	dirPath := filepath.Join(MockTmpDir, dirName)
-	err := os.MkdirAll(dirPath, os.ModePerm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary directory: %w", err)
-	}
+// 	dirName := fmt.Sprintf("Task_%d_%d_%d", taskID, userID, submissionNumber)
+// 	dirPath := filepath.Join(MockTmpDir, dirName)
+// 	err := os.MkdirAll(dirPath, os.ModePerm)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to create temporary directory: %w", err)
+// 	}
 
-	// Cleanup on failure
-	defer func() {
-		if err != nil {
-			err = os.RemoveAll(dirPath)
-			if err != nil {
-				mfs.t.Errorf("failed to remove temporary directory: %s", err)
-			}
-		}
-	}()
+// 	// Cleanup on failure
+// 	defer func() {
+// 		if err != nil {
+// 			err = os.RemoveAll(dirPath)
+// 			if err != nil {
+// 				mfs.t.Errorf("failed to remove temporary directory: %s", err)
+// 			}
+// 		}
+// 	}()
 
-	if _, err := os.Stat(mockTaskFilesDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("task files directory does not exist: %s", mockTaskFilesDir)
-	}
+// 	if _, err := os.Stat(mockTaskFilesDir); os.IsNotExist(err) {
+// 		return nil, fmt.Errorf("task files directory does not exist: %s", mockTaskFilesDir)
+// 	}
 
-	if err := copyDir(mockTaskFilesDir, dirPath); err != nil {
-		return nil, fmt.Errorf("failed to copy task files: %w", err)
-	}
+// 	if err := copyDir(mockTaskFilesDir, dirPath); err != nil {
+// 		return nil, fmt.Errorf("failed to copy task files: %w", err)
+// 	}
 
-	solutionFile, ok := testTypeSolutionMap[TestType(submissionNumber)]
-	if !ok {
-		return nil, fmt.Errorf("invalid submission number: %d", submissionNumber)
-	}
-	userSolution := filepath.Join(mockUserSolutionDir, solutionFile)
-	solutionName := "solution" + filepath.Ext(userSolution)
-	destSolution := filepath.Join(dirPath, solutionName)
+// 	solutionFile, ok := testTypeSolutionMap[TestType(submissionNumber)]
+// 	if !ok {
+// 		return nil, fmt.Errorf("invalid submission number: %d", submissionNumber)
+// 	}
+// 	userSolution := filepath.Join(mockUserSolutionDir, solutionFile)
+// 	solutionName := "solution" + filepath.Ext(userSolution)
+// 	destSolution := filepath.Join(dirPath, solutionName)
 
-	if _, err := os.Stat(userSolution); os.IsNotExist(err) {
-		return nil, fmt.Errorf("user solution file does not exist: %s", userSolution)
-	}
+// 	if _, err := os.Stat(userSolution); os.IsNotExist(err) {
+// 		return nil, fmt.Errorf("user solution file does not exist: %s", userSolution)
+// 	}
 
-	if err := utils.CopyFile(userSolution, destSolution); err != nil {
-		return nil, fmt.Errorf("failed to copy user solution file: %w", err)
-	}
+// 	if err := utils.CopyFile(userSolution, destSolution); err != nil {
+// 		return nil, fmt.Errorf("failed to copy user solution file: %w", err)
+// 	}
 
-	return &services.TaskDirConfig{
-		TaskFilesDirPath:    dirPath,
-		UserSolutionDirPath: destSolution,
-	}, nil
-}
+// 	return &services.TaskDirConfig{
+// 		TaskFilesDirPath:    dirPath,
+// 		UserSolutionDirPath: destSolution,
+// 	}, nil
+// }
 
-func copyDir(src string, dst string) error {
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("error accessing path %s: %w", path, err)
-		}
+// func copyDir(src string, dst string) error {
+// 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+// 		if err != nil {
+// 			return fmt.Errorf("error accessing path %s: %w", path, err)
+// 		}
 
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return fmt.Errorf("failed to get relative path: %w", err)
-		}
+// 		relPath, err := filepath.Rel(src, path)
+// 		if err != nil {
+// 			return fmt.Errorf("failed to get relative path: %w", err)
+// 		}
 
-		targetPath := filepath.Join(dst, relPath)
+// 		targetPath := filepath.Join(dst, relPath)
 
-		if d.IsDir() {
-			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
-			}
-		} else {
-			if err := utils.CopyFile(path, targetPath); err != nil {
-				return fmt.Errorf("failed to copy file %s to %s: %w", path, targetPath, err)
-			}
-		}
+// 		if d.IsDir() {
+// 			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+// 				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
+// 			}
+// 		} else {
+// 			if err := utils.CopyFile(path, targetPath); err != nil {
+// 				return fmt.Errorf("failed to copy file %s to %s: %w", path, targetPath, err)
+// 			}
+// 		}
 
-		return nil
-	})
-}
+// 		return nil
+// 	})
+// }
 
-func (mfs *MockFileService) UnconpressPackage(_ string) (*services.TaskDirConfig, error) {
-	return nil, errors.New("UncompressPackage not implemented")
-}
+// func (mfs *MockFileService) UnconpressPackage(_ string) (*services.TaskDirConfig, error) {
+// 	return nil, errors.New("UncompressPackage not implemented")
+// }
 
-func (mfs *MockFileService) StoreSolutionResult(_ solution.Result, _ string, _, _, _ int64) error {
-	return nil
-}
+// func (mfs *MockFileService) StoreSolutionResult(_ solution.Result, _ string, _, _, _ int64) error {
+// 	return nil
+// }

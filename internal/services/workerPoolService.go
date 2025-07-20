@@ -18,7 +18,12 @@ type Worker struct {
 	worker              WorkerService
 }
 
-type WorkerPool struct {
+type WorkerPoolService interface {
+	GetWorkersStatus() map[string]interface{}
+	ProcessTask(responseQueueName, messageID string, task TaskQueueMessage) error
+}
+
+type workerPoolService struct {
 	mu               sync.Mutex
 	busyWorkersCount int
 	workers          map[int]*Worker
@@ -35,7 +40,7 @@ func NewWorkerPool(
 	fileService FileService,
 	runnerService RunnerService,
 	messageService MessageService,
-) *WorkerPool {
+) WorkerPoolService {
 	workers := make(map[int]*Worker, maxWorkers)
 	for i := range maxWorkers {
 		workerService := NewWorkerService(
@@ -54,7 +59,7 @@ func NewWorkerPool(
 
 	workerPoolLogger := logger.NewNamedLogger("workerPool")
 
-	return &WorkerPool{
+	return &workerPoolService{
 		mu:            sync.Mutex{},
 		workers:       workers,
 		workerChannel: workerChannel,
@@ -64,7 +69,7 @@ func NewWorkerPool(
 	}
 }
 
-func (wp *WorkerPool) GetWorkersStatus() map[string]interface{} {
+func (wp *workerPoolService) GetWorkersStatus() map[string]interface{} {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
@@ -85,7 +90,7 @@ func (wp *WorkerPool) GetWorkersStatus() map[string]interface{} {
 	}
 }
 
-func (wp *WorkerPool) getFreeWorker() (*Worker, error) {
+func (wp *workerPoolService) getFreeWorker() (*Worker, error) {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
@@ -100,7 +105,7 @@ func (wp *WorkerPool) getFreeWorker() (*Worker, error) {
 	return nil, errors.ErrFailedToGetFreeWorker
 }
 
-func (wp *WorkerPool) ProcessTask(responseQueueName, messageID string, task TaskQueueMessage) error {
+func (wp *workerPoolService) ProcessTask(responseQueueName, messageID string, task TaskQueueMessage) error {
 	wp.logger.Infof("Processing task [MsgID: %s]", messageID)
 
 	worker, err := wp.getFreeWorker()
@@ -123,7 +128,7 @@ func (wp *WorkerPool) ProcessTask(responseQueueName, messageID string, task Task
 	return nil
 }
 
-func (wp *WorkerPool) markWorkerAsIdle(worker *Worker) {
+func (wp *workerPoolService) markWorkerAsIdle(worker *Worker) {
 	wp.logger.Infof("Marking worker as idle [WorkerID: %d]", worker.id)
 	wp.mu.Lock()
 	defer wp.mu.Unlock()

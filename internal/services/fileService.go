@@ -34,8 +34,9 @@ type FileService interface {
 }
 
 type fileService struct {
-	fileStorageURL string
-	logger         *zap.SugaredLogger
+	fileStorageURL  string
+	solutionService SolutionService
+	logger          *zap.SugaredLogger
 }
 
 type TaskDirConfig struct {
@@ -43,11 +44,12 @@ type TaskDirConfig struct {
 	UserSolutionDirPath string
 }
 
-func NewFilesService(fileServiceURL string) FileService {
+func NewFilesService(fileServiceURL string, solutionService SolutionService) FileService {
 	logger := logger.NewNamedLogger("fileService")
 	return &fileService{
-		fileStorageURL: fileServiceURL,
-		logger:         logger,
+		fileStorageURL:  fileServiceURL,
+		solutionService: solutionService,
+		logger:          logger,
 	}
 }
 
@@ -167,7 +169,7 @@ func (fs *fileService) StoreSolutionResult(
 		return err
 	}
 
-	if err := utils.RemoveExecutionResultFile(outputsFolderPath); err != nil {
+	if err := fs.solutionService.RemoveExecutionResultFile(outputsFolderPath); err != nil {
 		return err
 	}
 
