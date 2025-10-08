@@ -11,10 +11,11 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/pkg/constants"
 	e "github.com/mini-maxit/worker/pkg/errors"
-	"github.com/mini-maxit/worker/internal/logger"
 )
 
 // Attemts to close the file, and panics if something goes wrong.
@@ -56,6 +57,44 @@ func CopyFile(src, dst string) error {
 
 	return nil
 }
+// moveFile tries os.Rename and falls back to copy+delete on EXDEV.
+func MoveFile(src, dst string) error {
+	err := os.Rename(src, dst)
+	if err == nil {
+		return nil
+	}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) && errors.Is(linkErr.Err, syscall.EXDEV) {
+		return copyAndRemove(src, dst)
+	}
+	return err
+}
+
+// copyAndRemove copies src to dst and removes src. Used as a fallback for moveFile on EXDEV.
+func copyAndRemove(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	// ensure data is flushed
+	if err := out.Sync(); err != nil {
+		return err
+	}
+	// delete the original
+	return os.Remove(src)
+}
+
 
 // Checks if given elements is contained in given array.
 func Contains[V string](array []V, value V) bool {

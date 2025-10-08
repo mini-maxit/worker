@@ -7,8 +7,8 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
-	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/constants"
 )
 
 type Config struct {

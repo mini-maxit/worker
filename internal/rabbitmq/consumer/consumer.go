@@ -3,11 +3,11 @@ package consumer
 import (
 	"encoding/json"
 
+	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
+	"github.com/mini-maxit/worker/internal/scheduler"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
-	"github.com/mini-maxit/worker/internal/logger"
-	"github.com/mini-maxit/worker/internal/scheduler"
-	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/pkg/messages"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"

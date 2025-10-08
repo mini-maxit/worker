@@ -11,36 +11,25 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/pkg/constants"
 	cutomErrors "github.com/mini-maxit/worker/pkg/errors"
-	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
 type FileService interface {
-	HandleTaskPackage(taskID, userID, submissionNumber int64) (*TaskDirConfig, error)
-	UnconpressPackage(zipFilePath string) (*TaskDirConfig, error)
-	StoreSolutionResult(
-		solutionResult solution.Result,
-		TaskFilesDirPath string,
-		userID, taskID, submissionNumber int64,
-	) error
+	DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error)
+	UploadFile(filePath, bucket, objectKey string) error
 }
 
 type fileService struct {
 	fileStorageURL string
 	logger         *zap.SugaredLogger
-}
-
-type TaskDirConfig struct {
-	TaskFilesDirPath    string
-	UserSolutionDirPath string
 }
 
 func NewFilesService(fileServiceURL string) FileService {
@@ -51,103 +40,69 @@ func NewFilesService(fileServiceURL string) FileService {
 	}
 }
 
-func (fs *fileService) HandleTaskPackage(taskID, userID, submissionNumber int64) (*TaskDirConfig, error) {
-	fs.logger.Info("Handling task package")
-	requestURL := fmt.Sprintf("%s/getSolutionPackage?taskID=%d&userID=%d&submissionNumber=%d",
-		fs.fileStorageURL,
-		taskID, userID, submissionNumber,
-	)
+func (fs *fileService) DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error) {
+
+	fs.logger.Infof("Downloading file from bucket %s path %s", fileLocation.Bucket, fileLocation.Path)
+
+	// Build request URL: {baseUrl}/buckets/:bucketName/:objectKey?metadataOnly=false
+	requestURL := fmt.Sprintf("%s/buckets/%s/%s?metadataOnly=false", fs.fileStorageURL, fileLocation.Bucket, fileLocation.Path)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	client := &http.Client{}
-	response, err := client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
-		fs.logger.Errorf("Failed to get solution package. %s", response.Status)
-		bodyBytes, _ := io.ReadAll(response.Body)
-		return nil, errors.New(string(bodyBytes))
+	if resp.StatusCode != http.StatusOK {
+		fs.logger.Errorf("Failed to download file. %s", resp.Status)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", errors.New(string(bodyBytes))
 	}
 
-	id := uuid.New()
-	filePath := fmt.Sprintf("/app/%s.tar.gz", id.String())
-	file, err := os.Create(filePath)
+	// Ensure destination directory exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		fs.logger.Errorf("Failed to create destination directory: %s", err)
+		return "", err
+	}
+
+	outFile, err := os.Create(destPath)
 	if err != nil {
-		fs.logger.Errorf("Failed to create file. %s", err)
-		return nil, err
+		fs.logger.Errorf("Failed to create destination file: %s", err)
+		return "", err
+	}
+	defer outFile.Close()
+
+	if _, err := io.Copy(outFile, resp.Body); err != nil {
+		fs.logger.Errorf("Failed to copy downloaded file to destination: %s", err)
+		return "", err
 	}
 
-	defer file.Close()
-
-	_, err = io.Copy(file, response.Body)
-	if err != nil {
-		fs.logger.Errorf("Failed to copy file. %s", err)
-		return nil, err
+	// Try to set file permissions to readable
+	if err := outFile.Sync(); err != nil {
+		fs.logger.Warnf("Failed to sync file to disk: %s", err)
+	}
+	if err := os.Chmod(destPath, 0o644); err != nil {
+		// non-fatal
+		fs.logger.Warnf("Failed to chmod file: %s", err)
 	}
 
-	taskDirConfig, err := fs.UnconpressPackage(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	err = file.Close()
-	if err != nil {
-		fs.logger.Errorf("Failed to close file. %s", err)
-		return nil, err
-	}
-
-	return taskDirConfig, nil
+	fs.logger.Infof("File downloaded to %s", destPath)
+	return destPath, nil
 }
 
-func (fs *fileService) UnconpressPackage(zipFilePath string) (*TaskDirConfig, error) {
-	fs.logger.Infof("Unzipping solution package")
-
-	path, err := os.MkdirTemp("", "temp")
-	if err != nil {
-		fs.logger.Errorf("Failed to create temp directory. %s", err)
-		return nil, err
-	}
-
-	err = moveFile(zipFilePath, path+"/file.tar.gz")
-	if err != nil {
-		fs.logger.Errorf("Failed to rename file. %s", err)
-		errRemove := utils.RemoveIO(path, true, true)
-		if errRemove != nil {
-			fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
-		}
-		return nil, err
-	}
-
-	err = utils.ExtractTarGz(path+"/file.tar.gz", path)
-	if err != nil {
-		fs.logger.Errorf("Failed to extract file. %s", err)
-		errRemove := utils.RemoveIO(path, true, true)
-		if errRemove != nil {
-			fs.logger.Errorf("Failed to remove temp directory. %s", errRemove)
-		}
-		return nil, err
-	}
-
-	errRemove := utils.RemoveIO(path+"/file.tar.gz", false, false)
-	if errRemove != nil {
-		fs.logger.Errorf("Failed to remove file. %s", errRemove)
-	}
-
-	dirConfig := TaskDirConfig{
-		UserSolutionDirPath: path,
-		TaskFilesDirPath:    path + "/Task",
-	}
-
-	return &dirConfig, nil
+// TODO: implement
+func (fs *fileService) UploadFile(filePath, bucket, objectKey string) error {
+	fs.logger.Error("UploadFile method not implemented yet")
+	return nil
 }
 
 func (fs *fileService) StoreSolutionResult(
@@ -276,42 +231,4 @@ func (fs *fileService) sendRequestAndHandleResponse(req *http.Request) error {
 	}
 
 	return nil
-}
-
-// moveFile tries os.Rename and falls back to copy+delete on EXDEV.
-func moveFile(src, dst string) error {
-	err := os.Rename(src, dst)
-	if err == nil {
-		return nil
-	}
-	var linkErr *os.LinkError
-	if errors.As(err, &linkErr) && errors.Is(linkErr.Err, syscall.EXDEV) {
-		return copyAndRemove(src, dst)
-	}
-	return err
-}
-
-// copyAndRemove copies src to dst and removes src. Used as a fallback for moveFile on EXDEV.
-func copyAndRemove(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	// ensure data is flushed
-	if err := out.Sync(); err != nil {
-		return err
-	}
-	// delete the original
-	return os.Remove(src)
 }

@@ -3,12 +3,15 @@ package pipeline
 import (
 	"encoding/json"
 
+	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
+	"github.com/mini-maxit/worker/internal/stages/compiler"
+	"github.com/mini-maxit/worker/internal/stages/executor"
+	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/internal/storage"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/languages"
-	"github.com/mini-maxit/worker/pkg/solution"
-	"github.com/mini-maxit/worker/internal/storage"
-	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/pkg/solution"
 	"github.com/mini-maxit/worker/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
@@ -28,28 +31,11 @@ type worker struct {
 	processingMessageID string
 	channel             *amqp.Channel
 	storage             storage.FileService
+	compiler            compiler.Compiler
+	packager            packager.Packager
+	executor            executor.Executor
 	responder           responder.Responder
 	logger              *zap.SugaredLogger
-}
-
-type TaskForRunner struct {
-	taskFilesDirPath    string
-	userSolutionDirPath string
-	languageType        languages.LanguageType
-	languageVersion     string
-	solutionFileName    string
-	inputDirName        string
-	outputDirName       string
-	userOutputDirName   string
-	timeLimits          []int
-	memoryLimits        []int
-}
-
-type TaskForEvaluation struct {
-	taskFilesDirPath string
-	outputDirName    string
-	timeLimit        int
-	memoryLimit      int
 }
 
 func NewWorker(
@@ -59,11 +45,11 @@ func NewWorker(
 	logger *zap.SugaredLogger,
 ) Worker {
 	return &worker{
-		id:          id,
-		status:      constants.WorkerStatusIdle,
-		channel:     channel,
-		storage:     storage,
-		logger:      logger,
+		id:      id,
+		status:  constants.WorkerStatusIdle,
+		channel: channel,
+		storage: storage,
+		logger:  logger,
 	}
 }
 
@@ -99,29 +85,58 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task m
 	ws.processingMessageID = messageID
 	defer func() { ws.processingMessageID = "" }()
 
-	dc, solutionFileName, langType, err := ws.prepareTaskEnvironment(task)
+	// Parse language type
+	langType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
 		ws.publishError(responseQueueName, messageID, err)
 		return
 	}
+
+	// Download all files and set up directories
+	dc, err := ws.packager.PrepareSolutionPackage(task, messageID)
+	if err != nil {
+		ws.publishError(responseQueueName, messageID, err)
+		return
+	}
+
 	defer func() {
-		if err := utils.RemoveIO(dc.UserSolutionDirPath, true, true); err != nil {
+		// Clean up temporary directories
+		if err := utils.RemoveIO(dc.TmpDirPath, true, true); err != nil {
 			ws.logger.Errorf("[MsgID %s] Failed to remove temp directory: %s", messageID, err)
 		}
 	}()
 
-	taskForRunner := &TaskForRunner{
-		taskFilesDirPath:    dc.TaskFilesDirPath,
-		userSolutionDirPath: dc.UserSolutionDirPath,
-		languageType:        langType,
-		languageVersion:     task.LanguageVersion,
-		solutionFileName:    solutionFileName,
-		inputDirName:        constants.InputDirName,
-		outputDirName:       constants.OutputDirName,
-		userOutputDirName:   constants.UserOutputDirName,
-		timeLimits:          task.TimeLimits,
-		memoryLimits:        task.MemoryLimits,
+	// Compile solution if needed
+	err = ws.compiler.CompileSolutionIfNeeded(langType, task.LanguageVersion, dc.UserSolutionPath, dc.OutputDirPath, dc.CompileErrFilePath, messageID)
+	if err != nil {
+		ws.publishError(responseQueueName, messageID, err)
+		return
 	}
+
+	timeLimits := make([]int64, len(task.TestCases))
+	memoryLimits := make([]int64, len(task.TestCases))
+	for i, tc := range task.TestCases {
+		timeLimits[i] = tc.TimeLimitMs
+		memoryLimits[i] = tc.MemoryLimitKB
+	}
+
+	// Run solution
+	cfg := executor.CommandConfig{
+		MessageID:       messageID,
+		DirConfig:       dc,
+		LanguageType:    langType,
+		LanguageVersion: task.LanguageVersion,
+		TimeLimits:      timeLimits,
+		MemoryLimits:    memoryLimits,
+	}
+	err = ws.executor.ExecuteCommand(cfg)
+	if err != nil {
+		ws.publishError(responseQueueName, messageID, err)
+		return
+	}
+
+	// Evaluate solution
+
 
 	solutionResult := ws.runnerService.RunSolution(taskForRunner, messageID)
 	ws.storeAndPublishSolutionResult(
@@ -130,26 +145,6 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task m
 		task,
 		messageID,
 		responseQueueName)
-}
-
-func (ws *worker) prepareTaskEnvironment(task messages.TaskQueueMessage,
-) (*storage.TaskDirConfig, string, languages.LanguageType, error) {
-	dc, err := ws.storage.HandleTaskPackage(task.TaskID, task.UserID, task.SubmissionNumber)
-	if err != nil {
-		return nil, "", 0, err
-	}
-
-	langType, err := languages.ParseLanguageType(task.LanguageType)
-	if err != nil {
-		return nil, "", 0, err
-	}
-
-	solutionFileName, err := languages.GetSolutionFileNameWithExtension(constants.SolutionFileBaseName, langType)
-	if err != nil {
-		return nil, "", 0, err
-	}
-
-	return dc, solutionFileName, langType, nil
 }
 
 func (ws *worker) publishError(queue, messageID string, err error) {

@@ -16,12 +16,32 @@ import (
 	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 
-	"github.com/mini-maxit/worker/internal/constants"
-	"github.com/mini-maxit/worker/internal/errors"
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/errors"
+	"github.com/mini-maxit/worker/pkg/languages"
 )
 
-type dockerExecutor struct {
+type CommandConfig struct {
+	MessageID       string
+	DirConfig       *packager.TaskDirConfig
+	LanguageType    languages.LanguageType
+	LanguageVersion string
+	TimeLimits      []int64
+	MemoryLimits    []int64
+}
+
+type ExecutionResult struct {
+	ExitCode int
+	ExecTime float64
+}
+
+type Executor interface {
+	ExecuteCommand(cfg CommandConfig) error
+}
+
+type executor struct {
 	logger         *zap.SugaredLogger
 	cli            *client.Client
 	jobsDataVolume string
@@ -36,77 +56,87 @@ func NewDockerExecutor(volume string) (Executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &dockerExecutor{cli: cli, jobsDataVolume: volume, logger: logger}, nil
+	return &executor{cli: cli, jobsDataVolume: volume, logger: logger}, nil
 }
 
-func (d *dockerExecutor) ExecuteCommand(
-	solutionPath, messageID string, cfg CommandConfig,
+func (d *executor) ExecuteCommand(
+	cfg CommandConfig,
 ) error {
 	// Create a context with a timeout to avoid indefinite execution
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(constants.ContainerMaxRunTime)*time.Second)
 	defer cancel()
 
 	// Build the run_tests invocation
-	runCmd := d.buildRunCommand(solutionPath)
+	runCmd := d.buildRunCommand(cfg.DirConfig.UserSolutionPath)
 
 	// Build environment variables
 	env := d.buildEnvironmentVariables(cfg)
 
+	// Docker image name
+	dockerImage, err := cfg.LanguageType.GetDockerImage(cfg.LanguageVersion)
+	if err != nil {
+		d.logger.Errorf("Failed to get Docker image for language %s version %s: %s [MsgID: %s]",
+			cfg.LanguageType, cfg.LanguageVersion, err, cfg.MessageID)
+		return err
+	}
+
 	// Container configuration
-	containerCfg := d.buildContainerConfig(cfg, runCmd, env)
+	containerCfg := d.buildContainerConfig(cfg.DirConfig.TmpDirPath, dockerImage, runCmd, env)
 
 	// Host configuration
 	hostCfg := d.buildHostConfig(cfg)
 
 	// Prepare the Docker image
-	if err := d.PrepareImageIfNotPresent(ctx, cfg); err != nil {
-		d.logger.Errorf("Failed to prepare image %s: %s [MsgID: %s]", cfg.DockerImage, err, messageID)
+	if err := d.prepareImageIfNotPresent(ctx, dockerImage); err != nil {
+		d.logger.Errorf("Failed to prepare image %s: %s [MsgID: %s]", dockerImage, err, cfg.MessageID)
 		return err
 	}
 
 	// Create and start the container
-	resp, err := d.createAndStartContainer(ctx, containerCfg, hostCfg, messageID)
+	resp, err := d.createAndStartContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
 	if err != nil {
 		return err
 	}
 
 	// Wait for the container to exit
-	return d.waitForContainer(ctx, resp.ID, messageID)
+	return d.waitForContainer(ctx, resp.ID, cfg.MessageID)
 }
 
-func (d *dockerExecutor) buildRunCommand(solutionPath string) string {
-	bin := filepath.Base(solutionPath) // e.g. "solution"
+func (d *executor) buildRunCommand(absoluteSolutionPath string) string {
+	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
 	return fmt.Sprintf("run_tests.sh ./%s", bin)
 }
 
-func (d *dockerExecutor) buildEnvironmentVariables(cfg CommandConfig) []string {
-	const minMemKB = 128 * 1024 // 128 MB minimum per-test
+func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
+	const minMemKB int64 = 128 * 1024 // 128 MB minimum per-test
 	timeEnv := make([]string, len(cfg.TimeLimits))
 	for i, s := range cfg.TimeLimits {
-		timeEnv[i] = strconv.Itoa(s)
+		timeEnv[i] = strconv.FormatInt(s, 10)
 	}
 	memEnv := make([]string, len(cfg.MemoryLimits))
 	for i, kb := range cfg.MemoryLimits {
 		if kb < minMemKB {
 			kb = minMemKB
 		}
-		memEnv[i] = strconv.Itoa(kb)
+		memEnv[i] = strconv.FormatInt(kb, 10)
 	}
+
 	return []string{
 		"TIME_LIMITS=" + strings.Join(timeEnv, " "),
 		"MEM_LIMITS=" + strings.Join(memEnv, " "),
-		"INPUT_DIR=" + cfg.InputDirName,
-		"OUTPUT_DIR=" + cfg.OutputDirName,
-		"EXEC_RESULT_FILE=" + cfg.ExecResultFileName,
+		"INPUT_DIR=" + filepath.Base(cfg.DirConfig.InputDirPath),
+		"OUTPUT_DIR=" + filepath.Base(cfg.DirConfig.OutputDirPath),
+		"ERROR_DIR=" + filepath.Base(cfg.DirConfig.UserErrorDirPath),
+		"EXEC_RESULT_DIR=" + filepath.Base(cfg.DirConfig.UserExecResultDirPath),
 	}
 }
 
-func (d *dockerExecutor) buildContainerConfig(cfg CommandConfig, runCmd string, env []string) *container.Config {
+func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string, env []string) *container.Config {
 	stopTimeout := int(2)
 	return &container.Config{
-		Image:       cfg.DockerImage,
+		Image:       dockerImage,
 		Cmd:         []string{"bash", "-lc", runCmd},
-		WorkingDir:  cfg.WorkspaceDir,
+		WorkingDir:  workspaceDir,
 		Env:         env,
 		User:        "0:0",
 		StopTimeout: &stopTimeout,
@@ -114,20 +144,20 @@ func (d *dockerExecutor) buildContainerConfig(cfg CommandConfig, runCmd string, 
 	}
 }
 
-func (d *dockerExecutor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
+func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	return &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
-			Memory:    int64(maxIntSlice(cfg.MemoryLimits, 6*1024)) * 1024,
+			Memory:    maxIntSlice(cfg.MemoryLimits, int64(6*1024)) * 1024,
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
 			Source: d.jobsDataVolume,
-			Target: "/tmp",
+			Target: cfg.DirConfig.TmpDirPath,
 		}},
 		SecurityOpt:  []string{"no-new-privileges"},
 		CgroupnsMode: container.CgroupnsModePrivate,
@@ -135,7 +165,7 @@ func (d *dockerExecutor) buildHostConfig(cfg CommandConfig) *container.HostConfi
 	}
 }
 
-func (d *dockerExecutor) createAndStartContainer(
+func (d *executor) createAndStartContainer(
 	ctx context.Context, containerCfg *container.Config, hostCfg *container.HostConfig, messageID string,
 ) (*container.CreateResponse, error) {
 	name := fmt.Sprintf("submission-%s", messageID)
@@ -152,7 +182,7 @@ func (d *dockerExecutor) createAndStartContainer(
 	return &resp, nil
 }
 
-func (d *dockerExecutor) waitForContainer(
+func (d *executor) waitForContainer(
 	ctx context.Context, containerID, messageID string,
 ) error {
 	timeout := time.Duration(constants.ContainerMaxRunTime) * time.Second
@@ -187,9 +217,9 @@ func (d *dockerExecutor) waitForContainer(
 }
 
 // Helper function to prepare the Docker image by pulling it if not present.
-func (d *dockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg CommandConfig) error {
+func (d *executor) prepareImageIfNotPresent(ctx context.Context, dockerImage string) error {
 	// Check if the image is already present
-	_, err := d.cli.ImageInspect(ctx, cfg.DockerImage)
+	_, err := d.cli.ImageInspect(ctx, dockerImage)
 	if err == nil {
 		return nil
 	}
@@ -197,8 +227,8 @@ func (d *dockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg Comma
 		return err
 	}
 
-	d.logger.Infof("Image %s not found, pulling...", cfg.DockerImage)
-	reader, err := d.cli.ImagePull(ctx, cfg.DockerImage, image.PullOptions{})
+	d.logger.Infof("Image %s not found, pulling...", dockerImage)
+	reader, err := d.cli.ImagePull(ctx, dockerImage, image.PullOptions{})
 	if err != nil {
 		return err
 	}
@@ -208,7 +238,7 @@ func (d *dockerExecutor) PrepareImageIfNotPresent(ctx context.Context, cfg Comma
 }
 
 // maxIntSlice returns the larger of the values in a, or min if all are smaller.
-func maxIntSlice(a []int, minKB int) int {
+func maxIntSlice(a []int64, minKB int64) int64 {
 	m := minKB
 	for _, v := range a {
 		if v > m {

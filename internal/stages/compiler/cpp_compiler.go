@@ -2,12 +2,10 @@ package compiler
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"os/exec"
 
-	"github.com/mini-maxit/worker/internal/constants"
-	"github.com/mini-maxit/worker/internal/languages"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/internal/logger"
 	"go.uber.org/zap"
 )
@@ -22,10 +20,9 @@ func (e *CppCompiler) RequiresCompilation() bool {
 }
 
 // For now compile allows only one file.
-func (e *CppCompiler) Compile(sourceFilePath, dir, messageID string) (string, error) {
+func (e *CppCompiler) Compile(sourceFilePath, outFilePath, compErrFilePath, messageID string) error {
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
-	outFilePath := dir + "/solution"
-	// Correctly pass the command and its arguments as separate strings.\
+	// Correctly pass the command and its arguments as separate strings.
 	versionFlag := "-std=" + e.version
 	cmd := exec.Command("g++", "-o", outFilePath, versionFlag, sourceFilePath)
 
@@ -38,30 +35,29 @@ func (e *CppCompiler) Compile(sourceFilePath, dir, messageID string) (string, er
 		// Save stderr to a file
 		e.logger.Errorf("Error during compilation. %s [MsgID: %s]", cmdErr.Error(), messageID)
 		e.logger.Infof("Creating stderr file [MsgID: %s]", messageID)
-		errPath := fmt.Sprintf("%s/%s", dir, constants.CompileErrorFileName)
-		file, err := os.Create(errPath)
+		file, err := os.Create(compErrFilePath)
 		if err != nil {
 			e.logger.Errorf("Could not create stderr file. %s [MsgID: %s]", err.Error(), messageID)
-			return "", err
+			return err
 		}
 
 		e.logger.Infof("Writing error to stderr file [MsgID: %s]", messageID)
 		_, err = file.Write(stderr.Bytes())
 		if err != nil {
 			e.logger.Errorf("Error writing to file. %s [MsgID: %s]", err.Error(), messageID)
-			return "", err
+			return err
 		}
 		e.logger.Infof("Closing stderr file [MsgID: %s]", messageID)
 		err = file.Close()
 		if err != nil {
 			e.logger.Errorf("Error closing file. %s [MsgID: %s]", err.Error(), messageID)
-			return "", err
+			return err
 		}
-		e.logger.Infof("Compilation error saved to %s [MsgID: %s]", errPath, messageID)
-		return errPath, cmdErr
+		e.logger.Infof("Compilation error saved to %s [MsgID: %s]", compErrFilePath, messageID)
+		return cmdErr
 	}
 	e.logger.Infof("Compilation successful [MsgID: %s]", messageID)
-	return outFilePath, nil
+	return nil
 }
 
 func NewCppCompiler(version, messageID string) (*CppCompiler, error) {

@@ -32,7 +32,7 @@ func NewResponder() Responder {
 	}
 }
 
-func (r *responder)PublishErrorToResponseQueue(
+func (r *responder) PublishErrorToResponseQueue(
 	channel *amqp.Channel,
 	responseQueueName, messageType, messageID string,
 	err error,
