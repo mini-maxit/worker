@@ -4,7 +4,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/pkg/constants"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"

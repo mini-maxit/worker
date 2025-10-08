@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mini-maxit/worker/internal/constants"
-	e "github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/pkg/constants"
+	e "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/internal/logger"
 )
 

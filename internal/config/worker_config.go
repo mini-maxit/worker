@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
-	"github.com/mini-maxit/worker/internal/constants"
+	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/internal/logger"
 )
 

@@ -1,4 +1,4 @@
-package services
+package storage
 
 import (
 	"bytes"
@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mini-maxit/worker/internal/constants"
-	cutomErrors "github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/pkg/constants"
+	cutomErrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/internal/logger"
-	"github.com/mini-maxit/worker/internal/solution"
+	"github.com/mini-maxit/worker/pkg/solution"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )

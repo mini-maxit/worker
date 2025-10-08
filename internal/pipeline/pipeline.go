@@ -1,4 +1,202 @@
-package services
+package pipeline
+
+import (
+	"encoding/json"
+
+	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/languages"
+	"github.com/mini-maxit/worker/pkg/solution"
+	"github.com/mini-maxit/worker/internal/storage"
+	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
+	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/utils"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
+)
+
+type Worker interface {
+	ProcessTask(responseQueueName string, messageID string, task messages.TaskQueueMessage)
+	GetStatus() string
+	UpdateStatus(status string)
+	GetProcessingMessageID() string
+	GetId() int
+}
+
+type worker struct {
+	id                  int
+	status              string
+	processingMessageID string
+	channel             *amqp.Channel
+	storage             storage.FileService
+	responder           responder.Responder
+	logger              *zap.SugaredLogger
+}
+
+type TaskForRunner struct {
+	taskFilesDirPath    string
+	userSolutionDirPath string
+	languageType        languages.LanguageType
+	languageVersion     string
+	solutionFileName    string
+	inputDirName        string
+	outputDirName       string
+	userOutputDirName   string
+	timeLimits          []int
+	memoryLimits        []int
+}
+
+type TaskForEvaluation struct {
+	taskFilesDirPath string
+	outputDirName    string
+	timeLimit        int
+	memoryLimit      int
+}
+
+func NewWorker(
+	id int,
+	channel *amqp.Channel,
+	storage storage.FileService,
+	logger *zap.SugaredLogger,
+) Worker {
+	return &worker{
+		id:          id,
+		status:      constants.WorkerStatusIdle,
+		channel:     channel,
+		storage:     storage,
+		logger:      logger,
+	}
+}
+
+func (ws *worker) GetId() int {
+	return ws.id
+}
+
+func (ws *worker) GetStatus() string {
+	return ws.status
+}
+
+func (ws *worker) UpdateStatus(status string) {
+	ws.status = status
+}
+
+func (ws *worker) GetProcessingMessageID() string {
+	return ws.processingMessageID
+}
+
+func (ws *worker) ProcessTask(responseQueueName string, messageID string, task messages.TaskQueueMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			ws.logger.Errorf("Worker panicked: %v", r)
+			if err, ok := r.(error); ok {
+				ws.publishError(responseQueueName, messageID, err)
+			} else {
+				ws.logger.Errorf("Recovered value is not an error: %v", r)
+			}
+		}
+	}()
+
+	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
+	ws.processingMessageID = messageID
+	defer func() { ws.processingMessageID = "" }()
+
+	dc, solutionFileName, langType, err := ws.prepareTaskEnvironment(task)
+	if err != nil {
+		ws.publishError(responseQueueName, messageID, err)
+		return
+	}
+	defer func() {
+		if err := utils.RemoveIO(dc.UserSolutionDirPath, true, true); err != nil {
+			ws.logger.Errorf("[MsgID %s] Failed to remove temp directory: %s", messageID, err)
+		}
+	}()
+
+	taskForRunner := &TaskForRunner{
+		taskFilesDirPath:    dc.TaskFilesDirPath,
+		userSolutionDirPath: dc.UserSolutionDirPath,
+		languageType:        langType,
+		languageVersion:     task.LanguageVersion,
+		solutionFileName:    solutionFileName,
+		inputDirName:        constants.InputDirName,
+		outputDirName:       constants.OutputDirName,
+		userOutputDirName:   constants.UserOutputDirName,
+		timeLimits:          task.TimeLimits,
+		memoryLimits:        task.MemoryLimits,
+	}
+
+	solutionResult := ws.runnerService.RunSolution(taskForRunner, messageID)
+	ws.storeAndPublishSolutionResult(
+		solutionResult,
+		*dc,
+		task,
+		messageID,
+		responseQueueName)
+}
+
+func (ws *worker) prepareTaskEnvironment(task messages.TaskQueueMessage,
+) (*storage.TaskDirConfig, string, languages.LanguageType, error) {
+	dc, err := ws.storage.HandleTaskPackage(task.TaskID, task.UserID, task.SubmissionNumber)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	langType, err := languages.ParseLanguageType(task.LanguageType)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	solutionFileName, err := languages.GetSolutionFileNameWithExtension(constants.SolutionFileBaseName, langType)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	return dc, solutionFileName, langType, nil
+}
+
+func (ws *worker) publishError(queue, messageID string, err error) {
+	ws.logger.Errorf("Error: %s", err)
+	publishErr := ws.responder.PublishErrorToResponseQueue(ws.channel, queue, constants.QueueMessageTypeTask, messageID, err)
+	if publishErr != nil {
+		ws.logger.Errorf("Failed to publish error to response queue: %s", publishErr)
+	}
+}
+
+func (ws *worker) storeAndPublishSolutionResult(
+	solutionResult solution.Result,
+	dc storage.TaskDirConfig,
+	task messages.TaskQueueMessage,
+	messageID, responseQueueName string,
+) {
+	if solutionResult.StatusCode != solution.InitializationError {
+		ws.logger.Infof("Storing solution result [MsgID: %s]", messageID)
+		err := ws.storage.StoreSolutionResult(
+			solutionResult,
+			dc.TaskFilesDirPath,
+			task.UserID,
+			task.TaskID,
+			task.SubmissionNumber,
+		)
+		if err != nil {
+			ws.publishError(responseQueueName, messageID, err)
+			return
+		}
+	} else {
+		ws.logger.Infof("Initialization error occurred. Skipping storing solution result [MsgID: %s]", messageID)
+	}
+
+	payload, err := json.Marshal(solutionResult)
+	if err != nil {
+		ws.publishError(responseQueueName, messageID, err)
+		return
+	}
+
+	ws.logger.Infof("Publishing solution result [MsgID: %s]", messageID)
+	err = ws.responder.PublishSucessToResponseQueue(ws.channel, responseQueueName, constants.QueueMessageTypeTask, messageID, payload)
+	if err != nil {
+		ws.publishError(responseQueueName, messageID, err)
+	}
+}
+
+// package services
 
 // import (
 // 	"fmt"

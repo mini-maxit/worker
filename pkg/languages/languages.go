@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mini-maxit/worker/internal/constants"
-	"github.com/mini-maxit/worker/internal/errors"
+	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/errors"
 )
 
 type LanguageType int
