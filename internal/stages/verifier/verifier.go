@@ -9,34 +9,35 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	"go.uber.org/zap"
+	"golang.org/x/text/number"
 )
 
 // Returns true if the output and expected output are the same.
 // Returns false otherwise.
 // Returns an error if an error occurs.
 type Verifier interface {
-	CompareOutput(outputPath, expectedOutputPath, stderrPath string) (bool, error)
+	EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, testCases []messages.TestCase) solution.Result
 }
 
 type DefaultVerifier struct {
-	flags []string
+	flags  []string
 	logger *zap.SugaredLogger
 }
 
-type TaskForEvaluation struct {
-	taskFilesDirPath string
-	outputDirName    string
-	timeLimit        int
-	memoryLimit      int
+func NewDefaultVerifier(flags []string) Verifier {
+	return &DefaultVerifier{
+		flags: flags,
+	}
 }
 
 // CompareOutput compares the output file with the expected output file.
 // It returns true if the files are the same, false otherwise.
 // It returns a string of differences if there are any.
 // It returns an error if any issue occurs during the comparison.
-func (dv *DefaultVerifier) CompareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
+func (dv *DefaultVerifier) compareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
 	outputPath = filepath.Clean(outputPath)
 	expectedFilePath = filepath.Clean(expectedFilePath)
 
@@ -64,52 +65,52 @@ func (dv *DefaultVerifier) CompareOutput(outputPath, expectedFilePath, stderrPat
 	return true, nil
 }
 
-func NewDefaultVerifier(flags []string) Verifier {
-	return &DefaultVerifier{
-		flags: flags,
-	}
-}
+func (dv *DefaultVerifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, limits []solution.Limit) solution.Result {
+	testResults := make([]solution.TestResult, len(limits))
+	solutionStatuses := make([]solution.ResultStatus, len(limits))
+	solutionMessages := make([]string, len(limits))
+	numberOfTests := len(limits)
 
-func (dv *DefaultVerifier) evaluateAllTestCases(dc *packager.TaskDirConfig, messageID string, inputFiles []string) solution.Result {
-	testCases := make([]solution.TestResult, len(inputFiles))
-	solutionStatuses := make([]solution.ResultStatus, len(inputFiles))
-	solutionMessages := make([]string, len(inputFiles))
-
-	execResults, err := dv.ReadExecutionResultFiles(dc.UserExecResultDirPath, len(inputFiles))
+	execResults, err := dv.readExecutionResultFiles(dirConfig.UserExecResultDirPath, numberOfTests)
 	if err != nil {
 		dv.logger.Errorf("Error reading execution result file [MsgID: %s]: %s", messageID, err.Error())
 		return solution.Result{
-			OutputDir:  dc.UserOutputDirPath,
 			StatusCode: solution.InternalError,
 			Message:    err.Error(),
 		}
 	}
 
-	for i := range inputFiles {
-		outputPath := fmt.Sprintf("%s/%d.out", dc.UserOutputDirPath, (i + 1))
-		stderrPath := fmt.Sprintf("%s/%d.err", dc.UserErrorDirPath, (i + 1))
+	for i := range numberOfTests {
+		outputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserOutputDirPath, (i + 1))
+		expectedOutputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserExecResultDirPath, (i + 1))
+		stderrPath := fmt.Sprintf("%s/%d.err", dirConfig.UserErrorDirPath, (i + 1))
 
-		taskForEvaluation := &TaskForEvaluation{
-			taskFilesDirPath: task.taskFilesDirPath,
-			outputDirName:    task.outputDirName,
-			timeLimit:        task.timeLimits[i],
-			memoryLimit:      task.memoryLimits[i],
-		}
-
-		testCases[i], solutionStatuses[i], solutionMessages[i] = r.evaluateTestCase(
-			execResults[i],
-			verifier,
-			taskForEvaluation,
+		testResults[i], solutionStatuses[i], solutionMessages[i] = dv.evaluateTestCase(
 			outputPath,
+			expectedOutputPath,
 			stderrPath,
+			execResults[i],
+			limits[i].TimeMs,
+			limits[i].MemoryKb,
 			(i + 1),
 		)
 	}
 
 	// Construct final message summarizing the results
+
+	finalMessage, finalStatus := dv.constructFinalMessage(solutionStatuses, solutionMessages)
+
+	return solution.Result{
+		StatusCode:  finalStatus,
+		Message:     finalMessage,
+		TestResults: testResults,
+	}
+}
+
+func (dv *DefaultVerifier) constructFinalMessage(statuses []solution.ResultStatus, messages []string) (string, solution.ResultStatus) {
 	var finalMessage string
 	finalStatus := solution.Success
-	for _, status := range solutionStatuses {
+	for _, status := range statuses {
 		if status != solution.Success {
 			finalStatus = solution.TestFailed
 			break
@@ -119,7 +120,7 @@ func (dv *DefaultVerifier) evaluateAllTestCases(dc *packager.TaskDirConfig, mess
 	if finalStatus == solution.Success {
 		finalMessage = constants.SolutionMessageSuccess
 	} else {
-		for i, message := range solutionMessages {
+		for i, message := range messages {
 			if i != 0 {
 				finalMessage += ", "
 			}
@@ -127,16 +128,10 @@ func (dv *DefaultVerifier) evaluateAllTestCases(dc *packager.TaskDirConfig, mess
 		}
 		finalMessage += "."
 	}
-
-	return solution.Result{
-		OutputDir:   task.userOutputDirName,
-		StatusCode:  finalStatus,
-		Message:     finalMessage,
-		TestResults: testCases,
-	}
+	return finalMessage, finalStatus
 }
 
-func (dv *DefaultVerifier) ReadExecutionResultFiles(
+func (dv *DefaultVerifier) readExecutionResultFiles(
 	execResultDirPath string,
 	numberOfTest int,
 ) ([]*executor.ExecutionResult, error) {
@@ -166,26 +161,29 @@ func (dv *DefaultVerifier) ReadExecutionResultFiles(
 	return results, nil
 }
 
-func (r *DefaultVerifier) evaluateTestCase(
+func (dv *DefaultVerifier) evaluateTestCase(
+	outputPath string,
+	expectedOutputPath string,
+	stderrPath string,
 	execResult *executor.ExecutionResult,
-	dirConfig *packager.TaskDirConfig,
-	testCase int,
+	timeLimit int64,
+	memoryLimit int64,
+	testCaseIdx int,
+
 ) (solution.TestResult, solution.ResultStatus, string) {
 	solutionStatus := solution.Success
 	solutionMessage := constants.SolutionMessageSuccess
 
 	switch execResult.ExitCode {
 	case constants.ExitCodeSuccess:
-		expectedFilePath := fmt.Sprintf("%s/%s/%d.out", task.taskFilesDirPath, task.outputDirName, testCase)
-
-		passed, err := verifier.CompareOutput(outputPath, expectedFilePath, stderrPath)
+		passed, err := dv.compareOutput(outputPath, expectedOutputPath, stderrPath)
 		if err != nil {
 			return solution.TestResult{
 				Passed:        false,
 				ExecutionTime: execResult.ExecTime,
 				StatusCode:    solution.TestCaseStatus(solution.InternalError),
 				ErrorMessage:  err.Error(),
-				Order:         testCase,
+				Order:         testCaseIdx,
 			}, solution.InternalError, constants.SolutionMessageInternalError
 		}
 
@@ -202,33 +200,33 @@ func (r *DefaultVerifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			StatusCode:    statusCode,
 			ErrorMessage:  "",
-			Order:         testCase,
+			Order:         testCaseIdx,
 		}, solutionStatus, solutionMessage
 
 	case constants.ExitCodeTimeLimitExceeded:
 		message := fmt.Sprintf(
 			constants.TestCaseMessageTimeOut,
-			task.timeLimit,
+			timeLimit,
 		)
 		return solution.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
 			StatusCode:    solution.TimeLimitExceeded,
 			ErrorMessage:  message,
-			Order:         testCase,
+			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageTimeout
 
 	case constants.ExitCodeMemoryLimitExceeded:
 		message := fmt.Sprintf(
 			constants.TestCaseMessageMemoryLimitExceeded,
-			task.memoryLimit,
+			memoryLimit,
 		)
 		return solution.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
 			StatusCode:    solution.MemoryLimitExceeded,
 			ErrorMessage:  message,
-			Order:         testCase,
+			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageMemoryLimitExceeded
 
 	default:
@@ -237,8 +235,7 @@ func (r *DefaultVerifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			StatusCode:    solution.RuntimeError,
 			ErrorMessage:  constants.TestCaseMessageRuntimeError,
-			Order:         testCase,
+			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageRuntimeError
 	}
 }
-

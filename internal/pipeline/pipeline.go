@@ -7,6 +7,7 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/compiler"
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/internal/storage"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/languages"
@@ -34,6 +35,7 @@ type worker struct {
 	compiler            compiler.Compiler
 	packager            packager.Packager
 	executor            executor.Executor
+	verifier            verifier.Verifier
 	responder           responder.Responder
 	logger              *zap.SugaredLogger
 }
@@ -136,9 +138,9 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task m
 	}
 
 	// Evaluate solution
+	solutionResult := ws.verifier.EvaluateAllTestCases(dc, messageID, task.TestCases)
 
-
-	solutionResult := ws.runnerService.RunSolution(taskForRunner, messageID)
+	// solutionResult := ws.runnerService.RunSolution(taskForRunner, messageID)
 	ws.storeAndPublishSolutionResult(
 		solutionResult,
 		*dc,
