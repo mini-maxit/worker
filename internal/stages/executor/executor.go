@@ -29,7 +29,7 @@ type CommandConfig struct {
 	DirConfig       *packager.TaskDirConfig
 	LanguageType    languages.LanguageType
 	LanguageVersion string
-	Limits          solution.Limits
+	Limits          []solution.Limit
 }
 
 type ExecutionResult struct {
@@ -130,8 +130,8 @@ func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string
 	d.logger.Infof("Workspace directory in container: %s", workspaceDir)
 	return &container.Config{
 		Image: dockerImage,
-		// Cmd:         []string{"bash", "-lc", runCmd},
-		Cmd:         []string{"/bin/bash", "-c", "while true; do sleep 30; done;"},
+		Cmd:         []string{"bash", "-lc", runCmd},
+		// Cmd:         []string{"/bin/bash", "-c", "while true; do sleep 30; done;"},
 		WorkingDir:  workspaceDir,
 		Env:         env,
 		User:        "0:0",
@@ -146,7 +146,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
-			Memory:    cfg.Limits.MaxMemoryKBWithMinimum() * 1024,
+			Memory:    solution.MaxMemoryKBWithMinimum(cfg.Limits) * 1024,
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},

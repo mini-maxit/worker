@@ -14,7 +14,7 @@ import (
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 
-	// "github.com/mini-maxit/worker/utils"
+	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
@@ -107,12 +107,12 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *
 		return
 	}
 
-	// defer func() {
-	// 	// Clean up temporary directories
-	// 	if err := utils.RemoveIO(dc.TmpDirPath, true, true); err != nil {
-	// 		ws.logger.Errorf("[MsgID %s] Failed to remove temp directory: %s", messageID, err)
-	// 	}
-	// }()
+	defer func() {
+		// Clean up temporary directories
+		if err := utils.RemoveIO(dc.PackageDirPath, true, true); err != nil {
+			ws.logger.Errorf("[MsgID %s] Failed to remove temp directory: %s", messageID, err)
+		}
+	}()
 
 	// Compile solution if needed
 	err = ws.compiler.CompileSolutionIfNeeded(langType, task.LanguageVersion, dc.UserSolutionPath, dc.UserExecFilePath, dc.CompileErrFilePath, messageID)

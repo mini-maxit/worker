@@ -1,11 +1,14 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -95,10 +98,18 @@ func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath str
 func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
 	fileName := filepath.Base(filePath)
 	fs.logger.Infof("Uploading file %s to bucket %s path %s", fileName, bucket, objectKey)
-
-	// Build request URL: {baseUrl}/buckets/:bucketName/:objectKey
-	key := objectKey + "/" + fileName
-	requestUrl := fmt.Sprintf("%s/buckets/%s/%s", fs.fileStorageURL, bucket, key)
+	// Build request URL: {baseUrl}/buckets/{bucket}/upload-multiple?prefix=<prefix>
+	u, err := url.Parse(fmt.Sprintf("%s/buckets/%s/upload-multiple", fs.fileStorageURL, bucket))
+	if err != nil {
+		fs.logger.Errorf("Failed to parse upload URL: %s", err)
+		return err
+	}
+	if objectKey != "" {
+		q := u.Query()
+		q.Set("prefix", objectKey)
+		u.RawQuery = q.Encode()
+	}
+	requestUrl := u.String()
 
 	// Open the file to upload
 	file, err := os.Open(filePath)
@@ -108,15 +119,35 @@ func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
 	}
 	defer file.Close()
 
-	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPost, requestUrl, file)
+	// Prepare multipart form body
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("files", fileName)
+	if err != nil {
+		fs.logger.Errorf("Failed to create multipart form file: %s", err)
+		return err
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		fs.logger.Errorf("Failed to copy file into multipart body: %s", err)
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		fs.logger.Errorf("Failed to close multipart writer: %s", err)
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestUrl, body)
 	if err != nil {
 		fs.logger.Errorf("Failed to create upload request: %s", err)
 		return err
 	}
-
-	// Set the content type
-	req.Header.Set("Content-Type", "multipart/form-data")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	// Send the request
 	client := &http.Client{}

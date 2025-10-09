@@ -13,7 +13,7 @@ import (
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 
-	// "github.com/mini-maxit/worker/utils"
+	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
@@ -60,7 +60,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 	p.logger.Infof("Creating base directory at %s", basePath)
 	if err := p.createBaseDirs(basePath); err != nil {
 		p.logger.Errorf("Failed to create base directory: %s", err)
-		// _ = utils.RemoveIO(basePath, true, true)
+		_ = utils.RemoveIO(basePath, true, true)
 		return nil, err
 	}
 
@@ -68,7 +68,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 	p.logger.Infof("Downloading submission file to %s", basePath)
 	if err := p.downloadSubmission(basePath, taskQueueMessage.SubmissionFile); err != nil {
 		p.logger.Errorf("Failed to download submission file: %s", err)
-		// _ = utils.RemoveIO(basePath, true, true)
+		_ = utils.RemoveIO(basePath, true, true)
 		return nil, err
 	}
 
@@ -77,7 +77,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 	for idx, tc := range taskQueueMessage.TestCases {
 		if err := p.prepareTestCaseFiles(basePath, idx, tc); err != nil {
 			p.logger.Errorf("Failed to prepare test case files: %s", err)
-			// _ = utils.RemoveIO(basePath, true, true)
+			_ = utils.RemoveIO(basePath, true, true)
 			return nil, err
 		}
 	}
@@ -87,7 +87,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 	err := p.createCompileErrFile(basePath)
 	if err != nil {
 		p.logger.Errorf("Failed to create compile.err file: %s", err)
-		// _ = utils.RemoveIO(basePath, true, true)
+		_ = utils.RemoveIO(basePath, true, true)
 		return nil, err
 	}
 
