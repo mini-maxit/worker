@@ -44,9 +44,9 @@ for idx in "${!inputs[@]}"; do
   tsec=${times[idx]}
   mlimit_kb=${mems[idx]}
 
-  out="${USER_OUTPUT_DIR}/${testno}.out"
-  err="${USER_ERROR_DIR}/${testno}.err"
-  exec_result="${USER_EXEC_RESULT_DIR}/${testno}.res"
+  out="${PWD}/${USER_OUTPUT_DIR}/${testno}.out"
+  err="${PWD}/${USER_ERROR_DIR}/${testno}.err"
+  exec_result="${PWD}/${USER_EXEC_RESULT_DIR}/${testno}.res"
 
   # run in subshell to isolate failure
   (
