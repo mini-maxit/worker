@@ -48,13 +48,13 @@ jobs:
 
       - name: Prepare runtime folders
         run: |
-          for folder in $(find interna/stages/executor -type d -mindepth 1 -maxdepth 1); do
-            cp interna/stages/executor/run_tests.sh "$folder/run_tests.sh"
+          for folder in $(find internal/stages/executor -type d -mindepth 1 -maxdepth 1); do
+            cp internal/stages/executor/run_tests.sh "$folder/run_tests.sh"
           done
 
       - name: Build and push runtime images
         run: |
-          for folder in $(find interna/stages/executor -type d -mindepth 1 -maxdepth 1); do
+          for folder in $(find internal/stages/executor -type d -mindepth 1 -maxdepth 1); do
             folder_name=$(basename "$folder")
             docker buildx build \
               --push \
