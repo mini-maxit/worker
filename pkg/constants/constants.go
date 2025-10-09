@@ -49,25 +49,28 @@ const (
 
 // Configuration constants.
 const (
-	DefaultRabbitmqHost     = "localhost"
-	DefaultRabbitmqUser     = "guest"
-	DefaultRabbitmqPassword = "guest"
-	DefaultRabbitmqPort     = "5672"
-	DefaultFileStorageHost  = "file-storage"
-	DefaultFilesStoragePort = "8888"
-	DefaultLogPath          = "./internal/logger/logs/log.txt"
-	CompileErrorFileName    = "compile-err.err"
-	BaseChrootDir           = "../tmp/chroot"
-	DefaultWorkerQueueName  = "worker_queue"
-	DefaultMaxWorkersStr    = "10"
-	UserOutputDirName       = "user-output"
-	RuntimeImagePrefix      = "seber/runtime"
-	ExecResultFileName      = "result.txt"
-	ContainerMaxRunTime     = 30
-	DefaultJobsDataVolume   = "maxit_worker_jobs-data"
+	DefaultRabbitmqHost      = "localhost"
+	DefaultRabbitmqUser      = "guest"
+	DefaultRabbitmqPassword  = "guest"
+	DefaultRabbitmqPort      = "5672"
+	DefaultStorageHost       = "file-storage"
+	DefaultStoragePort       = "8888"
+	DefaultLogPath           = "./internal/logger/logs/log.txt"
+	CompileErrorFileName     = "compile-err.err"
+	BaseChrootDir            = "../tmp/chroot"
+	DefaultWorkerQueueName   = "worker_queue"
+	DefaultResponseQueueName = "response_queue"
+	DefaultMaxWorkersStr     = "10"
+	UserOutputDirName        = "user-output"
+	RuntimeImagePrefix       = "seber/runtime"
+	ExecResultFileName       = "result.txt"
+	ContainerMaxRunTime      = 30
+	DefaultJobsDataVolume    = "maxit_worker_jobs-data"
+	DefaultVerifierFlags     = "-w"
 )
 
 // Utility constants.
 const (
-	MaxFileSize = 10 * 1024 * 1024 // 10 MB
+	MaxFileSize                = 10 * 1024 * 1024 // 10 MB
+	MinContainerMemoryKB int64 = 64 * 1024        // 64 MB
 )

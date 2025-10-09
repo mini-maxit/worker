@@ -6,7 +6,6 @@ toolchain go1.23.1
 
 require (
 	github.com/docker/docker v28.1.1+incompatible
-	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.10.0
 	go.uber.org/zap v1.27.0

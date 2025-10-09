@@ -61,7 +61,7 @@ func (c *consumer) Listen() {
 		err := json.Unmarshal(msg.Body, &queueMessage)
 		if err != nil {
 			c.logger.Errorf("Failed to unmarshal message: %s", err)
-			err = c.responder.PublishErrorToResponseQueue(c.channel, msg.ReplyTo, queueMessage.Type, queueMessage.MessageID, err)
+			err = c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, err)
 			if err != nil {
 				c.logger.Errorf("Failed to publish error message: %s", err)
 			}
@@ -81,8 +81,6 @@ func (c *consumer) Listen() {
 		default:
 			c.logger.Errorf("Unknown message type: %s", queueMessage.Type)
 			err = c.responder.PublishErrorToResponseQueue(
-				c.channel,
-				msg.ReplyTo,
 				queueMessage.Type,
 				queueMessage.MessageID,
 				errors.ErrUnknownMessageType)
@@ -121,12 +119,10 @@ func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) 
 func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo string) {
 	c.logger.Infof("Processing task message")
 
-	var task messages.TaskQueueMessage
-	if err := json.Unmarshal(queueMessage.Payload, &task); err != nil {
+	var task *messages.TaskQueueMessage
+	if err := json.Unmarshal(queueMessage.Payload, task); err != nil {
 		c.logger.Errorf("Failed to unmarshal task message: %s", err)
 		pubErr := c.responder.PublishErrorToResponseQueue(
-			c.channel,
-			replyTo,
 			queueMessage.Type,
 			queueMessage.MessageID,
 			err)
@@ -152,8 +148,6 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 	}
 
 	pubErr := c.responder.PublishErrorToResponseQueue(
-		c.channel,
-		replyTo,
 		queueMessage.Type,
 		queueMessage.MessageID,
 		err)
@@ -166,19 +160,12 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, replyTo string) {
 	c.logger.Infof("Processing status message")
 	status := c.scheduler.GetWorkersStatus()
-	payload, err := json.Marshal(status)
-	if err != nil {
-		c.logger.Errorf("Failed to marshal status message: %s", err)
-		err = c.responder.PublishErrorToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
-		if err != nil {
-			c.logger.Errorf("Failed to publish error message: %s", err)
-		}
-	}
 
-	err = c.responder.PublishSucessToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, payload)
+
+	err := c.responder.PublishSucessStatusRespond(queueMessage.Type, queueMessage.MessageID, status)
 	if err != nil {
 		c.logger.Errorf("Failed to publish status message: %s", err)
-		err = c.responder.PublishErrorToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		err = c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, err)
 		if err != nil {
 			c.logger.Errorf("Failed to publish error message: %s", err)
 		}
@@ -188,52 +175,13 @@ func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, reply
 func (c *consumer) handleHandshakeMessage(queueMessage messages.QueueMessage, replyTo string) {
 	c.logger.Infof("Processing handshake message")
 	languages := c.scheduler.GetSupportedLanguages()
-	payload, err := json.Marshal(languages)
-	if err != nil {
-		c.logger.Errorf("Failed to marshal supported languages: %s", err)
-		err = c.responder.PublishErrorToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
-		if err != nil {
-			c.logger.Errorf("Failed to publish error message: %s", err)
-		}
-	}
 
-	err = c.responder.PublishSucessToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, payload)
+	err := c.responder.PublishSucessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, languages)
 	if err != nil {
 		c.logger.Errorf("Failed to publish supported languages: %s", err)
-		err = c.responder.PublishErrorToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
+		err = c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, err)
 		if err != nil {
 			c.logger.Errorf("Failed to publish error message: %s", err)
 		}
 	}
 }
-
-// 	supportedLanguages := languages.GetSupportedLanguagesWithVersions()
-
-// 	var languagesList []map[string]interface{}
-// 	for name, versions := range supportedLanguages {
-// 		languagesList = append(languagesList, map[string]interface{}{
-// 			"name":     name,
-// 			"versions": versions,
-// 		})
-// 	}
-
-// 	payload, err := json.Marshal(map[string]interface{}{
-// 		"languages": languagesList,
-// 	})
-// 	if err != nil {
-// 		c.logger.Errorf("Failed to marshal supported languages: %s", err)
-// 		err = c.responder.PublishErrorToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
-// 		if err != nil {
-// 			c.logger.Errorf("Failed to publish error message: %s", err)
-// 		}
-// 	}
-
-// 	err = c.responder.PublishSucessToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, payload)
-// 	if err != nil {
-// 		c.logger.Errorf("Failed to publish supported languages: %s", err)
-// 		err = c.responder.PublishErrorToResponseQueue(c.channel, replyTo, queueMessage.Type, queueMessage.MessageID, err)
-// 		if err != nil {
-// 			c.logger.Errorf("Failed to publish error message: %s", err)
-// 		}
-// 	}
-// }

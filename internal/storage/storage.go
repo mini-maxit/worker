@@ -1,46 +1,39 @@
 package storage
 
 import (
-	// "bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	// "mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
-	// "strconv"
 	"time"
 
 	"github.com/mini-maxit/worker/internal/logger"
-	// "github.com/mini-maxit/worker/pkg/constants"
-	// cutomErrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
-	"github.com/mini-maxit/worker/pkg/solution"
-	// "github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
-type FileService interface {
+type Storage interface {
 	DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error)
 	UploadFile(filePath, bucket, objectKey string) error
 }
 
-type fileService struct {
+type storage struct {
 	fileStorageURL string
 	logger         *zap.SugaredLogger
 }
 
-func NewFilesService(fileServiceURL string) FileService {
+func NewStorage(fileServiceURL string) Storage {
 	logger := logger.NewNamedLogger("fileService")
-	return &fileService{
+	return &storage{
 		fileStorageURL: fileServiceURL,
 		logger:         logger,
 	}
 }
 
-func (fs *fileService) DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error) {
+func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error) {
 
 	fs.logger.Infof("Downloading file from bucket %s path %s", fileLocation.Bucket, fileLocation.Path)
 
@@ -100,138 +93,7 @@ func (fs *fileService) DownloadFile(fileLocation messages.FileLocation, destPath
 }
 
 // TODO: implement
-func (fs *fileService) UploadFile(filePath, bucket, objectKey string) error {
+func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
 	fs.logger.Error("UploadFile method not implemented yet")
 	return nil
 }
-
-func (fs *fileService) StoreSolutionResult(
-	outputDir string,
-	solutionResult solution.Result,
-	taskFilesDirPath string,
-	userID, taskID, submissionNumber int64,
-) error {
-	// outputsFolderPath := filepath.Join(taskFilesDirPath, outputDir)
-
-	// if solutionResult.StatusCode == solution.CompilationError {
-	// 	if err := fs.moveCompilationError(taskFilesDirPath, outputsFolderPath); err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	// if err := utils.RemoveEmptyErrFiles(outputsFolderPath); err != nil {
-	// 	return err
-	// }
-
-	// if err := utils.RemoveExecutionResultFile(outputsFolderPath); err != nil {
-	// 	return err
-	// }
-
-	// archiveFilePath, err := utils.TarGzFolder(outputsFolderPath)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// return fs.sendArchiveToStorage(archiveFilePath, userID, taskID, submissionNumber)
-	fs.logger.Errorf("StoreSolutionResult method not fully implemented yet")
-	return nil
-}
-
-// func (fs *fileService) moveCompilationError(taskDir, outputDir string) error {
-// 	src := filepath.Join(taskDir, constants.CompileErrorFileName)
-// 	dst := filepath.Join(outputDir, constants.CompileErrorFileName)
-// 	return os.Rename(src, dst)
-// }
-
-// func (fs *fileService) sendArchiveToStorage(
-// 	archiveFilePath string,
-// 	userID, taskID, submissionNumber int64,
-// ) error {
-// 	body, writer, err := fs.prepareMultipartBody(archiveFilePath, userID, taskID, submissionNumber)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	req, err := fs.createRequestWithContext(ctx, body, writer.FormDataContentType())
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return fs.sendRequestAndHandleResponse(req)
-// }
-
-// func (fs *fileService) prepareMultipartBody(
-// 	archiveFilePath string,
-// 	userID, taskID, submissionNumber int64,
-// ) (*bytes.Buffer, *multipart.Writer, error) {
-// 	file, err := os.Open(archiveFilePath)
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	defer file.Close()
-
-// 	body := &bytes.Buffer{}
-// 	writer := multipart.NewWriter(body)
-
-// 	form := map[string]string{
-// 		"userID":           strconv.FormatInt(userID, 10),
-// 		"taskID":           strconv.FormatInt(taskID, 10),
-// 		"submissionNumber": strconv.FormatInt(submissionNumber, 10),
-// 	}
-
-// 	for key, val := range form {
-// 		if err := writer.WriteField(key, val); err != nil {
-// 			return nil, nil, err
-// 		}
-// 	}
-
-// 	part, err := writer.CreateFormFile("archive", filepath.Base(archiveFilePath))
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	if _, err := io.Copy(part, file); err != nil {
-// 		return nil, nil, err
-// 	}
-
-// 	if err := writer.Close(); err != nil {
-// 		return nil, nil, err
-// 	}
-
-// 	return body, writer, nil
-// }
-
-// func (fs *fileService) createRequestWithContext(
-// 	ctx context.Context,
-// 	body *bytes.Buffer,
-// 	contentType string,
-// ) (*http.Request, error) {
-// 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fs.fileStorageURL+"/storeOutputs", body)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	req.Header.Set("Content-Type", contentType)
-// 	return req, nil
-// }
-
-// func (fs *fileService) sendRequestAndHandleResponse(req *http.Request) error {
-// 	client := &http.Client{}
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp.StatusCode != http.StatusOK {
-// 		buf := new(bytes.Buffer)
-// 		if _, err := buf.ReadFrom(resp.Body); err != nil {
-// 			fs.logger.Errorf("Failed to read response body: %s", err)
-// 		}
-// 		fs.logger.Errorf("Failed to store solution result: %s", buf.String())
-// 		return cutomErrors.ErrFailedToStoreSolution
-// 	}
-
-// 	return nil
-// }

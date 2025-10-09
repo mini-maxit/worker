@@ -11,17 +11,19 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/storage"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/pkg/solution"
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
 type Packager interface {
-	PrepareSolutionPackage(taskQueueMessage messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error)
+	PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error)
+	SendSolutionPackage(dirConfig *TaskDirConfig, task *messages.TaskQueueMessage, statusCode solution.ResultStatus) error
 }
 
 type packager struct {
 	logger  *zap.SugaredLogger
-	storage storage.FileService
+	storage storage.Storage
 }
 
 type TaskDirConfig struct {
@@ -36,18 +38,15 @@ type TaskDirConfig struct {
 	CompileErrFilePath    string
 }
 
-// Create user output directory
-// Set up output, error, diff files
-//
-
-func NewPackager() Packager {
+func NewPackager(storage storage.Storage) Packager {
 	logger := logger.NewNamedLogger("packager")
 	return &packager{
-		logger: logger,
+		logger:  logger,
+		storage: storage,
 	}
 }
 
-func (p *packager) PrepareSolutionPackage(taskQueueMessage messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error) {
+func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error) {
 	if p.storage == nil {
 		return nil, errors.New("storage service is not initialized")
 	}
@@ -68,7 +67,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage messages.TaskQueueMes
 
 	// Download test cases and create user files
 	for idx, tc := range taskQueueMessage.TestCases {
-		if err := p.handleTestCase(basePath, idx, tc); err != nil {
+		if err := p.prepareTestCaseFiles(basePath, idx, tc); err != nil {
 			_ = utils.RemoveIO(basePath, true, true)
 			return nil, err
 		}
@@ -132,8 +131,8 @@ func (p *packager) downloadSubmission(basePath string, submission messages.FileL
 	return nil
 }
 
-// handleTestCase downloads input and expected output for a test case and creates user files.
-func (p *packager) handleTestCase(basePath string, idx int, tc messages.TestCase) error {
+// prepareTestCaseFiles downloads input and expected output for a test case and creates user files.
+func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.TestCase) error {
 	// inputs
 	if tc.InputFile.Bucket == "" || tc.InputFile.Path == "" {
 		p.logger.Warnf("Test case %d input location is empty, skipping", idx)
@@ -190,3 +189,153 @@ func (p *packager) createCompileErrFile(basePath string) error {
 	compErrFile.Close()
 	return nil
 }
+
+func (p *packager) SendSolutionPackage(
+	dirConfig *TaskDirConfig,
+	task *messages.TaskQueueMessage,
+	statusCode solution.ResultStatus,
+
+) error {
+	err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, task.UserOutputFile, ".out")
+	if err != nil {
+		return err
+	}
+
+	err = p.uploadNonEmptyFiles(dirConfig.UserErrorDirPath, task.UserErrorFile, ".err")
+	if err != nil {
+		return err
+	}
+
+	err = p.uploadNonEmptyFiles(dirConfig.UserDiffDirPath, task.UserDiffFile, ".diff")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *packager) uploadNonEmptyFiles(dirPath string, outputFileLocation messages.FileLocation, fileExt string) error {
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		p.logger.Errorf("Failed to read directory %s: %s", dirPath, err)
+		return err
+	}
+
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == fileExt {
+			filePath := filepath.Join(dirPath, file.Name())
+			if fi, err := os.Stat(filePath); err == nil {
+				if fi.Size() == 0 {
+					continue
+				}
+			}
+
+			p.logger.Infof("Uploading file: %s", filePath)
+			if err := p.storage.UploadFile(filePath, outputFileLocation.Bucket, outputFileLocation.Path); err != nil {
+				p.logger.Errorf("Failed to upload file %s: %s", filePath, err)
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// func (fs *fileService) moveCompilationError(taskDir, outputDir string) error {
+// 	src := filepath.Join(taskDir, constants.CompileErrorFileName)
+// 	dst := filepath.Join(outputDir, constants.CompileErrorFileName)
+// 	return os.Rename(src, dst)
+// }
+
+// func (fs *fileService) sendArchiveToStorage(
+// 	archiveFilePath string,
+// 	userID, taskID, submissionNumber int64,
+// ) error {
+// 	body, writer, err := fs.prepareMultipartBody(archiveFilePath, userID, taskID, submissionNumber)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 	defer cancel()
+
+// 	req, err := fs.createRequestWithContext(ctx, body, writer.FormDataContentType())
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	return fs.sendRequestAndHandleResponse(req)
+// }
+
+// func (fs *fileService) prepareMultipartBody(
+// 	archiveFilePath string,
+// 	userID, taskID, submissionNumber int64,
+// ) (*bytes.Buffer, *multipart.Writer, error) {
+// 	file, err := os.Open(archiveFilePath)
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+// 	defer file.Close()
+
+// 	body := &bytes.Buffer{}
+// 	writer := multipart.NewWriter(body)
+
+// 	form := map[string]string{
+// 		"userID":           strconv.FormatInt(userID, 10),
+// 		"taskID":           strconv.FormatInt(taskID, 10),
+// 		"submissionNumber": strconv.FormatInt(submissionNumber, 10),
+// 	}
+
+// 	for key, val := range form {
+// 		if err := writer.WriteField(key, val); err != nil {
+// 			return nil, nil, err
+// 		}
+// 	}
+
+// 	part, err := writer.CreateFormFile("archive", filepath.Base(archiveFilePath))
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+// 	if _, err := io.Copy(part, file); err != nil {
+// 		return nil, nil, err
+// 	}
+
+// 	if err := writer.Close(); err != nil {
+// 		return nil, nil, err
+// 	}
+
+// 	return body, writer, nil
+// }
+
+// func (fs *fileService) createRequestWithContext(
+// 	ctx context.Context,
+// 	body *bytes.Buffer,
+// 	contentType string,
+// ) (*http.Request, error) {
+// 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fs.fileStorageURL+"/storeOutputs", body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	req.Header.Set("Content-Type", contentType)
+// 	return req, nil
+// }
+
+// func (fs *fileService) sendRequestAndHandleResponse(req *http.Request) error {
+// 	client := &http.Client{}
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer resp.Body.Close()
+
+// 	if resp.StatusCode != http.StatusOK {
+// 		buf := new(bytes.Buffer)
+// 		if _, err := buf.ReadFrom(resp.Body); err != nil {
+// 			fs.logger.Errorf("Failed to read response body: %s", err)
+// 		}
+// 		fs.logger.Errorf("Failed to store solution result: %s", buf.String())
+// 		return cutomErrors.ErrFailedToStoreSolution
+// 	}
+
+// 	return nil
+// }

@@ -21,6 +21,7 @@ import (
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
+	"github.com/mini-maxit/worker/pkg/solution"
 )
 
 type CommandConfig struct {
@@ -28,8 +29,7 @@ type CommandConfig struct {
 	DirConfig       *packager.TaskDirConfig
 	LanguageType    languages.LanguageType
 	LanguageVersion string
-	TimeLimits      []int64
-	MemoryLimits    []int64
+	Limits          solution.Limits
 }
 
 type ExecutionResult struct {
@@ -47,16 +47,10 @@ type executor struct {
 	jobsDataVolume string
 }
 
-func NewDockerExecutor(volume string) (Executor, error) {
+func NewExecutor(volume string, cli *client.Client) Executor {
 	logger := logger.NewNamedLogger("docker-executor")
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &executor{cli: cli, jobsDataVolume: volume, logger: logger}, nil
+
+	return &executor{cli: cli, jobsDataVolume: volume, logger: logger}
 }
 
 func (d *executor) ExecuteCommand(
@@ -109,12 +103,11 @@ func (d *executor) buildRunCommand(absoluteSolutionPath string) string {
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 	const minMemKB int64 = 128 * 1024 // 128 MB minimum per-test
-	timeEnv := make([]string, len(cfg.TimeLimits))
-	for i, s := range cfg.TimeLimits {
-		timeEnv[i] = strconv.FormatInt(s, 10)
-	}
-	memEnv := make([]string, len(cfg.MemoryLimits))
-	for i, kb := range cfg.MemoryLimits {
+	timeEnv := make([]string, len(cfg.Limits))
+	memEnv := make([]string, len(cfg.Limits))
+	for i, l := range cfg.Limits {
+		timeEnv[i] = strconv.FormatInt(l.TimeMs, 10)
+		kb := l.MemoryKb
 		if kb < minMemKB {
 			kb = minMemKB
 		}
@@ -150,7 +143,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
-			Memory:    maxIntSlice(cfg.MemoryLimits, int64(6*1024)) * 1024,
+			Memory:    cfg.Limits.MaxMemoryKBWithMinimum() * 1024,
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},
@@ -237,13 +230,4 @@ func (d *executor) prepareImageIfNotPresent(ctx context.Context, dockerImage str
 	return err
 }
 
-// maxIntSlice returns the larger of the values in a, or min if all are smaller.
-func maxIntSlice(a []int64, minKB int64) int64 {
-	m := minKB
-	for _, v := range a {
-		if v > m {
-			m = v
-		}
-	}
-	return m
-}
+

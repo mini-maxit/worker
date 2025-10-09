@@ -34,18 +34,21 @@ type FileLocation struct {
 }
 
 type TestCase struct {
-	InputFile        FileLocation `json:"input_file"`
-	ExpectedOutput   FileLocation `json:"expected_output"`
-	StdoutResult     FileLocation `json:"stdout_result"`
-	StderrResult     FileLocation `json:"stderr_result"`
-	TimeLimitMs      int64        `json:"time_limit_ms"`
-	MemoryLimitKB    int64        `json:"memory_limit_kb"`
+	InputFile      FileLocation `json:"input_file"`
+	ExpectedOutput FileLocation `json:"expected_output"`
+	StdoutResult   FileLocation `json:"stdout_result"`
+	StderrResult   FileLocation `json:"stderr_result"`
+	TimeLimitMs    int64        `json:"time_limit_ms"`
+	MemoryLimitKB  int64        `json:"memory_limit_kb"`
 }
 
 type TaskQueueMessage struct {
-	SubmissionNumber   int64        `json:"submission_number"`
-	LanguageType       string       `json:"language_type"`
-	LanguageVersion    string       `json:"language_version"`
-	SubmissionFile     FileLocation `json:"submission_file"`
-	TestCases          []TestCase   `json:"test_cases"`
+	SubmissionNumber int64        `json:"submission_number"`
+	LanguageType     string       `json:"language_type"`
+	LanguageVersion  string       `json:"language_version"`
+	SubmissionFile   FileLocation `json:"submission_file"`
+	UserOutputFile FileLocation `json:"user_output_file"`
+	UserErrorFile  FileLocation `json:"user_error_file"`
+	UserDiffFile   FileLocation `json:"user_diff_file"`
+	TestCases        []TestCase   `json:"test_cases"`
 }

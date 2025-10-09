@@ -5,38 +5,45 @@ import (
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/pkg/solution"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
 
 type Responder interface {
 	PublishErrorToResponseQueue(
-		channel *amqp.Channel,
-		responseQueueName, messageType, messageID string,
+		messageType, messageID string,
 		err error,
 	) error
-	PublishSucessToResponseQueue(
-		channel *amqp.Channel,
-		responseQueueName, messageType, messageID string,
-		payload []byte,
+	PublishSucessHandshakeRespond(
+		messageType, messageID string,
+		languageMap map[string][]string,
+	) error
+	PublishSucessStatusRespond(
+		messageType, messageID string,
+		statusMap map[string]interface{},
+	) error
+	PublishSucessTaskRespond(
+		messageType, messageID string,
+		taskResult solution.Result,
 	) error
 }
 
 type responder struct {
-	logger *zap.SugaredLogger
+	logger            *zap.SugaredLogger
+	channel           *amqp.Channel
+	responseQueueName string
 }
 
-func NewResponder() Responder {
+func NewResponder(channel *amqp.Channel, responseQueueName string) Responder {
 	return &responder{
-		logger: logger.NewNamedLogger("responder"),
+		logger:            logger.NewNamedLogger("responder"),
+		channel:           channel,
+		responseQueueName: responseQueueName,
 	}
 }
 
-func (r *responder) PublishErrorToResponseQueue(
-	channel *amqp.Channel,
-	responseQueueName, messageType, messageID string,
-	err error,
-) error {
+func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, err error) error {
 	errorPayload := map[string]string{"error": err.Error()}
 	payload, jsonErr := json.Marshal(errorPayload)
 	if jsonErr != nil {
@@ -55,7 +62,7 @@ func (r *responder) PublishErrorToResponseQueue(
 		return jsonErr
 	}
 
-	err = channel.Publish("", responseQueueName, false, false, amqp.Publishing{
+	err = r.channel.Publish("", r.responseQueueName, false, false, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: messageID,
 		Body:          responseJSON,
@@ -68,11 +75,34 @@ func (r *responder) PublishErrorToResponseQueue(
 	return nil
 }
 
-func (r *responder) PublishSucessToResponseQueue(
-	channel *amqp.Channel,
-	responseQueueName, messageType, messageID string,
-	payload []byte,
-) error {
+func (r *responder) PublishSucessTaskRespond(messageType, messageID string, taskResult solution.Result) error {
+	payload, err := json.Marshal(taskResult)
+	if err != nil {
+		return err
+	}
+
+	return r.publishRespondMessage(messageType, messageID, payload)
+}
+
+func (r *responder) PublishSucessHandshakeRespond(messageType, messageID string, languageMap map[string][]string) error {
+	payload, err := json.Marshal(languageMap)
+	if err != nil {
+		return err
+	}
+
+	return r.publishRespondMessage(messageType, messageID, payload)
+}
+
+func (r *responder) PublishSucessStatusRespond(messageType, messageID string, statusMap map[string]interface{}) error {
+	payload, err := json.Marshal(statusMap)
+	if err != nil {
+		return err
+	}
+
+	return r.publishRespondMessage(messageType, messageID, payload)
+}
+
+func (r *responder) publishRespondMessage(messageType, messageID string, payload []byte) error {
 	queueMessage := messages.ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
@@ -85,13 +115,10 @@ func (r *responder) PublishSucessToResponseQueue(
 		return jsonErr
 	}
 
-	r.logger.Infof("Publishing response to queue: %s", responseQueueName)
-	err := channel.Publish("", responseQueueName, false, false, amqp.Publishing{
+	err := r.channel.Publish("", r.responseQueueName, false, false, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
 	})
-
-	r.logger.Infof("Published response to queue: %s", responseQueueName)
 
 	if err != nil {
 		return err

@@ -6,30 +6,30 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/pkg/constants"
-	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	"go.uber.org/zap"
-	"golang.org/x/text/number"
 )
 
 // Returns true if the output and expected output are the same.
 // Returns false otherwise.
 // Returns an error if an error occurs.
 type Verifier interface {
-	EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, testCases []messages.TestCase) solution.Result
+	EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, limits []solution.Limit) solution.Result
 }
 
-type DefaultVerifier struct {
+type verifier struct {
 	flags  []string
 	logger *zap.SugaredLogger
 }
 
-func NewDefaultVerifier(flags []string) Verifier {
-	return &DefaultVerifier{
-		flags: flags,
+func NewVerifier(flags []string) Verifier {
+	return &verifier{
+		flags:  flags,
+		logger: logger.NewNamedLogger("verifier"),
 	}
 }
 
@@ -37,11 +37,11 @@ func NewDefaultVerifier(flags []string) Verifier {
 // It returns true if the files are the same, false otherwise.
 // It returns a string of differences if there are any.
 // It returns an error if any issue occurs during the comparison.
-func (dv *DefaultVerifier) compareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
+func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
 	outputPath = filepath.Clean(outputPath)
 	expectedFilePath = filepath.Clean(expectedFilePath)
 
-	args := dv.flags
+	args := v.flags
 
 	args = append(args, outputPath, expectedFilePath)
 	diffCmd := exec.Command("diff", args...)
@@ -65,15 +65,15 @@ func (dv *DefaultVerifier) compareOutput(outputPath, expectedFilePath, stderrPat
 	return true, nil
 }
 
-func (dv *DefaultVerifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, limits []solution.Limit) solution.Result {
+func (v *verifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, limits []solution.Limit) solution.Result {
 	testResults := make([]solution.TestResult, len(limits))
 	solutionStatuses := make([]solution.ResultStatus, len(limits))
 	solutionMessages := make([]string, len(limits))
 	numberOfTests := len(limits)
 
-	execResults, err := dv.readExecutionResultFiles(dirConfig.UserExecResultDirPath, numberOfTests)
+	execResults, err := v.readExecutionResultFiles(dirConfig.UserExecResultDirPath, numberOfTests)
 	if err != nil {
-		dv.logger.Errorf("Error reading execution result file [MsgID: %s]: %s", messageID, err.Error())
+		v.logger.Errorf("Error reading execution result file [MsgID: %s]: %s", messageID, err.Error())
 		return solution.Result{
 			StatusCode: solution.InternalError,
 			Message:    err.Error(),
@@ -85,7 +85,7 @@ func (dv *DefaultVerifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfi
 		expectedOutputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserExecResultDirPath, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%d.err", dirConfig.UserErrorDirPath, (i + 1))
 
-		testResults[i], solutionStatuses[i], solutionMessages[i] = dv.evaluateTestCase(
+		testResults[i], solutionStatuses[i], solutionMessages[i] = v.evaluateTestCase(
 			outputPath,
 			expectedOutputPath,
 			stderrPath,
@@ -98,7 +98,7 @@ func (dv *DefaultVerifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfi
 
 	// Construct final message summarizing the results
 
-	finalMessage, finalStatus := dv.constructFinalMessage(solutionStatuses, solutionMessages)
+	finalMessage, finalStatus := v.constructFinalMessage(solutionStatuses, solutionMessages)
 
 	return solution.Result{
 		StatusCode:  finalStatus,
@@ -107,7 +107,7 @@ func (dv *DefaultVerifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfi
 	}
 }
 
-func (dv *DefaultVerifier) constructFinalMessage(statuses []solution.ResultStatus, messages []string) (string, solution.ResultStatus) {
+func (v *verifier) constructFinalMessage(statuses []solution.ResultStatus, messages []string) (string, solution.ResultStatus) {
 	var finalMessage string
 	finalStatus := solution.Success
 	for _, status := range statuses {
@@ -131,7 +131,7 @@ func (dv *DefaultVerifier) constructFinalMessage(statuses []solution.ResultStatu
 	return finalMessage, finalStatus
 }
 
-func (dv *DefaultVerifier) readExecutionResultFiles(
+func (v *verifier) readExecutionResultFiles(
 	execResultDirPath string,
 	numberOfTest int,
 ) ([]*executor.ExecutionResult, error) {
@@ -141,7 +141,7 @@ func (dv *DefaultVerifier) readExecutionResultFiles(
 		filePath := filepath.Join(execResultDirPath, fmt.Sprintf("%d.res", i+1))
 		file, err := os.Open(filePath)
 		if err != nil {
-			dv.logger.Errorf("Failed to open execution result file %s: %s", filePath, err)
+			v.logger.Errorf("Failed to open execution result file %s: %s", filePath, err)
 			return nil, err
 		}
 		defer file.Close()
@@ -150,7 +150,7 @@ func (dv *DefaultVerifier) readExecutionResultFiles(
 		var execTime float64
 		_, err = fmt.Fscanf(file, "%d %f\n", &exitCode, &execTime)
 		if err != nil {
-			dv.logger.Errorf("Failed to read line %d: %s", i, err)
+			v.logger.Errorf("Failed to read line %d: %s", i, err)
 			return nil, err
 		}
 		results[i] = &executor.ExecutionResult{
@@ -161,7 +161,7 @@ func (dv *DefaultVerifier) readExecutionResultFiles(
 	return results, nil
 }
 
-func (dv *DefaultVerifier) evaluateTestCase(
+func (v *verifier) evaluateTestCase(
 	outputPath string,
 	expectedOutputPath string,
 	stderrPath string,
@@ -176,7 +176,7 @@ func (dv *DefaultVerifier) evaluateTestCase(
 
 	switch execResult.ExitCode {
 	case constants.ExitCodeSuccess:
-		passed, err := dv.compareOutput(outputPath, expectedOutputPath, stderrPath)
+		passed, err := v.compareOutput(outputPath, expectedOutputPath, stderrPath)
 		if err != nil {
 			return solution.TestResult{
 				Passed:        false,

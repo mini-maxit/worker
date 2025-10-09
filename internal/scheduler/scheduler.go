@@ -1,22 +1,24 @@
 package scheduler
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/pipeline"
-	"github.com/mini-maxit/worker/internal/storage"
+	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
+	"github.com/mini-maxit/worker/internal/stages/compiler"
+	"github.com/mini-maxit/worker/internal/stages/executor"
+	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
 
 type Scheduler interface {
 	GetWorkersStatus() map[string]interface{}
-	ProcessTask(responseQueueName, messageID string, task messages.TaskQueueMessage) error
+	ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error
 	GetSupportedLanguages() map[string][]string
 }
 
@@ -24,21 +26,22 @@ type scheduler struct {
 	mu               sync.Mutex
 	busyWorkersCount int
 	workers          map[int]pipeline.Worker
-	workerChannel    *amqp.Channel
-	workerQueue      string
 	maxWorkers       int
 	logger           *zap.SugaredLogger
 }
 
 func NewScheduler(
-	workerChannel *amqp.Channel,
-	workerQueue string,
 	maxWorkers int,
-	storage storage.FileService,
+	compiler compiler.Compiler,
+	packager packager.Packager,
+	executor executor.Executor,
+	verifier verifier.Verifier,
+	responder responder.Responder,
+
 ) Scheduler {
 	workers := make(map[int]pipeline.Worker, maxWorkers)
 	for i := 0; i < maxWorkers; i++ {
-		workers[i] = pipeline.NewWorker(i, workerChannel, storage, logger.NewNamedLogger(fmt.Sprintf("worker-%d", i)))
+		workers[i] = pipeline.NewWorker(i, compiler, packager, executor, verifier, responder)
 	}
 
 	workerPoolLogger := logger.NewNamedLogger("workerPool")
@@ -46,8 +49,6 @@ func NewScheduler(
 	return &scheduler{
 		mu:            sync.Mutex{},
 		workers:       workers,
-		workerChannel: workerChannel,
-		workerQueue:   workerQueue,
 		maxWorkers:    maxWorkers,
 		logger:        workerPoolLogger,
 	}
@@ -89,7 +90,7 @@ func (s *scheduler) getFreeWorker() (pipeline.Worker, error) {
 	return nil, errors.ErrFailedToGetFreeWorker
 }
 
-func (s *scheduler) ProcessTask(responseQueueName, messageID string, task messages.TaskQueueMessage) error {
+func (s *scheduler) ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error {
 	s.logger.Infof("Processing task [MsgID: %s]", messageID)
 
 	worker, err := s.getFreeWorker()

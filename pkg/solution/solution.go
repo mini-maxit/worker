@@ -1,5 +1,9 @@
 package solution
 
+import (
+	"github.com/mini-maxit/worker/pkg/constants"
+)
+
 type ResultStatus int
 
 const (
@@ -48,4 +52,17 @@ type TestResult struct {
 type Limit struct {
 	TimeMs   int64 // Time limit in milliseconds
 	MemoryKb int64 // Memory limit in kilobytes
+}
+
+// Limits is a named slice type so we can define methods on it.
+type Limits []Limit
+
+func (l Limits) MaxMemoryKBWithMinimum() int64 {
+	max := constants.MinContainerMemoryKB
+	for _, v := range l {
+		if v.MemoryKb > max {
+			max = v.MemoryKb
+		}
+	}
+	return max
 }
