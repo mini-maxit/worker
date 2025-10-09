@@ -127,8 +127,9 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string, env []string) *container.Config {
 	stopTimeout := int(2)
 	return &container.Config{
-		Image:       dockerImage,
-		Cmd:         []string{"bash", "-lc", runCmd},
+		Image: dockerImage,
+		// Cmd:         []string{"bash", "-lc", runCmd},
+		Cmd:         []string{"/bin/bash", "-c", "while true; do sleep 30; done;"},
 		WorkingDir:  workspaceDir,
 		Env:         env,
 		User:        "0:0",
@@ -139,7 +140,8 @@ func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	return &container.HostConfig{
-		AutoRemove:  true,
+		//AutoRemove:  true,
+		AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
@@ -229,5 +231,3 @@ func (d *executor) prepareImageIfNotPresent(ctx context.Context, dockerImage str
 	_, err = io.Copy(io.Discard, reader)
 	return err
 }
-
-

@@ -26,7 +26,7 @@ type storage struct {
 }
 
 func NewStorage(fileServiceURL string) Storage {
-	logger := logger.NewNamedLogger("fileService")
+	logger := logger.NewNamedLogger("storage")
 	return &storage{
 		fileStorageURL: fileServiceURL,
 		logger:         logger,
@@ -92,8 +92,47 @@ func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath str
 	return destPath, nil
 }
 
-// TODO: implement
 func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
-	fs.logger.Error("UploadFile method not implemented yet")
+	fileName := filepath.Base(filePath)
+	fs.logger.Infof("Uploading file %s to bucket %s path %s", fileName, bucket, objectKey)
+
+	// Build request URL: {baseUrl}/buckets/:bucketName/:objectKey
+	key := objectKey + "/" + fileName
+	requestUrl := fmt.Sprintf("%s/buckets/%s/%s", fs.fileStorageURL, bucket, key)
+
+	// Open the file to upload
+	file, err := os.Open(filePath)
+	if err != nil {
+		fs.logger.Errorf("Failed to open file %s: %s", filePath, err)
+		return err
+	}
+	defer file.Close()
+
+	// Create a new HTTP request
+	req, err := http.NewRequest(http.MethodPost, requestUrl, file)
+	if err != nil {
+		fs.logger.Errorf("Failed to create upload request: %s", err)
+		return err
+	}
+
+	// Set the content type
+	req.Header.Set("Content-Type", "multipart/form-data")
+
+	// Send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fs.logger.Errorf("Failed to upload file: %s", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fs.logger.Errorf("Failed to upload file. %s", resp.Status)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return errors.New(string(bodyBytes))
+	}
+
+	fs.logger.Infof("File uploaded successfully to %s", requestUrl)
 	return nil
 }

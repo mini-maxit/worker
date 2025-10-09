@@ -32,14 +32,14 @@ func initializeSolutionCompiler(langType languages.LanguageType, langVersion str
 }
 
 // get proper compiler and compile if needed
-func (c *compiler) CompileSolutionIfNeeded(langType languages.LanguageType, langVersion, sourceFilePath, outFilePath, compErrFilePath, messageID string) error {
+func (c *compiler) CompileSolutionIfNeeded(langType languages.LanguageType, langVersion, sourceFilePath, execFilePath, compErrFilePath, messageID string) error {
 	compiler, err := initializeSolutionCompiler(langType, langVersion, messageID)
 	if err != nil {
 		return err
 	}
 
 	if compiler.RequiresCompilation() {
-		return compiler.Compile(sourceFilePath, outFilePath, compErrFilePath, messageID)
+		return compiler.Compile(sourceFilePath, execFilePath, compErrFilePath, messageID)
 	}
 	return nil
 }

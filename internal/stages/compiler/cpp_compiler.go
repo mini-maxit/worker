@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"go.uber.org/zap"
 )
 
@@ -20,11 +20,11 @@ func (e *CppCompiler) RequiresCompilation() bool {
 }
 
 // For now compile allows only one file.
-func (e *CppCompiler) Compile(sourceFilePath, outFilePath, compErrFilePath, messageID string) error {
+func (e *CppCompiler) Compile(sourceFilePath, execFilePath, compErrFilePath, messageID string) error {
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
 	// Correctly pass the command and its arguments as separate strings.
 	versionFlag := "-std=" + e.version
-	cmd := exec.Command("g++", "-o", outFilePath, versionFlag, sourceFilePath)
+	cmd := exec.Command("g++", "-o", execFilePath, versionFlag, sourceFilePath)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

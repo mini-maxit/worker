@@ -12,7 +12,8 @@ import (
 	"github.com/mini-maxit/worker/internal/storage"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
-	"github.com/mini-maxit/worker/utils"
+
+	// "github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +32,7 @@ type TaskDirConfig struct {
 	InputDirPath          string
 	OutputDirPath         string
 	UserSolutionPath      string
+	UserExecFilePath      string
 	UserOutputDirPath     string
 	UserExecResultDirPath string
 	UserErrorDirPath      string
@@ -54,29 +56,37 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 	basePath := filepath.Join("/tmp", msgID)
 
 	// create directories
+	p.logger.Infof("Creating base directory at %s", basePath)
 	if err := p.createBaseDirs(basePath); err != nil {
-		_ = utils.RemoveIO(basePath, true, true)
+		p.logger.Errorf("Failed to create base directory: %s", err)
+		// _ = utils.RemoveIO(basePath, true, true)
 		return nil, err
 	}
 
 	// Download submission
+	p.logger.Infof("Downloading submission file to %s", basePath)
 	if err := p.downloadSubmission(basePath, taskQueueMessage.SubmissionFile); err != nil {
-		_ = utils.RemoveIO(basePath, true, true)
+		p.logger.Errorf("Failed to download submission file: %s", err)
+		// _ = utils.RemoveIO(basePath, true, true)
 		return nil, err
 	}
 
 	// Download test cases and create user files
+	p.logger.Infof("Preparing test case files in %s", basePath)
 	for idx, tc := range taskQueueMessage.TestCases {
 		if err := p.prepareTestCaseFiles(basePath, idx, tc); err != nil {
-			_ = utils.RemoveIO(basePath, true, true)
+			p.logger.Errorf("Failed to prepare test case files: %s", err)
+			// _ = utils.RemoveIO(basePath, true, true)
 			return nil, err
 		}
 	}
 
 	// Create compile.err file
+	p.logger.Infof("Creating compile.err file in %s", basePath)
 	err := p.createCompileErrFile(basePath)
 	if err != nil {
-		_ = utils.RemoveIO(basePath, true, true)
+		p.logger.Errorf("Failed to create compile.err file: %s", err)
+		// _ = utils.RemoveIO(basePath, true, true)
 		return nil, err
 	}
 
@@ -84,7 +94,8 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 		TmpDirPath:            basePath,
 		InputDirPath:          filepath.Join(basePath, "inputs"),
 		OutputDirPath:         filepath.Join(basePath, "outputs"),
-		UserSolutionPath:      filepath.Join(basePath, "solution"),
+		UserSolutionPath:      filepath.Join(basePath, filepath.Base(taskQueueMessage.SubmissionFile.Path)),
+		UserExecFilePath:      filepath.Join(basePath, strings.TrimSuffix(filepath.Base(taskQueueMessage.SubmissionFile.Path), filepath.Ext(taskQueueMessage.SubmissionFile.Path))),
 		UserOutputDirPath:     filepath.Join(basePath, "userOutputs"),
 		UserErrorDirPath:      filepath.Join(basePath, "userErrors"),
 		UserDiffDirPath:       filepath.Join(basePath, "userDiff"),
@@ -100,7 +111,6 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 func (p *packager) createBaseDirs(basePath string) error {
 	dirs := []string{
 		basePath,
-		filepath.Join(basePath, "solution"),
 		filepath.Join(basePath, "inputs"),
 		filepath.Join(basePath, "outputs"),
 		filepath.Join(basePath, "userOutputs"),
@@ -123,8 +133,8 @@ func (p *packager) downloadSubmission(basePath string, submission messages.FileL
 	if submission.Bucket == "" || submission.Path == "" {
 		return fmt.Errorf("submission file location is empty")
 	}
-	solutionDest := filepath.Join(basePath, "solution")
-	if _, err := p.storage.DownloadFile(submission, solutionDest); err != nil {
+	path := filepath.Join(basePath, filepath.Base(submission.Path))
+	if _, err := p.storage.DownloadFile(submission, path); err != nil {
 		p.logger.Errorf("Failed to download submission file: %s", err)
 		return err
 	}
@@ -196,17 +206,17 @@ func (p *packager) SendSolutionPackage(
 	statusCode solution.ResultStatus,
 
 ) error {
-	err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, task.UserOutputFile, ".out")
+	err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, task.UserOutputBase, ".out")
 	if err != nil {
 		return err
 	}
 
-	err = p.uploadNonEmptyFiles(dirConfig.UserErrorDirPath, task.UserErrorFile, ".err")
+	err = p.uploadNonEmptyFiles(dirConfig.UserErrorDirPath, task.UserErrorBase, ".err")
 	if err != nil {
 		return err
 	}
 
-	err = p.uploadNonEmptyFiles(dirConfig.UserDiffDirPath, task.UserDiffFile, ".diff")
+	err = p.uploadNonEmptyFiles(dirConfig.UserDiffDirPath, task.UserDiffBase, ".diff")
 	if err != nil {
 		return err
 	}

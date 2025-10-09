@@ -1,0 +1,74 @@
+{
+    "type": "task",
+    "message_id": "asf",
+    "payload": {
+        "language_type": "cpp",
+        "language_version": "17",
+        "submission_file": {
+            "bucket": "task1",
+            "path": "Task/prog.cpp"
+        },
+        "user_output_base": {
+            "bucket": "task1",
+            "path": "userOutput"
+        },
+        "user_error_base": {
+            "bucket": "task1",
+            "path": "userError"
+        },
+        "user_diff_base": {
+            "bucket": "task1",
+            "path": "userDiff"
+        },
+        "test_cases": [
+            {
+                "input_file": {
+                    "bucket": "task1",
+                    "path": "Task/inputs/1.in"
+                },
+                "expected_output": {
+                    "bucket": "task1",
+                    "path": "Task/outputs/1.out"
+                },
+                "time_limit_ms": 2000,
+                "memory_limit_kb": 65536
+            },
+            {
+                "input_file": {
+                    "bucket": "task1",
+                    "path": "Task/inputs/2.in"
+                },
+                "expected_output": {
+                    "bucket": "task1",
+                    "path": "Task/outputs/2.out"
+                },
+                "time_limit_ms": 2000,
+                "memory_limit_kb": 65536
+            },
+            {
+                "input_file": {
+                    "bucket": "task1",
+                    "path": "Task/inputs/3.in"
+                },
+                "expected_output": {
+                    "bucket": "task1",
+                    "path": "Task/outputs/3.out"
+                },
+                "time_limit_ms": 2000,
+                "memory_limit_kb": 65536
+            },
+            {
+                "input_file": {
+                    "bucket": "task1",
+                    "path": "Task/inputs/4.in"
+                },
+                "expected_output": {
+                    "bucket": "task1",
+                    "path": "Task/outputs/4.out"
+                },
+                "time_limit_ms": 2000,
+                "memory_limit_kb": 65536
+            }
+        ]
+    }
+}

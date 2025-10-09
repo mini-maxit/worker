@@ -120,7 +120,7 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 	c.logger.Infof("Processing task message")
 
 	var task *messages.TaskQueueMessage
-	if err := json.Unmarshal(queueMessage.Payload, task); err != nil {
+	if err := json.Unmarshal(queueMessage.Payload, &task); err != nil {
 		c.logger.Errorf("Failed to unmarshal task message: %s", err)
 		pubErr := c.responder.PublishErrorToResponseQueue(
 			queueMessage.Type,
@@ -160,7 +160,6 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, replyTo string) {
 	c.logger.Infof("Processing status message")
 	status := c.scheduler.GetWorkersStatus()
-
 
 	err := c.responder.PublishSucessStatusRespond(queueMessage.Type, queueMessage.MessageID, status)
 	if err != nil {
