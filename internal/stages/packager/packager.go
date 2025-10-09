@@ -28,7 +28,8 @@ type packager struct {
 }
 
 type TaskDirConfig struct {
-	TmpDirPath            string
+	WorkspaceDirPath      string
+	PackageDirPath        string
 	InputDirPath          string
 	OutputDirPath         string
 	UserSolutionPath      string
@@ -91,7 +92,8 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 	}
 
 	cfg := &TaskDirConfig{
-		TmpDirPath:            basePath,
+		WorkspaceDirPath:      "/tmp/",
+		PackageDirPath:        basePath,
 		InputDirPath:          filepath.Join(basePath, "inputs"),
 		OutputDirPath:         filepath.Join(basePath, "outputs"),
 		UserSolutionPath:      filepath.Join(basePath, filepath.Base(taskQueueMessage.SubmissionFile.Path)),

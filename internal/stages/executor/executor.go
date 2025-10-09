@@ -61,7 +61,7 @@ func (d *executor) ExecuteCommand(
 	defer cancel()
 
 	// Build the run_tests invocation
-	runCmd := d.buildRunCommand(cfg.DirConfig.UserSolutionPath)
+	runCmd := d.buildRunCommand(cfg.DirConfig.UserExecFilePath)
 
 	// Build environment variables
 	env := d.buildEnvironmentVariables(cfg)
@@ -75,7 +75,7 @@ func (d *executor) ExecuteCommand(
 	}
 
 	// Container configuration
-	containerCfg := d.buildContainerConfig(cfg.DirConfig.TmpDirPath, dockerImage, runCmd, env)
+	containerCfg := d.buildContainerConfig(cfg.DirConfig.PackageDirPath, dockerImage, runCmd, env)
 
 	// Host configuration
 	hostCfg := d.buildHostConfig(cfg)
@@ -126,6 +126,8 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 
 func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string, env []string) *container.Config {
 	stopTimeout := int(2)
+	d.logger.Infof("Running command in container: %s", runCmd)
+	d.logger.Infof("Workspace directory in container: %s", workspaceDir)
 	return &container.Config{
 		Image: dockerImage,
 		// Cmd:         []string{"bash", "-lc", runCmd},
@@ -140,8 +142,8 @@ func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	return &container.HostConfig{
-		//AutoRemove:  true,
-		AutoRemove:  false,
+		AutoRemove: true,
+		// AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
@@ -152,7 +154,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
 			Source: d.jobsDataVolume,
-			Target: cfg.DirConfig.TmpDirPath,
+			Target: cfg.DirConfig.WorkspaceDirPath,
 		}},
 		SecurityOpt:  []string{"no-new-privileges"},
 		CgroupnsMode: container.CgroupnsModePrivate,

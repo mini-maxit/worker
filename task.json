@@ -36,11 +36,11 @@
             {
                 "input_file": {
                     "bucket": "task1",
-                    "path": "Task/inputs/2.in"
+                    "path": "/Task/inputs/2.in"
                 },
                 "expected_output": {
                     "bucket": "task1",
-                    "path": "Task/outputs/2.out"
+                    "path": "/Task/outputs/2.out"
                 },
                 "time_limit_ms": 2000,
                 "memory_limit_kb": 65536
