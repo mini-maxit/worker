@@ -118,9 +118,9 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 		"TIME_LIMITS=" + strings.Join(timeEnv, " "),
 		"MEM_LIMITS=" + strings.Join(memEnv, " "),
 		"INPUT_DIR=" + filepath.Base(cfg.DirConfig.InputDirPath),
-		"OUTPUT_DIR=" + filepath.Base(cfg.DirConfig.OutputDirPath),
-		"ERROR_DIR=" + filepath.Base(cfg.DirConfig.UserErrorDirPath),
-		"EXEC_RESULT_DIR=" + filepath.Base(cfg.DirConfig.UserExecResultDirPath),
+		"USER_OUTPUT_DIR=" + filepath.Base(cfg.DirConfig.UserOutputDirPath),
+		"USER_ERROR_DIR=" + filepath.Base(cfg.DirConfig.UserErrorDirPath),
+		"USER_EXEC_RESULT_DIR=" + filepath.Base(cfg.DirConfig.UserExecResultDirPath),
 	}
 }
 
@@ -142,8 +142,7 @@ func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	return &container.HostConfig{
-		AutoRemove: true,
-		// AutoRemove:  false,
+		AutoRemove:  true,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),

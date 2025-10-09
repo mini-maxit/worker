@@ -9,18 +9,18 @@ if [[ -z "$INPUT_DIR" ]]; then
   exit 1
 fi
 
-if [[ -z "$OUTPUT_DIR" ]]; then
-  echo "ERROR: OUTPUT_DIR must be set" >&2
+if [[ -z "$USER_OUTPUT_DIR" ]]; then
+  echo "ERROR: USER_OUTPUT_DIR must be set" >&2
   exit 1
 fi
 
-if [[ -z "$EXEC_RESULT_DIR" ]]; then
-  echo "ERROR: EXEC_RESULT_DIR must be set" >&2
+if [[ -z "$USER_EXEC_RESULT_DIR" ]]; then
+  echo "ERROR: USER_EXEC_RESULT_DIR must be set" >&2
   exit 1
 fi
 
-if [[ -z "$ERROR_DIR" ]]; then
-  echo "ERROR: ERROR_DIR must be set" >&2
+if [[ -z "$USER_ERROR_DIR" ]]; then
+  echo "ERROR: USER_ERROR_DIR must be set" >&2
   exit 1
 fi
 
@@ -44,9 +44,9 @@ for idx in "${!inputs[@]}"; do
   tsec=${times[idx]}
   mlimit_kb=${mems[idx]}
 
-  out="${OUTPUT_DIR}/${testno}.out"
-  err="${ERROR_DIR}/${testno}.err"
-  exec_result="${EXEC_RESULT_DIR}/${testno}.result"
+  out="${USER_OUTPUT_DIR}/${testno}.out"
+  err="${USER_ERROR_DIR}/${testno}.err"
+  exec_result="${USER_EXEC_RESULT_DIR}/${testno}.res"
 
   # run in subshell to isolate failure
   (
