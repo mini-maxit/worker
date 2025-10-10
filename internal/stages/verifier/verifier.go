@@ -41,7 +41,7 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 	outputPath = filepath.Clean(outputPath)
 	expectedFilePath = filepath.Clean(expectedFilePath)
 
-	args := v.flags
+	args := append([]string{}, v.flags...)
 
 	args = append(args, outputPath, expectedFilePath)
 	diffCmd := exec.Command("diff", args...)
@@ -53,11 +53,19 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 	defer diffCmdOutput.Close()
 
 	diffCmd.Stdout = diffCmdOutput
+	diffCmd.Stderr = diffCmdOutput
 	err = diffCmd.Run()
-	diffExitCode := diffCmd.ProcessState.ExitCode()
+	var diffExitCode int
+	if diffCmd.ProcessState != nil {
+		diffExitCode = diffCmd.ProcessState.ExitCode()
+	}
 	if err != nil {
 		if diffExitCode == constants.ExitCodeDifference {
 			return false, nil
+		}
+
+		if rb, rerr := os.ReadFile(stderrPath); rerr == nil && len(rb) > 0 {
+			return false, fmt.Errorf("error running diff command: %w: %s", err, string(rb))
 		}
 		return false, fmt.Errorf("error running diff command: %w", err)
 	}
@@ -80,9 +88,10 @@ func (v *verifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messa
 		}
 	}
 
-	for i := range numberOfTests {
+	for i := 0; i < numberOfTests; i++ {
 		outputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserOutputDirPath, (i + 1))
-		expectedOutputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserExecResultDirPath, (i + 1))
+		// expected outputs are stored in the package outputs directory
+		expectedOutputPath := fmt.Sprintf("%s/%d.out", dirConfig.OutputDirPath, (i + 1))
 		stderrPath := fmt.Sprintf("%s/%d.err", dirConfig.UserErrorDirPath, (i + 1))
 
 		testResults[i], solutionStatuses[i], solutionMessages[i] = v.evaluateTestCase(
