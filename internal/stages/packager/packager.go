@@ -174,12 +174,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 	}
 
 	// Create user files: X.out, X.err, X.diff using input filename stem or index fallback.
-	var prefix string
-	if tc.InputFile.Path != "" {
-		prefix = strings.TrimSuffix(filepath.Base(tc.InputFile.Path), filepath.Ext(tc.InputFile.Path))
-	} else {
-		prefix = strconv.Itoa(idx + 1)
-	}
+	prefix := getTestCasePrefix(tc.InputFile.Path, idx)
 
 	userOut := filepath.Join(basePath, "userOutputs", prefix+".out")
 	userErr := filepath.Join(basePath, "userErrors", prefix+".err")
