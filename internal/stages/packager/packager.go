@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/mini-maxit/worker/internal/logger"
@@ -173,8 +172,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		}
 	}
 
-	// Create user files: X.out, X.err, X.diff using input filename stem or index fallback.
-	prefix := getTestCasePrefix(tc.InputFile.Path, idx)
+	prefix := strings.TrimSuffix(filepath.Base(tc.InputFile.Path), filepath.Ext(tc.InputFile.Path))
 
 	userOut := filepath.Join(basePath, "userOutputs", prefix+".out")
 	userErr := filepath.Join(basePath, "userErrors", prefix+".err")
