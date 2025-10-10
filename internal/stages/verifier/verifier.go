@@ -60,10 +60,12 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 		diffExitCode = diffCmd.ProcessState.ExitCode()
 	}
 	if err != nil {
-		if diffExitCode == constants.ExitCodeDifference {
+		if diffCmd.ProcessState != nil && diffExitCode == constants.ExitCodeDifference {
 			return false, nil
 		}
-
+		if diffCmd.ProcessState == nil {
+			return false, fmt.Errorf("error running diff command: %w (process state unavailable)", err)
+		}
 		if rb, rerr := os.ReadFile(stderrPath); rerr == nil && len(rb) > 0 {
 			return false, fmt.Errorf("error running diff command: %w: %s", err, string(rb))
 		}
