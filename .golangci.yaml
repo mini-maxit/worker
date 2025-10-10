@@ -33,7 +33,7 @@ linters:
   default: "none"
   enable:
     ## enabled by default
-    - errcheck # checking for unchecked errors, these unchecked errors can be critical bugs in some cases # TODO: enable this
+    - errcheck # checking for unchecked errors, these unchecked errors can be critical bugs in some cases
     - govet # reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
     - ineffassign # detects when assignments to existing variables are not used
     - staticcheck # is a go vet on steroids, applying a ton of static analysis checks
@@ -48,7 +48,7 @@ linters:
     - copyloopvar # detects places where loop variables are copied (Go 1.22+)
     # - cyclop # checks function and package cyclomatic complexity
     # - depguard # checks if package imports are in a list of acceptable packages
-    - dupl # tool for code clone detection # TODO: enable this and fix
+    - dupl # tool for code clone detection
     - durationcheck # checks for two durations multiplied together
     - errname # checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error
     - errorlint # finds code that will cause problems with the error wrapping scheme introduced in Go 1.13
@@ -56,11 +56,11 @@ linters:
     - exptostd # detects functions from golang.org/x/exp/ that can be replaced by std functions
     - fatcontext # detects nested contexts in loops
     - forbidigo # forbids identifiers
-    - funlen # tool for detection of long functions # TODO: enable and fix this
+    - funlen # tool for detection of long functions
     - gocheckcompilerdirectives # validates go compiler directive comments (//go:)
     - gochecknoinits # checks that no init functions are present in Go code
     - gochecksumtype # checks exhaustiveness on Go "sum types"
-    # - gocognit # computes and checks the cognitive complexity of functions # TODO: enable and fix this
+    - gocognit # computes and checks the cognitive complexity of functions
     - goconst # finds repeated strings that could be replaced by a constant
     - gocritic # provides diagnostics that check for bugs, performance and style issues
     - gocyclo # computes and checks the cyclomatic complexity of functions
@@ -81,7 +81,7 @@ linters:
     - nilerr # finds the code that returns nil even if it checks that the error is not nil
     - nilnesserr # reports that it checks for err != nil, but it returns a different nil value error (powered by nilness and nilerr)
     - nilnil # checks that there is no simultaneous return of nil error and an invalid value
-    - noctx # finds sending http request without context.Context # TODO: enable and fix this
+    - noctx # finds sending http request without context.Context
     - nolintlint # reports ill-formed or insufficient nolint directives
     - nonamedreturns # reports all named returns
     - perfsprint # checks that fmt.Sprintf can be replaced with a faster alternative
