@@ -153,7 +153,7 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 	solutionResult := ws.verifier.EvaluateAllTestCases(dc, messageID, cfg.Limits)
 
 	// Store solution results
-	err = ws.packager.SendSolutionPackage(dc, task, solutionResult.StatusCode)
+	err = ws.packager.SendSolutionPackage(dc, task)
 	if err != nil {
 		ws.publishAndLogError(err)
 		return

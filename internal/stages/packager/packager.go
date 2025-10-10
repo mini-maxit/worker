@@ -11,7 +11,6 @@ import (
 	"github.com/mini-maxit/worker/internal/storage"
 	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
-	"github.com/mini-maxit/worker/pkg/solution"
 
 	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
@@ -19,7 +18,7 @@ import (
 
 type Packager interface {
 	PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error)
-	SendSolutionPackage(dirConfig *TaskDirConfig, task *messages.TaskQueueMessage, statusCode solution.ResultStatus) error
+	SendSolutionPackage(dirConfig *TaskDirConfig, task *messages.TaskQueueMessage) error
 }
 
 type packager struct {
@@ -212,7 +211,6 @@ func (p *packager) createCompileErrFile(basePath string) error {
 func (p *packager) SendSolutionPackage(
 	dirConfig *TaskDirConfig,
 	task *messages.TaskQueueMessage,
-	statusCode solution.ResultStatus,
 
 ) error {
 	err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, task.UserOutputBase, ".out")
