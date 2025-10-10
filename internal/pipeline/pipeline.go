@@ -19,7 +19,7 @@ import (
 )
 
 type Worker interface {
-	ProcessTask(responseQueueName string, messageID string, task *messages.TaskQueueMessage)
+	ProcessTask(messageID string, task *messages.TaskQueueMessage)
 	GetStatus() string
 	UpdateStatus(status string)
 	GetProcessingMessageID() string
@@ -77,12 +77,11 @@ func (ws *worker) GetProcessingMessageID() string {
 	return ws.processingMessageID
 }
 
-func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *messages.TaskQueueMessage) {
+func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			ws.logger.Errorf("Worker panicked: %v", r)
 			if err, ok := r.(error); ok {
-				ws.publishError(err)
+				ws.publishAndLogError(err)
 			} else {
 				ws.logger.Errorf("Recovered value is not an error: %v", r)
 			}
@@ -96,14 +95,14 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *
 	// Parse language type
 	langType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
-		ws.publishError(err)
+		ws.publishAndLogError(err)
 		return
 	}
 
 	// Download all files and set up directories
 	dc, err := ws.packager.PrepareSolutionPackage(task, messageID)
 	if err != nil {
-		ws.publishError(err)
+		ws.publishAndLogError(err)
 		return
 	}
 
@@ -115,9 +114,16 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *
 	}()
 
 	// Compile solution if needed
-	err = ws.compiler.CompileSolutionIfNeeded(langType, task.LanguageVersion, dc.UserSolutionPath, dc.UserExecFilePath, dc.CompileErrFilePath, messageID)
+	err = ws.compiler.CompileSolutionIfNeeded(
+		langType,
+		task.LanguageVersion,
+		dc.UserSolutionPath,
+		dc.UserExecFilePath,
+		dc.CompileErrFilePath,
+		messageID)
+
 	if err != nil {
-		ws.publishError(err)
+		ws.publishAndLogError(err)
 		return
 	}
 
@@ -139,7 +145,7 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *
 	}
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
-		ws.publishError(err)
+		ws.publishAndLogError(err)
 		return
 	}
 
@@ -149,7 +155,7 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *
 	// Store solution results
 	err = ws.packager.SendSolutionPackage(dc, task, solutionResult.StatusCode)
 	if err != nil {
-		ws.publishError(err)
+		ws.publishAndLogError(err)
 		return
 	}
 
@@ -159,17 +165,18 @@ func (ws *worker) ProcessTask(responseQueueName string, messageID string, task *
 
 func (ws *worker) publishSucces(solutionResult solution.Result) {
 	ws.logger.Infof("Publishing success response [MsgID: %s]", ws.processingMessageID)
-	publishErr := ws.responder.PublishSucessTaskRespond(constants.QueueMessageTypeTask, ws.processingMessageID, solutionResult)
+	publishErr := ws.responder.PublishSucessTaskRespond(
+		constants.QueueMessageTypeTask,
+		ws.processingMessageID,
+		solutionResult)
+
 	if publishErr != nil {
 		ws.logger.Errorf("Failed to publish success response: %s", publishErr)
 		ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, publishErr)
 	}
 }
 
-func (ws *worker) publishError(err error) {
+func (ws *worker) publishAndLogError(err error) {
 	ws.logger.Errorf("Error: %s", err)
-	publishErr := ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, err)
-	if publishErr != nil {
-		ws.logger.Errorf("Failed to publish error to response queue: %s", publishErr)
-	}
+	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, err)
 }

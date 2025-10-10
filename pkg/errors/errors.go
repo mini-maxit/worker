@@ -20,4 +20,5 @@ var (
 	ErrContainerTimeout             = errors.New("container runtime timed out")
 	ErrContainerFailed              = errors.New("container failed to execute")
 	ErrInputOutputMismatch          = errors.New("input output mismatch")
+	ErrSubmissionFileLocationEmpty  = errors.New("submission file location is empty")
 )

@@ -37,11 +37,13 @@ func NewStorage(fileServiceURL string) Storage {
 }
 
 func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error) {
-
 	fs.logger.Infof("Downloading file from bucket %s path %s", fileLocation.Bucket, fileLocation.Path)
 
 	// Build request URL: {baseUrl}/buckets/:bucketName/:objectKey?metadataOnly=false
-	requestURL := fmt.Sprintf("%s/buckets/%s/%s?metadataOnly=false", fs.fileStorageURL, fileLocation.Bucket, fileLocation.Path)
+	requestURL := fmt.Sprintf("%s/buckets/%s/%s?metadataOnly=false",
+		fs.fileStorageURL,
+		fileLocation.Bucket,
+		fileLocation.Path)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

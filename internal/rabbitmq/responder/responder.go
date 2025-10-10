@@ -14,7 +14,7 @@ type Responder interface {
 	PublishErrorToResponseQueue(
 		messageType, messageID string,
 		err error,
-	) error
+	)
 	PublishSucessHandshakeRespond(
 		messageType, messageID string,
 		languageMap map[string][]string,
@@ -43,11 +43,12 @@ func NewResponder(channel *amqp.Channel, responseQueueName string) Responder {
 	}
 }
 
-func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, err error) error {
+func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, err error) {
 	errorPayload := map[string]string{"error": err.Error()}
 	payload, jsonErr := json.Marshal(errorPayload)
 	if jsonErr != nil {
-		return jsonErr
+		r.logger.Errorf("Failed to marshal error payload: %s", jsonErr)
+		return
 	}
 
 	queueMessage := messages.ResponseQueueMessage{
@@ -59,7 +60,8 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, e
 
 	responseJSON, jsonErr := json.Marshal(queueMessage)
 	if jsonErr != nil {
-		return jsonErr
+		r.logger.Errorf("Failed to marshal response message: %s", jsonErr)
+		return
 	}
 
 	err = r.channel.Publish("", r.responseQueueName, false, false, amqp.Publishing{
@@ -69,10 +71,11 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, e
 	})
 
 	if err != nil {
-		return err
+		r.logger.Errorf("Failed to publish error message: %s", err)
+		return
 	}
 
-	return nil
+	r.logger.Infof("Published error message to response queue: %s", messageID)
 }
 
 func (r *responder) PublishSucessTaskRespond(messageType, messageID string, taskResult solution.Result) error {
@@ -84,7 +87,11 @@ func (r *responder) PublishSucessTaskRespond(messageType, messageID string, task
 	return r.publishRespondMessage(messageType, messageID, payload)
 }
 
-func (r *responder) PublishSucessHandshakeRespond(messageType, messageID string, languageMap map[string][]string) error {
+func (r *responder) PublishSucessHandshakeRespond(
+	messageType string,
+	messageID string,
+	languageMap map[string][]string,
+) error {
 	payload, err := json.Marshal(languageMap)
 	if err != nil {
 		return err

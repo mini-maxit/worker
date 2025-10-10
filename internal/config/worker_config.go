@@ -45,7 +45,7 @@ func NewConfig() *Config {
 	workerQueueName, responseQueueName, maxWorkers := workerConfig()
 	jobsDataVolume := dockerConfig()
 	verifierFlagsStr := verifierConfig()
-	
+
 	return &Config{
 		RabbitMQURL:       rabbitmqURL,
 		StorageBaseUrl:    storageBaseUrl,
@@ -153,7 +153,7 @@ func dockerConfig() string {
 
 func verifierConfig() []string {
 	logger := logger.NewNamedLogger("config")
-	
+
 	verifierFlagsStr := os.Getenv("VERIFIER_FLAGS")
 	if verifierFlagsStr == "" {
 		verifierFlagsStr = constants.DefaultVerifierFlags

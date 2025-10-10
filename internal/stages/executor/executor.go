@@ -130,7 +130,7 @@ func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string
 	d.logger.Infof("Workspace directory in container: %s", workspaceDir)
 	return &container.Config{
 		Image: dockerImage,
-		Cmd:         []string{"bash", "-lc", runCmd},
+		Cmd:   []string{"bash", "-lc", runCmd},
 		// Cmd:         []string{"/bin/bash", "-c", "while true; do sleep 30; done;"},
 		WorkingDir:  workspaceDir,
 		Env:         env,

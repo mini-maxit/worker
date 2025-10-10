@@ -403,7 +403,7 @@ linters:
 
 formatters:
   enable:
-    - goimports # in addition to fixing imports, goimports also formats your code in the same style as gofmt
+    # - goimports # in addition to fixing imports, goimports also formats your code in the same style as gofmt TODO:enable-this
 
 issues:
   # Maximum count of issues with the same text.

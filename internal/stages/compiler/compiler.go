@@ -6,7 +6,14 @@ import (
 )
 
 type Compiler interface {
-	CompileSolutionIfNeeded(langType languages.LanguageType, langVersion, sourceFilePath, outFilePath, compErrFilePath, messageID string) error
+	CompileSolutionIfNeeded(
+		langType languages.LanguageType,
+		langVersion string,
+		sourceFilePath string,
+		outFilePath string,
+		compErrFilePath string,
+		messageID string,
+	) error
 }
 
 type compiler struct {
@@ -22,7 +29,11 @@ type LanguageCompiler interface {
 	Compile(sourceFilePath, outFilePath, compErrFilePath, messageID string) error
 }
 
-func initializeSolutionCompiler(langType languages.LanguageType, langVersion string, messageID string) (LanguageCompiler, error) {
+func initializeSolutionCompiler(
+	langType languages.LanguageType,
+	langVersion string,
+	messageID string,
+) (LanguageCompiler, error) {
 	switch langType {
 	case languages.CPP:
 		return NewCppCompiler(langVersion, messageID)
@@ -31,8 +42,15 @@ func initializeSolutionCompiler(langType languages.LanguageType, langVersion str
 	}
 }
 
-// get proper compiler and compile if needed
-func (c *compiler) CompileSolutionIfNeeded(langType languages.LanguageType, langVersion, sourceFilePath, execFilePath, compErrFilePath, messageID string) error {
+// get proper compiler and compile if needed.
+func (c *compiler) CompileSolutionIfNeeded(
+	langType languages.LanguageType,
+	langVersion,
+	sourceFilePath,
+	execFilePath,
+	compErrFilePath,
+	messageID string,
+) error {
 	compiler, err := initializeSolutionCompiler(langType, langVersion, messageID)
 	if err != nil {
 		return err

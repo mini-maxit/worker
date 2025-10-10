@@ -19,7 +19,6 @@ import (
 type Scheduler interface {
 	GetWorkersStatus() map[string]interface{}
 	ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error
-	GetSupportedLanguages() map[string][]string
 }
 
 type scheduler struct {
@@ -40,17 +39,17 @@ func NewScheduler(
 
 ) Scheduler {
 	workers := make(map[int]pipeline.Worker, maxWorkers)
-	for i := 0; i < maxWorkers; i++ {
+	for i := range maxWorkers {
 		workers[i] = pipeline.NewWorker(i, compiler, packager, executor, verifier, responder)
 	}
 
 	workerPoolLogger := logger.NewNamedLogger("workerPool")
 
 	return &scheduler{
-		mu:            sync.Mutex{},
-		workers:       workers,
-		maxWorkers:    maxWorkers,
-		logger:        workerPoolLogger,
+		mu:         sync.Mutex{},
+		workers:    workers,
+		maxWorkers: maxWorkers,
+		logger:     workerPoolLogger,
 	}
 }
 
@@ -107,7 +106,7 @@ func (s *scheduler) ProcessTask(responseQueueName, messageID string, task *messa
 			}
 		}()
 
-		w.ProcessTask(responseQueueName, messageID, task)
+		w.ProcessTask(messageID, task)
 	}(worker)
 
 	return nil
@@ -122,10 +121,4 @@ func (s *scheduler) markWorkerAsIdle(worker pipeline.Worker) {
 	s.busyWorkersCount--
 
 	s.logger.Infof("Worker marked as idle [WorkerID: %d]", worker.GetId())
-}
-
-// TODO: implement
-func (s *scheduler) GetSupportedLanguages() map[string][]string {
-	languages := make(map[string][]string)
-	return languages
 }

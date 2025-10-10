@@ -57,6 +57,7 @@ func CopyFile(src, dst string) error {
 
 	return nil
 }
+
 // moveFile tries os.Rename and falls back to copy+delete on EXDEV.
 func MoveFile(src, dst string) error {
 	err := os.Rename(src, dst)
@@ -94,7 +95,6 @@ func copyAndRemove(src, dst string) error {
 	// delete the original
 	return os.Remove(src)
 }
-
 
 // Checks if given elements is contained in given array.
 func Contains[V string](array []V, value V) bool {

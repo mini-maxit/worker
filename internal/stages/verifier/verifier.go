@@ -73,7 +73,11 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 	return true, nil
 }
 
-func (v *verifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, limits []solution.Limit) solution.Result {
+func (v *verifier) EvaluateAllTestCases(
+	dirConfig *packager.TaskDirConfig,
+	messageID string,
+	limits []solution.Limit,
+) solution.Result {
 	testResults := make([]solution.TestResult, len(limits))
 	solutionStatuses := make([]solution.ResultStatus, len(limits))
 	solutionMessages := make([]string, len(limits))
@@ -88,7 +92,7 @@ func (v *verifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messa
 		}
 	}
 
-	for i := 0; i < numberOfTests; i++ {
+	for i := range numberOfTests {
 		outputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserOutputDirPath, (i + 1))
 		// expected outputs are stored in the package outputs directory
 		expectedOutputPath := fmt.Sprintf("%s/%d.out", dirConfig.OutputDirPath, (i + 1))
@@ -116,7 +120,10 @@ func (v *verifier) EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messa
 	}
 }
 
-func (v *verifier) constructFinalMessage(statuses []solution.ResultStatus, messages []string) (string, solution.ResultStatus) {
+func (v *verifier) constructFinalMessage(
+	statuses []solution.ResultStatus,
+	messages []string,
+) (string, solution.ResultStatus) {
 	var finalMessage string
 	finalStatus := solution.Success
 	for _, status := range statuses {
@@ -146,7 +153,6 @@ func (v *verifier) readExecutionResultFiles(
 ) ([]*executor.ExecutionResult, error) {
 	results := make([]*executor.ExecutionResult, numberOfTest)
 	for i := range results {
-
 		filePath := filepath.Join(execResultDirPath, fmt.Sprintf("%d.res", i+1))
 		file, err := os.Open(filePath)
 		if err != nil {

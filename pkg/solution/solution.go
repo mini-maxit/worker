@@ -57,11 +57,11 @@ type Limit struct {
 // Limits is a named slice type so we can define methods on it.
 
 func MaxMemoryKBWithMinimum(limits []Limit) int64 {
-	max := constants.MinContainerMemoryKB
+	maxMem := constants.MinContainerMemoryKB
 	for _, v := range limits {
-		if v.MemoryKb > max {
-			max = v.MemoryKb
+		if v.MemoryKb > maxMem {
+			maxMem = v.MemoryKb
 		}
 	}
-	return max
+	return maxMem
 }

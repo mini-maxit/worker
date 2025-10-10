@@ -1,18 +1,18 @@
 package main
 
 import (
+	"github.com/docker/docker/client"
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/rabbitmq"
 	"github.com/mini-maxit/worker/internal/rabbitmq/consumer"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
-	"github.com/mini-maxit/worker/internal/storage"
 	"github.com/mini-maxit/worker/internal/scheduler"
 	"github.com/mini-maxit/worker/internal/stages/compiler"
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
-	"github.com/docker/docker/client"
+	"github.com/mini-maxit/worker/internal/storage"
 )
 
 func main() {
@@ -38,7 +38,6 @@ func main() {
 		logger.Fatalf("Failed to create Docker client: %s", err.Error())
 	}
 
-
 	defer func() {
 		err := conn.Close()
 		if err != nil {
@@ -57,7 +56,6 @@ func main() {
 	responder := responder.NewResponder(workerChannel, config.ResponseQueueName)
 	scheduler := scheduler.NewScheduler(config.MaxWorkers, compiler, packager, executor, verifier, responder)
 	consumer := consumer.NewConsumer(workerChannel, config.ConsumeQueueName, scheduler, responder)
-	
 
 	logger.Info("Listening for messages")
 	// Start listening for messages

@@ -2,7 +2,6 @@ package packager
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/storage"
+	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 
@@ -49,14 +49,17 @@ func NewPackager(storage storage.Storage) Packager {
 	}
 }
 
-func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error) {
+func (p *packager) PrepareSolutionPackage(
+	taskQueueMessage *messages.TaskQueueMessage,
+	msgID string,
+) (*TaskDirConfig, error) {
 	if p.storage == nil {
 		return nil, errors.New("storage service is not initialized")
 	}
 
 	basePath := filepath.Join("/tmp", msgID)
 
-	// create directories
+	// create directories.
 	p.logger.Infof("Creating base directory at %s", basePath)
 	if err := p.createBaseDirs(basePath); err != nil {
 		p.logger.Errorf("Failed to create base directory: %s", err)
@@ -64,7 +67,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 		return nil, err
 	}
 
-	// Download submission
+	// Download submission.
 	p.logger.Infof("Downloading submission file to %s", basePath)
 	if err := p.downloadSubmission(basePath, taskQueueMessage.SubmissionFile); err != nil {
 		p.logger.Errorf("Failed to download submission file: %s", err)
@@ -72,7 +75,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 		return nil, err
 	}
 
-	// Download test cases and create user files
+	// Download test cases and create user files.
 	p.logger.Infof("Preparing test case files in %s", basePath)
 	for idx, tc := range taskQueueMessage.TestCases {
 		if err := p.prepareTestCaseFiles(basePath, idx, tc); err != nil {
@@ -82,7 +85,7 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 		}
 	}
 
-	// Create compile.err file
+	// Create compile.err file.
 	p.logger.Infof("Creating compile.err file in %s", basePath)
 	err := p.createCompileErrFile(basePath)
 	if err != nil {
@@ -91,13 +94,17 @@ func (p *packager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMe
 		return nil, err
 	}
 
+	userFileExt := filepath.Ext(taskQueueMessage.SubmissionFile.Path)
+	userFileNameWithoutExt := strings.TrimSuffix(filepath.Base(taskQueueMessage.SubmissionFile.Path), userFileExt)
+	userExecPath := filepath.Join(basePath, userFileNameWithoutExt)
+
 	cfg := &TaskDirConfig{
 		WorkspaceDirPath:      "/tmp/",
 		PackageDirPath:        basePath,
 		InputDirPath:          filepath.Join(basePath, "inputs"),
 		OutputDirPath:         filepath.Join(basePath, "outputs"),
 		UserSolutionPath:      filepath.Join(basePath, filepath.Base(taskQueueMessage.SubmissionFile.Path)),
-		UserExecFilePath:      filepath.Join(basePath, strings.TrimSuffix(filepath.Base(taskQueueMessage.SubmissionFile.Path), filepath.Ext(taskQueueMessage.SubmissionFile.Path))),
+		UserExecFilePath:      userExecPath,
 		UserOutputDirPath:     filepath.Join(basePath, "userOutputs"),
 		UserErrorDirPath:      filepath.Join(basePath, "userErrors"),
 		UserDiffDirPath:       filepath.Join(basePath, "userDiff"),
@@ -130,10 +137,10 @@ func (p *packager) createBaseDirs(basePath string) error {
 	return nil
 }
 
-// downloadSubmission downloads the submission file into basePath/solution
+// downloadSubmission downloads the submission file into basePath/solution.
 func (p *packager) downloadSubmission(basePath string, submission messages.FileLocation) error {
 	if submission.Bucket == "" || submission.Path == "" {
-		return fmt.Errorf("submission file location is empty")
+		return customErr.ErrSubmissionFileLocationEmpty
 	}
 	path := filepath.Join(basePath, filepath.Base(submission.Path))
 	if _, err := p.storage.DownloadFile(submission, path); err != nil {
@@ -156,7 +163,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		}
 	}
 
-	// expected outputs
+	// expected outputs.
 	if tc.ExpectedOutput.Bucket == "" || tc.ExpectedOutput.Path == "" {
 		p.logger.Warnf("Test case %d expected output location is empty, skipping", idx)
 	} else {
@@ -167,7 +174,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		}
 	}
 
-	// Create user files: X.out, X.err, X.diff using input filename stem or index fallback
+	// Create user files: X.out, X.err, X.diff using input filename stem or index fallback.
 	var prefix string
 	if tc.InputFile.Path != "" {
 		prefix = strings.TrimSuffix(filepath.Base(tc.InputFile.Path), filepath.Ext(tc.InputFile.Path))
@@ -252,102 +259,3 @@ func (p *packager) uploadNonEmptyFiles(dirPath string, outputFileLocation messag
 
 	return nil
 }
-
-// func (fs *fileService) moveCompilationError(taskDir, outputDir string) error {
-// 	src := filepath.Join(taskDir, constants.CompileErrorFileName)
-// 	dst := filepath.Join(outputDir, constants.CompileErrorFileName)
-// 	return os.Rename(src, dst)
-// }
-
-// func (fs *fileService) sendArchiveToStorage(
-// 	archiveFilePath string,
-// 	userID, taskID, submissionNumber int64,
-// ) error {
-// 	body, writer, err := fs.prepareMultipartBody(archiveFilePath, userID, taskID, submissionNumber)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	req, err := fs.createRequestWithContext(ctx, body, writer.FormDataContentType())
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return fs.sendRequestAndHandleResponse(req)
-// }
-
-// func (fs *fileService) prepareMultipartBody(
-// 	archiveFilePath string,
-// 	userID, taskID, submissionNumber int64,
-// ) (*bytes.Buffer, *multipart.Writer, error) {
-// 	file, err := os.Open(archiveFilePath)
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	defer file.Close()
-
-// 	body := &bytes.Buffer{}
-// 	writer := multipart.NewWriter(body)
-
-// 	form := map[string]string{
-// 		"userID":           strconv.FormatInt(userID, 10),
-// 		"taskID":           strconv.FormatInt(taskID, 10),
-// 		"submissionNumber": strconv.FormatInt(submissionNumber, 10),
-// 	}
-
-// 	for key, val := range form {
-// 		if err := writer.WriteField(key, val); err != nil {
-// 			return nil, nil, err
-// 		}
-// 	}
-
-// 	part, err := writer.CreateFormFile("archive", filepath.Base(archiveFilePath))
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	if _, err := io.Copy(part, file); err != nil {
-// 		return nil, nil, err
-// 	}
-
-// 	if err := writer.Close(); err != nil {
-// 		return nil, nil, err
-// 	}
-
-// 	return body, writer, nil
-// }
-
-// func (fs *fileService) createRequestWithContext(
-// 	ctx context.Context,
-// 	body *bytes.Buffer,
-// 	contentType string,
-// ) (*http.Request, error) {
-// 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fs.fileStorageURL+"/storeOutputs", body)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	req.Header.Set("Content-Type", contentType)
-// 	return req, nil
-// }
-
-// func (fs *fileService) sendRequestAndHandleResponse(req *http.Request) error {
-// 	client := &http.Client{}
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp.StatusCode != http.StatusOK {
-// 		buf := new(bytes.Buffer)
-// 		if _, err := buf.ReadFrom(resp.Body); err != nil {
-// 			fs.logger.Errorf("Failed to read response body: %s", err)
-// 		}
-// 		fs.logger.Errorf("Failed to store solution result: %s", buf.String())
-// 		return cutomErrors.ErrFailedToStoreSolution
-// 	}
-
-// 	return nil
-// }
