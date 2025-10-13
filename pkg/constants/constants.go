@@ -32,11 +32,8 @@ const (
 
 // Worker specific constants.
 const (
-	SolutionFileBaseName = "solution"
-	InputDirName         = "inputs"
-	OutputDirName        = "outputs"
-	WorkerStatusIdle     = "idle"
-	WorkerStatusBusy     = "busy"
+	WorkerStatusIdle = "idle"
+	WorkerStatusBusy = "busy"
 )
 
 // Exit codes.
@@ -61,12 +58,23 @@ const (
 	DefaultWorkerQueueName   = "worker_queue"
 	DefaultResponseQueueName = "response_queue"
 	DefaultMaxWorkersStr     = "10"
-	UserOutputDirName        = "user-output"
 	RuntimeImagePrefix       = "seber/runtime"
 	ExecResultFileName       = "result.txt"
 	ContainerMaxRunTime      = 30
 	DefaultJobsDataVolume    = "maxit_worker_jobs-data"
 	DefaultVerifierFlags     = "-w"
+)
+
+// Solution package and temporary directory paths.
+const (
+	TmpDirPath            = "/tmp/"
+	InputDirName          = "inputs"
+	OutputDirName         = "outputs"
+	UserOutputDirName     = "userOutputs"
+	UserErrorDirName      = "userErrors"
+	UserDiffDirName       = "userDiff"
+	UserExecResultDirName = "userExecResults"
+	CompileErrFileName    = "compile.err"
 )
 
 // Utility constants.

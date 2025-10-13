@@ -10,6 +10,7 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	"go.uber.org/zap"
 )
@@ -18,7 +19,11 @@ import (
 // Returns false otherwise.
 // Returns an error if an error occurs.
 type Verifier interface {
-	EvaluateAllTestCases(dirConfig *packager.TaskDirConfig, messageID string, limits []solution.Limit) solution.Result
+	EvaluateAllTestCases(
+		dirConfig *packager.TaskDirConfig,
+		testCases []messages.TestCase,
+		messageID string,
+	) solution.Result
 }
 
 type verifier struct {
@@ -77,15 +82,15 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 
 func (v *verifier) EvaluateAllTestCases(
 	dirConfig *packager.TaskDirConfig,
+	testCases []messages.TestCase,
 	messageID string,
-	limits []solution.Limit,
 ) solution.Result {
-	testResults := make([]solution.TestResult, len(limits))
-	solutionStatuses := make([]solution.ResultStatus, len(limits))
-	solutionMessages := make([]string, len(limits))
-	numberOfTests := len(limits)
+	numberOfTest := len(testCases)
+	testResults := make([]solution.TestResult, numberOfTest)
+	solutionStatuses := make([]solution.ResultStatus, numberOfTest)
+	solutionMessages := make([]string, numberOfTest)
 
-	execResults, err := v.readExecutionResultFiles(dirConfig.UserExecResultDirPath, numberOfTests)
+	execResults, err := v.readExecutionResultFiles(dirConfig.UserExecResultDirPath, numberOfTest)
 	if err != nil {
 		v.logger.Errorf("Error reading execution result file [MsgID: %s]: %s", messageID, err.Error())
 		return solution.Result{
@@ -94,19 +99,26 @@ func (v *verifier) EvaluateAllTestCases(
 		}
 	}
 
-	for i := range numberOfTests {
-		outputPath := fmt.Sprintf("%s/%d.out", dirConfig.UserOutputDirPath, (i + 1))
-		// expected outputs are stored in the package outputs directory
-		expectedOutputPath := fmt.Sprintf("%s/%d.out", dirConfig.OutputDirPath, (i + 1))
-		stderrPath := fmt.Sprintf("%s/%d.err", dirConfig.UserErrorDirPath, (i + 1))
+	for i, tc := range testCases {
+		userOutputFile := filepath.Join(
+			dirConfig.UserOutputDirPath,
+			filepath.Base(tc.StdOutResult.Path))
+
+		expectedOutputPath := filepath.Join(
+			dirConfig.OutputDirPath,
+			filepath.Base(tc.StdOutResult.Path))
+
+		userStderrFile := filepath.Join(
+			dirConfig.UserErrorDirPath,
+			filepath.Base(tc.StdErrResult.Path))
 
 		testResults[i], solutionStatuses[i], solutionMessages[i] = v.evaluateTestCase(
-			outputPath,
+			userOutputFile,
 			expectedOutputPath,
-			stderrPath,
+			userStderrFile,
 			execResults[i],
-			limits[i].TimeMs,
-			limits[i].MemoryKb,
+			testCases[i].TimeLimitMs,
+			testCases[i].MemoryLimitKB,
 			(i + 1),
 		)
 	}

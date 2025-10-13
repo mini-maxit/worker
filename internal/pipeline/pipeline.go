@@ -81,7 +81,7 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 	defer func() {
 		if r := recover(); r != nil {
 			if err, ok := r.(error); ok {
-				ws.publishAndLogError(err)
+				ws.publishError(err)
 			} else {
 				ws.logger.Errorf("Recovered value is not an error: %v", r)
 			}
@@ -95,14 +95,14 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 	// Parse language type
 	langType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
-		ws.publishAndLogError(err)
+		ws.publishError(err)
 		return
 	}
 
 	// Download all files and set up directories
 	dc, err := ws.packager.PrepareSolutionPackage(task, messageID)
 	if err != nil {
-		ws.publishAndLogError(err)
+		ws.publishError(err)
 		return
 	}
 
@@ -123,7 +123,7 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 		messageID)
 
 	if err != nil {
-		ws.publishAndLogError(err)
+		ws.publishCompilationError(err, dc, task.TestCases)
 		return
 	}
 
@@ -145,17 +145,17 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 	}
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
-		ws.publishAndLogError(err)
+		ws.publishError(err)
 		return
 	}
 
 	// Evaluate solution
-	solutionResult := ws.verifier.EvaluateAllTestCases(dc, messageID, cfg.Limits)
+	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID)
 
 	// Store solution results
-	err = ws.packager.SendSolutionPackage(dc, task)
+	err = ws.packager.SendSolutionPackage(dc, task.TestCases /*hasCompilationErr*/, false)
 	if err != nil {
-		ws.publishAndLogError(err)
+		ws.publishError(err)
 		return
 	}
 
@@ -176,7 +176,16 @@ func (ws *worker) publishSucces(solutionResult solution.Result) {
 	}
 }
 
-func (ws *worker) publishAndLogError(err error) {
+func (ws *worker) publishError(err error) {
 	ws.logger.Errorf("Error: %s", err)
+	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, err)
+}
+
+func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
+	ws.logger.Errorf("Compilation error: %s", err)
+	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true)
+	if sendErr != nil {
+		ws.logger.Errorf("Failed to send solution package: %s", sendErr)
+	}
 	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, err)
 }

@@ -54,7 +54,6 @@ type Limit struct {
 	MemoryKb int64 // Memory limit in kilobytes
 }
 
-
 func MaxMemoryKBWithMinimum(limits []Limit) int64 {
 	maxMem := constants.MinContainerMemoryKB
 	for _, v := range limits {

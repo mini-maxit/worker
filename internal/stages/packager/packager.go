@@ -8,6 +8,7 @@ import (
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/storage"
+	"github.com/mini-maxit/worker/pkg/constants"
 	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
 
@@ -17,7 +18,7 @@ import (
 
 type Packager interface {
 	PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error)
-	SendSolutionPackage(dirConfig *TaskDirConfig, task *messages.TaskQueueMessage) error
+	SendSolutionPackage(dirConfig *TaskDirConfig, testCases []messages.TestCase, hasCompilationErr bool) error
 }
 
 type packager struct {
@@ -26,7 +27,7 @@ type packager struct {
 }
 
 type TaskDirConfig struct {
-	WorkspaceDirPath      string
+	TmpDirPath            string
 	PackageDirPath        string
 	InputDirPath          string
 	OutputDirPath         string
@@ -55,7 +56,7 @@ func (p *packager) PrepareSolutionPackage(
 		return nil, errors.New("storage service is not initialized")
 	}
 
-	basePath := filepath.Join("/tmp", msgID)
+	basePath := filepath.Join(constants.TmpDirPath, msgID)
 
 	// create directories.
 	p.logger.Infof("Creating base directory at %s", basePath)
@@ -97,17 +98,17 @@ func (p *packager) PrepareSolutionPackage(
 	userExecPath := filepath.Join(basePath, userFileNameWithoutExt)
 
 	cfg := &TaskDirConfig{
-		WorkspaceDirPath:      "/tmp/",
+		TmpDirPath:            constants.TmpDirPath,
 		PackageDirPath:        basePath,
-		InputDirPath:          filepath.Join(basePath, "inputs"),
-		OutputDirPath:         filepath.Join(basePath, "outputs"),
+		InputDirPath:          filepath.Join(basePath, constants.InputDirName),
+		OutputDirPath:         filepath.Join(basePath, constants.OutputDirName),
 		UserSolutionPath:      filepath.Join(basePath, filepath.Base(taskQueueMessage.SubmissionFile.Path)),
 		UserExecFilePath:      userExecPath,
-		UserOutputDirPath:     filepath.Join(basePath, "userOutputs"),
-		UserErrorDirPath:      filepath.Join(basePath, "userErrors"),
-		UserDiffDirPath:       filepath.Join(basePath, "userDiff"),
-		CompileErrFilePath:    filepath.Join(basePath, "compile.err"),
-		UserExecResultDirPath: filepath.Join(basePath, "userExecResults"),
+		UserOutputDirPath:     filepath.Join(basePath, constants.UserOutputDirName),
+		UserErrorDirPath:      filepath.Join(basePath, constants.UserErrorDirName),
+		UserDiffDirPath:       filepath.Join(basePath, constants.UserDiffDirName),
+		CompileErrFilePath:    filepath.Join(basePath, constants.CompileErrFileName),
+		UserExecResultDirPath: filepath.Join(basePath, constants.UserExecResultDirName),
 	}
 
 	p.logger.Infof("Prepared solution package at %s", basePath)
@@ -118,12 +119,12 @@ func (p *packager) PrepareSolutionPackage(
 func (p *packager) createBaseDirs(basePath string) error {
 	dirs := []string{
 		basePath,
-		filepath.Join(basePath, "inputs"),
-		filepath.Join(basePath, "outputs"),
-		filepath.Join(basePath, "userOutputs"),
-		filepath.Join(basePath, "userErrors"),
-		filepath.Join(basePath, "userDiff"),
-		filepath.Join(basePath, "userExecResults"),
+		filepath.Join(basePath, constants.InputDirName),
+		filepath.Join(basePath, constants.OutputDirName),
+		filepath.Join(basePath, constants.UserOutputDirName),
+		filepath.Join(basePath, constants.UserErrorDirName),
+		filepath.Join(basePath, constants.UserDiffDirName),
+		filepath.Join(basePath, constants.UserExecResultDirName),
 	}
 
 	for _, d := range dirs {
@@ -154,7 +155,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 	if tc.InputFile.Bucket == "" || tc.InputFile.Path == "" {
 		p.logger.Warnf("Test case %d input location is empty, skipping", idx)
 	} else {
-		inputDest := filepath.Join(basePath, "inputs", filepath.Base(tc.InputFile.Path))
+		inputDest := filepath.Join(basePath, constants.InputDirName, filepath.Base(tc.InputFile.Path))
 		if _, err := p.storage.DownloadFile(tc.InputFile, inputDest); err != nil {
 			p.logger.Errorf("Failed to download input for test case %d: %s", idx, err)
 			return err
@@ -165,7 +166,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 	if tc.ExpectedOutput.Bucket == "" || tc.ExpectedOutput.Path == "" {
 		p.logger.Warnf("Test case %d expected output location is empty, skipping", idx)
 	} else {
-		outputDest := filepath.Join(basePath, "outputs", filepath.Base(tc.ExpectedOutput.Path))
+		outputDest := filepath.Join(basePath, constants.OutputDirName, filepath.Base(tc.ExpectedOutput.Path))
 		if _, err := p.storage.DownloadFile(tc.ExpectedOutput, outputDest); err != nil {
 			p.logger.Errorf("Failed to download expected output for test case %d: %s", idx, err)
 			return err
@@ -174,10 +175,10 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 
 	prefix := strings.TrimSuffix(filepath.Base(tc.InputFile.Path), filepath.Ext(tc.InputFile.Path))
 
-	userOut := filepath.Join(basePath, "userOutputs", prefix+".out")
-	userErr := filepath.Join(basePath, "userErrors", prefix+".err")
-	userDiff := filepath.Join(basePath, "userDiff", prefix+".diff")
-	userRes := filepath.Join(basePath, "userExecResults", prefix+".res")
+	userOut := filepath.Join(basePath, constants.UserOutputDirName, prefix+".out")
+	userErr := filepath.Join(basePath, constants.UserErrorDirName, prefix+".err")
+	userDiff := filepath.Join(basePath, constants.UserDiffDirName, prefix+".diff")
+	userRes := filepath.Join(basePath, constants.UserExecResultDirName, prefix+".res")
 
 	for _, f := range []string{userOut, userErr, userDiff, userRes} {
 		fi, err := os.OpenFile(f, os.O_CREATE|os.O_RDWR, 0644)
@@ -191,7 +192,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 }
 
 func (p *packager) createCompileErrFile(basePath string) error {
-	compErrFilePath := filepath.Join(basePath, "compile.err")
+	compErrFilePath := filepath.Join(basePath, constants.CompileErrFileName)
 	compErrFile, err := os.OpenFile(compErrFilePath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		p.logger.Errorf("Failed to create compile.err file: %s", err)
@@ -203,22 +204,32 @@ func (p *packager) createCompileErrFile(basePath string) error {
 
 func (p *packager) SendSolutionPackage(
 	dirConfig *TaskDirConfig,
-	task *messages.TaskQueueMessage,
-
+	testCases []messages.TestCase,
+	hasCompilationErr bool,
 ) error {
-	err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, task.UserOutputBase, ".out")
-	if err != nil {
-		return err
+	if hasCompilationErr {
+		err := p.uploadNonEmptyFiles(dirConfig.CompileErrFilePath, testCases[0].StdErrResult, ".err")
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
-	err = p.uploadNonEmptyFiles(dirConfig.UserErrorDirPath, task.UserErrorBase, ".err")
-	if err != nil {
-		return err
-	}
+	for _, test := range testCases {
+		err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, test.StdOutResult, ".out")
+		if err != nil {
+			return err
+		}
 
-	err = p.uploadNonEmptyFiles(dirConfig.UserDiffDirPath, task.UserDiffBase, ".diff")
-	if err != nil {
-		return err
+		err = p.uploadNonEmptyFiles(dirConfig.UserErrorDirPath, test.StdErrResult, ".err")
+		if err != nil {
+			return err
+		}
+
+		err = p.uploadNonEmptyFiles(dirConfig.UserDiffDirPath, test.DiffResult, ".diff")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

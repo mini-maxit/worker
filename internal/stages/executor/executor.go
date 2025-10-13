@@ -21,6 +21,7 @@ import (
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
+	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 )
 
@@ -30,6 +31,7 @@ type CommandConfig struct {
 	LanguageType    languages.LanguageType
 	LanguageVersion string
 	Limits          []solution.Limit
+	TestCases       []messages.TestCase
 }
 
 type ExecutionResult struct {
@@ -114,24 +116,53 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 		memEnv[i] = strconv.FormatInt(kb, 10)
 	}
 
+	inputFilePaths := make([]string, len(cfg.TestCases))
+	userOutputFilePaths := make([]string, len(cfg.TestCases))
+	userErrorFilePaths := make([]string, len(cfg.TestCases))
+	userExecResultFilePaths := make([]string, len(cfg.TestCases))
+
+	// Build paths for each test case
+	for i, tc := range cfg.TestCases {
+		inputFilePaths[i] = filepath.Join(
+			cfg.DirConfig.InputDirPath,
+			filepath.Base(tc.InputFile.Path))
+
+		userOutputFilePaths[i] = filepath.Join(
+			cfg.DirConfig.UserOutputDirPath,
+			filepath.Base(tc.StdOutResult.Path))
+
+		userErrorFilePaths[i] = filepath.Join(
+			cfg.DirConfig.UserErrorDirPath,
+			filepath.Base(tc.StdErrResult.Path))
+
+		userExecResultFilePaths[i] = filepath.Join(
+			cfg.DirConfig.UserExecResultDirPath,
+			fmt.Sprintf("%d.res", tc.Order))
+	}
+
 	return []string{
 		"TIME_LIMITS=" + strings.Join(timeEnv, " "),
 		"MEM_LIMITS=" + strings.Join(memEnv, " "),
-		"INPUT_DIR=" + filepath.Base(cfg.DirConfig.InputDirPath),
-		"USER_OUTPUT_DIR=" + filepath.Base(cfg.DirConfig.UserOutputDirPath),
-		"USER_ERROR_DIR=" + filepath.Base(cfg.DirConfig.UserErrorDirPath),
-		"USER_EXEC_RESULT_DIR=" + filepath.Base(cfg.DirConfig.UserExecResultDirPath),
+		"INPUT_FILES=" + strings.Join(inputFilePaths, " "),
+		"USER_OUTPUT_FILES=" + strings.Join(userOutputFilePaths, " "),
+		"USER_ERROR_FILES=" + strings.Join(userErrorFilePaths, " "),
+		"USER_EXEC_RESULT_FILES=" + strings.Join(userExecResultFilePaths, " "),
 	}
 }
 
-func (d *executor) buildContainerConfig(workspaceDir, dockerImage, runCmd string, env []string) *container.Config {
+func (d *executor) buildContainerConfig(
+	userPackageDirPath string,
+	dockerImage string,
+	runCmd string,
+	env []string,
+) *container.Config {
 	stopTimeout := int(2)
 	d.logger.Infof("Running command in container: %s", runCmd)
-	d.logger.Infof("Workspace directory in container: %s", workspaceDir)
+	d.logger.Infof("Workspace directory in container: %s", userPackageDirPath)
 	return &container.Config{
-		Image: dockerImage,
-		Cmd:   []string{"bash", "-lc", runCmd},
-		WorkingDir:  workspaceDir,
+		Image:       dockerImage,
+		Cmd:         []string{"bash", "-lc", runCmd},
+		WorkingDir:  userPackageDirPath,
 		Env:         env,
 		User:        "0:0",
 		StopTimeout: &stopTimeout,
@@ -152,7 +183,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
 			Source: d.jobsDataVolume,
-			Target: cfg.DirConfig.WorkspaceDirPath,
+			Target: cfg.DirConfig.TmpDirPath,
 		}},
 		SecurityOpt:  []string{"no-new-privileges"},
 		CgroupnsMode: container.CgroupnsModePrivate,
