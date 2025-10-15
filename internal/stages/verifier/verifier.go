@@ -114,7 +114,7 @@ func (v *verifier) EvaluateAllTestCases(
 
 		expectedOutputPath := filepath.Join(
 			dirConfig.OutputDirPath,
-			filepath.Base(tc.StdOutResult.Path))
+			filepath.Base(tc.ExpectedOutput.Path))
 
 		userDiffPath := filepath.Join(
 			dirConfig.UserDiffDirPath,
