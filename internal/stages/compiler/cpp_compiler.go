@@ -25,7 +25,7 @@ func (e *CppCompiler) Compile(sourceFilePath, execFilePath, compErrFilePath, mes
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
 	// Correctly pass the command and its arguments as separate strings.
 	versionFlag := "-std=" + e.version
-	ctx := context.Background()
+	ctx := context.Background() // TODO: use a timeout context
 	cmd := exec.CommandContext(ctx, "g++", "-o", execFilePath, versionFlag, sourceFilePath)
 
 	var stderr bytes.Buffer

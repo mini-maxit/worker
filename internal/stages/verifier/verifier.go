@@ -50,7 +50,7 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, diffPath, errorPa
 	args := append([]string{}, v.flags...)
 
 	args = append(args, outputPath, expectedFilePath)
-	ctx := context.Background()
+	ctx := context.Background() // TODO: use a timeout context
 	diffCmd := exec.CommandContext(ctx, "diff", args...)
 
 	diffCmdOutput, err := os.OpenFile(diffPath, os.O_CREATE|os.O_WRONLY, 0644)
