@@ -42,7 +42,7 @@ func NewVerifier(flags []string) Verifier {
 // It returns true if the files are the same, false otherwise.
 // It returns a string of differences if there are any.
 // It returns an error if any issue occurs during the comparison.
-func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string) (bool, error) {
+func (v *verifier) compareOutput(outputPath, expectedFilePath, diffPath, errorPath string) (bool, error) {
 	outputPath = filepath.Clean(outputPath)
 	expectedFilePath = filepath.Clean(expectedFilePath)
 
@@ -51,14 +51,20 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 	args = append(args, outputPath, expectedFilePath)
 	diffCmd := exec.Command("diff", args...)
 
-	diffCmdOutput, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY, 0644)
+	diffCmdOutput, err := os.OpenFile(diffPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return false, fmt.Errorf("error opening output file %s: %w", outputPath, err)
 	}
 	defer diffCmdOutput.Close()
 
+	diffCmdStdErr, err := os.OpenFile(errorPath, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return false, fmt.Errorf("error opening error file %s: %w", errorPath, err)
+	}
+	defer diffCmdStdErr.Close()
+
 	diffCmd.Stdout = diffCmdOutput
-	diffCmd.Stderr = diffCmdOutput
+	diffCmd.Stderr = diffCmdStdErr
 	err = diffCmd.Run()
 	var diffExitCode int
 	if diffCmd.ProcessState != nil {
@@ -71,7 +77,7 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, stderrPath string
 		if diffCmd.ProcessState == nil {
 			return false, fmt.Errorf("error running diff command: %w (process state unavailable)", err)
 		}
-		if rb, rerr := os.ReadFile(stderrPath); rerr == nil && len(rb) > 0 {
+		if rb, rerr := os.ReadFile(errorPath); rerr == nil && len(rb) > 0 {
 			return false, fmt.Errorf("error running diff command: %w: %s", err, string(rb))
 		}
 		return false, fmt.Errorf("error running diff command: %w", err)
@@ -108,14 +114,19 @@ func (v *verifier) EvaluateAllTestCases(
 			dirConfig.OutputDirPath,
 			filepath.Base(tc.StdOutResult.Path))
 
-		userStderrFile := filepath.Join(
+		userDiffPath := filepath.Join(
+			dirConfig.UserDiffDirPath,
+			filepath.Base(tc.DiffResult.Path))
+
+		userErrorPath := filepath.Join(
 			dirConfig.UserErrorDirPath,
 			filepath.Base(tc.StdErrResult.Path))
 
 		testResults[i], solutionStatuses[i], solutionMessages[i] = v.evaluateTestCase(
 			userOutputFile,
 			expectedOutputPath,
-			userStderrFile,
+			userDiffPath,
+			userErrorPath,
 			execResults[i],
 			testCases[i].TimeLimitMs,
 			testCases[i].MemoryLimitKB,
@@ -193,7 +204,8 @@ func (v *verifier) readExecutionResultFiles(
 func (v *verifier) evaluateTestCase(
 	outputPath string,
 	expectedOutputPath string,
-	stderrPath string,
+	diffPath string,
+	errorPath string,
 	execResult *executor.ExecutionResult,
 	timeLimit int64,
 	memoryLimit int64,
@@ -205,7 +217,7 @@ func (v *verifier) evaluateTestCase(
 
 	switch execResult.ExitCode {
 	case constants.ExitCodeSuccess:
-		passed, err := v.compareOutput(outputPath, expectedOutputPath, stderrPath)
+		passed, err := v.compareOutput(outputPath, expectedOutputPath, diffPath, errorPath)
 		if err != nil {
 			return solution.TestResult{
 				Passed:        false,

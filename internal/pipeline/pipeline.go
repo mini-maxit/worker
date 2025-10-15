@@ -141,7 +141,7 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 		DirConfig:       dc,
 		LanguageType:    langType,
 		LanguageVersion: task.LanguageVersion,
-		Limits:          limits,
+		TestCases:       task.TestCases,
 	}
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {

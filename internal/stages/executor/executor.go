@@ -30,7 +30,6 @@ type CommandConfig struct {
 	DirConfig       *packager.TaskDirConfig
 	LanguageType    languages.LanguageType
 	LanguageVersion string
-	Limits          []solution.Limit
 	TestCases       []messages.TestCase
 }
 
@@ -105,11 +104,11 @@ func (d *executor) buildRunCommand(absoluteSolutionPath string) string {
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 	const minMemKB int64 = 128 * 1024 // 128 MB minimum per-test
-	timeEnv := make([]string, len(cfg.Limits))
-	memEnv := make([]string, len(cfg.Limits))
-	for i, l := range cfg.Limits {
-		timeEnv[i] = strconv.FormatInt(l.TimeMs, 10)
-		kb := l.MemoryKb
+	timeEnv := make([]string, len(cfg.TestCases))
+	memEnv := make([]string, len(cfg.TestCases))
+	for i, tc := range cfg.TestCases {
+		timeEnv[i] = strconv.FormatInt(tc.TimeLimitMs, 10)
+		kb := tc.MemoryLimitKB
 		if kb < minMemKB {
 			kb = minMemKB
 		}
@@ -160,7 +159,8 @@ func (d *executor) buildContainerConfig(
 	d.logger.Infof("Running command in container: %s", runCmd)
 	d.logger.Infof("Workspace directory in container: %s", userPackageDirPath)
 	return &container.Config{
-		Image:       dockerImage,
+		Image: dockerImage,
+		// Cmd: 	   []string{"bash", "-c", "while true; do sleep 1000; done"},
 		Cmd:         []string{"bash", "-lc", runCmd},
 		WorkingDir:  userPackageDirPath,
 		Env:         env,
@@ -171,12 +171,20 @@ func (d *executor) buildContainerConfig(
 }
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
+	memLimitsKb := make([]solution.Limit, len(cfg.TestCases))
+	for i, tc := range cfg.TestCases {
+		memLimitsKb[i] = solution.Limit{
+			TimeMs:   tc.TimeLimitMs,
+			MemoryKb: tc.MemoryLimitKB,
+		}
+	}
+
 	return &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
-			Memory:    solution.MaxMemoryKBWithMinimum(cfg.Limits) * 1024,
+			Memory:    solution.MaxMemoryKBWithMinimum(memLimitsKb) * 1024,
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},

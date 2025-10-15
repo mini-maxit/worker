@@ -208,7 +208,7 @@ func (p *packager) SendSolutionPackage(
 	hasCompilationErr bool,
 ) error {
 	if hasCompilationErr {
-		err := p.uploadNonEmptyFiles(dirConfig.CompileErrFilePath, testCases[0].StdErrResult, ".err")
+		err := p.uploadNonEmptyFile(dirConfig.CompileErrFilePath, testCases[0].StdErrResult)
 		if err != nil {
 			return err
 		}
@@ -216,17 +216,29 @@ func (p *packager) SendSolutionPackage(
 	}
 
 	for _, test := range testCases {
-		err := p.uploadNonEmptyFiles(dirConfig.UserOutputDirPath, test.StdOutResult, ".out")
+		userOutputPath := filepath.Join(
+			dirConfig.UserOutputDirPath,
+			filepath.Base(test.StdOutResult.Path))
+
+		err := p.uploadNonEmptyFile(userOutputPath, test.StdOutResult)
 		if err != nil {
 			return err
 		}
 
-		err = p.uploadNonEmptyFiles(dirConfig.UserErrorDirPath, test.StdErrResult, ".err")
+		userErrorPath := filepath.Join(
+			dirConfig.UserErrorDirPath,
+			filepath.Base(test.StdErrResult.Path))
+
+		err = p.uploadNonEmptyFile(userErrorPath, test.StdErrResult)
 		if err != nil {
 			return err
 		}
 
-		err = p.uploadNonEmptyFiles(dirConfig.UserDiffDirPath, test.DiffResult, ".diff")
+		userDiffPath := filepath.Join(
+			dirConfig.UserDiffDirPath,
+			filepath.Base(test.DiffResult.Path))
+
+		err = p.uploadNonEmptyFile(userDiffPath, test.DiffResult)
 		if err != nil {
 			return err
 		}
@@ -235,28 +247,24 @@ func (p *packager) SendSolutionPackage(
 	return nil
 }
 
-func (p *packager) uploadNonEmptyFiles(dirPath string, outputFileLocation messages.FileLocation, fileExt string) error {
-	files, err := os.ReadDir(dirPath)
-	if err != nil {
-		p.logger.Errorf("Failed to read directory %s: %s", dirPath, err)
-		return err
+func (p *packager) uploadNonEmptyFile(filePath string, outputFileLocation messages.FileLocation) error {
+	if fi, err := os.Stat(filePath); err == nil {
+		if fi.Size() == 0 {
+			return nil
+		}
 	}
 
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == fileExt {
-			filePath := filepath.Join(dirPath, file.Name())
-			if fi, err := os.Stat(filePath); err == nil {
-				if fi.Size() == 0 {
-					continue
-				}
-			}
+	p.logger.Infof("Uploading file: %s", filePath)
+	objPath := outputFileLocation.Path
+	if idx := strings.LastIndex(objPath, "/"); idx != -1 {
+		objPath = objPath[:idx]
+	} else {
+		return errors.New("invalid output file location path")
+	}
 
-			p.logger.Infof("Uploading file: %s", filePath)
-			if err := p.storage.UploadFile(filePath, outputFileLocation.Bucket, outputFileLocation.Path); err != nil {
-				p.logger.Errorf("Failed to upload file %s: %s", filePath, err)
-				return err
-			}
-		}
+	if err := p.storage.UploadFile(filePath, outputFileLocation.Bucket, objPath); err != nil {
+		p.logger.Errorf("Failed to upload file %s: %s", filePath, err)
+		return err
 	}
 
 	return nil
