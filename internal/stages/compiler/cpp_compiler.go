@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 
@@ -24,7 +25,8 @@ func (e *CppCompiler) Compile(sourceFilePath, execFilePath, compErrFilePath, mes
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)
 	// Correctly pass the command and its arguments as separate strings.
 	versionFlag := "-std=" + e.version
-	cmd := exec.Command("g++", "-o", execFilePath, versionFlag, sourceFilePath)
+	ctx := context.Background()
+	cmd := exec.CommandContext(ctx, "g++", "-o", execFilePath, versionFlag, sourceFilePath)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

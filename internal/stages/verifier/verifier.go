@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -49,7 +50,8 @@ func (v *verifier) compareOutput(outputPath, expectedFilePath, diffPath, errorPa
 	args := append([]string{}, v.flags...)
 
 	args = append(args, outputPath, expectedFilePath)
-	diffCmd := exec.Command("diff", args...)
+	ctx := context.Background()
+	diffCmd := exec.CommandContext(ctx, "diff", args...)
 
 	diffCmdOutput, err := os.OpenFile(diffPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
