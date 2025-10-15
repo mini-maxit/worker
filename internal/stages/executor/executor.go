@@ -100,7 +100,7 @@ func (d *executor) ExecuteCommand(
 
 func (d *executor) buildRunCommand(absoluteSolutionPath string) string {
 	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
-	return fmt.Sprintf("run_tests.sh ./%s", bin)
+	return fmt.Sprintf("%s ./%s", constants.DockerTestScript, bin)
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
@@ -137,7 +137,7 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 
 		userExecResultFilePaths[i] = filepath.Join(
 			cfg.DirConfig.UserExecResultDirPath,
-			fmt.Sprintf("%d.res", tc.Order))
+			fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt))
 	}
 
 	return []string{

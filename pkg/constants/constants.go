@@ -11,11 +11,9 @@ const (
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
 	SolutionMessageRuntimeError        = "solution execution failed"
-	SolutionMessageInvalidLanguageType = "invalid language type supplied"
 	SolutionMessageTimeout             = "time limit exceeded"
 	SolutionMessageMemoryLimitExceeded = "memory limit exceeded"
 	SolutionMessageOutputDifference    = "output difference"
-	SolutionMessageLimitsMismatch      = "time and memory limits mismatch compared to the number of test cases"
 	SolutionMessageInternalError       = "internal error occurred"
 )
 
@@ -39,7 +37,6 @@ const (
 // Exit codes.
 const (
 	ExitCodeSuccess             = 0
-	ExitCodeInternalError       = 1
 	ExitCodeTimeLimitExceeded   = 143
 	ExitCodeMemoryLimitExceeded = 134
 )
@@ -53,13 +50,10 @@ const (
 	DefaultStorageHost       = "file-storage"
 	DefaultStoragePort       = "8888"
 	DefaultLogPath           = "./internal/logger/logs/log.txt"
-	CompileErrorFileName     = "compile-err.err"
-	BaseChrootDir            = "../tmp/chroot"
 	DefaultWorkerQueueName   = "worker_queue"
 	DefaultResponseQueueName = "response_queue"
 	DefaultMaxWorkersStr     = "10"
 	RuntimeImagePrefix       = "seber/runtime"
-	ExecResultFileName       = "result.txt"
 	ContainerMaxRunTime      = 30
 	DefaultJobsDataVolume    = "maxit_worker_jobs-data"
 	DefaultVerifierFlags     = "-w"
@@ -67,18 +61,26 @@ const (
 
 // Solution package and temporary directory paths.
 const (
-	TmpDirPath            = "/tmp/"
-	InputDirName          = "inputs"
-	OutputDirName         = "outputs"
-	UserOutputDirName     = "userOutputs"
-	UserErrorDirName      = "userErrors"
-	UserDiffDirName       = "userDiff"
-	UserExecResultDirName = "userExecResults"
-	CompileErrFileName    = "compile.err"
+	TmpDirPath             = "/tmp/"
+	InputDirName           = "inputs"
+	OutputDirName          = "outputs"
+	UserOutputDirName      = "userOutputs"
+	UserErrorDirName       = "userErrors"
+	UserDiffDirName        = "userDiff"
+	UserExecResultDirName  = "userExecResults"
+	CompileErrFileName     = "compile.err"
+	ExecutionResultFileExt = "res"
 )
 
-// Utility constants.
+// Docker execution constants.
 const (
-	MaxFileSize                = 10 * 1024 * 1024 // 10 MB
-	MinContainerMemoryKB int64 = 64 * 1024        // 64 MB
+	MinContainerMemoryKB int64 = 64 * 1024 // 64 MB
+	DockerTestScript           = "run_tests.sh"
+)
+
+// RabbitMQ specific constants.
+const (
+	RabbitMQReconnectTries  = 10
+	RabbitMQMaxPriority     = 3
+	RabbitMQRequeuePriority = 2
 )

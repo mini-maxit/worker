@@ -49,7 +49,7 @@ func (c *consumer) Listen() {
 	c.logger.Infof("Declaring queue %s", c.workerQueueName)
 
 	args := make(amqp.Table)
-	args["x-max-priority"] = 3
+	args["x-max-priority"] = constants.RabbitMQMaxPriority
 	_, err := c.channel.QueueDeclare(c.workerQueueName, true, false, false, false, args)
 	if err != nil {
 		c.logger.Panicf("Failed to declare queue %s: %s", c.workerQueueName, err)
@@ -92,7 +92,7 @@ func (c *consumer) Listen() {
 	}
 }
 func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) error {
-	priority := 2
+	priority := constants.RabbitMQRequeuePriority
 
 	queueMessageJSON, err := json.Marshal(queueMessage)
 	if err != nil {

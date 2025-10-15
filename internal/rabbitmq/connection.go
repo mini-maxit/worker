@@ -5,10 +5,9 @@ import (
 
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/constants"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-const numTries = 10
 
 func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	logger := logger.NewNamedLogger("rabbitmq")
@@ -19,7 +18,7 @@ func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	var err error
 	var conn *amqp.Connection
 
-	for v := range numTries {
+	for v := range constants.RabbitMQReconnectTries {
 		conn, err = amqp.Dial(rabbitMQURL)
 		if err != nil {
 			logger.Warnf("Failed to connect to RabbitMQ: %s", err.Error())

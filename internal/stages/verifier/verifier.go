@@ -167,7 +167,7 @@ func (v *verifier) readExecutionResultFiles(
 ) ([]*executor.ExecutionResult, error) {
 	results := make([]*executor.ExecutionResult, numberOfTest)
 	for i := range results {
-		filePath := filepath.Join(execResultDirPath, fmt.Sprintf("%d.res", i+1))
+		filePath := filepath.Join(execResultDirPath, fmt.Sprintf("%d.%s", i+1, constants.ExecutionResultFileExt))
 		file, err := os.Open(filePath)
 		if err != nil {
 			v.logger.Errorf("Failed to open execution result file %s: %s", filePath, err)
