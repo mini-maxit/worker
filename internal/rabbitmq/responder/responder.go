@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -17,7 +18,7 @@ type Responder interface {
 	)
 	PublishSucessHandshakeRespond(
 		messageType, messageID string,
-		languageMap map[string][]string,
+		languages []languages.LanguageSpec,
 	) error
 	PublishSucessStatusRespond(
 		messageType, messageID string,
@@ -90,9 +91,9 @@ func (r *responder) PublishSucessTaskRespond(messageType, messageID string, task
 func (r *responder) PublishSucessHandshakeRespond(
 	messageType string,
 	messageID string,
-	languageMap map[string][]string,
+	languages []languages.LanguageSpec,
 ) error {
-	payload, err := json.Marshal(languageMap)
+	payload, err := json.Marshal(languages)
 	if err != nil {
 		return err
 	}

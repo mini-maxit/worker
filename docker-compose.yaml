@@ -26,7 +26,7 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - JOBS_DATA_VOLUME=worker_jobs-data
   file-storage:
-    image: file-storage
+    image: maxit/file-storage
     pull_policy: never
     container_name: file-storage
     ports:

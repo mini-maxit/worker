@@ -14,6 +14,12 @@ const (
 	CPP LanguageType = iota + 1
 )
 
+type LanguageSpec struct {
+	LanguageName string   `json:"name"`
+	Versions     []string `json:"versions"`
+	Extension    string   `json:"extension"`
+}
+
 func (lt LanguageType) String() string {
 	for key, value := range LanguageTypeMap {
 		if value == lt {
@@ -83,14 +89,25 @@ func ParseLanguageType(s string) (LanguageType, error) {
 	return 0, errors.ErrInvalidLanguageType
 }
 
-func GetSupportedLanguagesWithVersions() map[string][]string {
-	supportedLanguages := make(map[string][]string)
-	for lang, versions := range LanguageVersionMap {
+func GetSupportedLanguagesWithVersions() []LanguageSpec {
+	supportedLanguages := make([]LanguageSpec, 0, len(LanguageTypeMap))
+	for langType, versions := range LanguageVersionMap {
+		langName := langType.String()
+		langExtension, ok := LanguageExtensionMap[langType]
+		if !ok {
+			langExtension = ""
+		}
+
 		var versionList []string
 		for version := range versions {
 			versionList = append(versionList, version)
 		}
-		supportedLanguages[lang.String()] = versionList
+
+		supportedLanguages = append(supportedLanguages, LanguageSpec{
+			LanguageName: langName,
+			Versions:     versionList,
+			Extension:    langExtension,
+		})
 	}
 	return supportedLanguages
 }
