@@ -18,7 +18,7 @@ type Responder interface {
 	)
 	PublishSucessHandshakeRespond(
 		messageType, messageID string,
-		languages []languages.LanguageSpec,
+		languageSpecs []languages.LanguageSpec,
 	) error
 	PublishSucessStatusRespond(
 		messageType, messageID string,
@@ -91,12 +91,21 @@ func (r *responder) PublishSucessTaskRespond(messageType, messageID string, task
 func (r *responder) PublishSucessHandshakeRespond(
 	messageType string,
 	messageID string,
-	languages []languages.LanguageSpec,
+	languageSpecs []languages.LanguageSpec,
 ) error {
-	payload, err := json.Marshal(languages)
+	// Wrap languages array in the expected HandShakeResponsePayload format
+	handshakePayload := struct {
+		Languages []languages.LanguageSpec `json:"languages"`
+	}{
+		Languages: languageSpecs,
+	}
+
+	payload, err := json.Marshal(handshakePayload)
 	if err != nil {
 		return err
 	}
+
+	r.logger.Info("payload: ", string(payload))
 
 	return r.publishRespondMessage(messageType, messageID, payload)
 }
@@ -123,6 +132,7 @@ func (r *responder) publishRespondMessage(messageType, messageID string, payload
 		return jsonErr
 	}
 
+	r.logger.Infof("Publishing response message to response queue: %s", r.responseQueueName)
 	err := r.channel.Publish("", r.responseQueueName, false, false, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
