@@ -186,18 +186,22 @@ func (v *verifier) readExecutionResultFiles(
 			v.logger.Errorf("Failed to open execution result file %s: %s", filePath, err)
 			return nil, err
 		}
-		defer file.Close()
+
 
 		var exitCode int
 		var execTime float64
 		_, err = fmt.Fscanf(file, "%d %f\n", &exitCode, &execTime)
 		if err != nil {
 			v.logger.Errorf("Failed to read line %d: %s", i, err)
+			file.Close()
 			return nil, err
 		}
 		results[i] = &executor.ExecutionResult{
 			ExitCode: exitCode,
 			ExecTime: execTime,
+		}
+		if err := file.Close(); err != nil {
+			v.logger.Errorf("Failed to close execution result file %s: %s", filePath, err)
 		}
 	}
 	return results, nil
