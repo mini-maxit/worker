@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/mini-maxit/worker/internal/logger"
@@ -10,6 +11,7 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/pkg/constants"
+	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
@@ -123,7 +125,12 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 		messageID)
 
 	if err != nil {
-		ws.publishCompilationError(err, dc, task.TestCases)
+		if errors.Is(err, customErr.ErrCompilationFailed) {
+			ws.publishCompilationError(err, dc, task.TestCases)
+			return
+		}
+
+		ws.publishError(err)
 		return
 	}
 
@@ -160,12 +167,12 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 	}
 
 	// Send response message
-	ws.publishSucces(solutionResult)
+	ws.publishPayload(solutionResult)
 }
 
-func (ws *worker) publishSucces(solutionResult solution.Result) {
-	ws.logger.Infof("Publishing success response [MsgID: %s]", ws.processingMessageID)
-	publishErr := ws.responder.PublishSucessTaskRespond(
+func (ws *worker) publishPayload(solutionResult solution.Result) {
+	ws.logger.Infof("Publishing payload response [MsgID: %s]", ws.processingMessageID)
+	publishErr := ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
 		ws.processingMessageID,
 		solutionResult)
@@ -187,5 +194,16 @@ func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDir
 	if sendErr != nil {
 		ws.logger.Errorf("Failed to send solution package: %s", sendErr)
 	}
-	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, err)
+
+	solutionResult := solution.Result{
+		StatusCode: solution.CompilationError,
+		Message:    "Compilation failed",
+	}
+	respErr := ws.responder.PublishPayloadTaskRespond(
+		constants.QueueMessageTypeTask,
+		ws.processingMessageID, solutionResult,
+	)
+	if respErr != nil {
+		ws.logger.Errorf("Failed to publish response: %s", respErr)
+	}
 }

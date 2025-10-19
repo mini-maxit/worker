@@ -24,7 +24,7 @@ type Responder interface {
 		messageType, messageID string,
 		statusMap map[string]interface{},
 	) error
-	PublishSucessTaskRespond(
+	PublishPayloadTaskRespond(
 		messageType, messageID string,
 		taskResult solution.Result,
 	) error
@@ -79,7 +79,7 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, e
 	r.logger.Infof("Published error message to response queue: %s", messageID)
 }
 
-func (r *responder) PublishSucessTaskRespond(messageType, messageID string, taskResult solution.Result) error {
+func (r *responder) PublishPayloadTaskRespond(messageType, messageID string, taskResult solution.Result) error {
 	payload, err := json.Marshal(taskResult)
 	if err != nil {
 		return err

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"go.uber.org/zap"
 )
@@ -56,7 +57,7 @@ func (e *CppCompiler) Compile(sourceFilePath, execFilePath, compErrFilePath, mes
 			return err
 		}
 		e.logger.Infof("Compilation error saved to %s [MsgID: %s]", compErrFilePath, messageID)
-		return cmdErr
+		return errors.ErrCompilationFailed
 	}
 	e.logger.Infof("Compilation successful [MsgID: %s]", messageID)
 	return nil
