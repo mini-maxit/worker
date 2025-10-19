@@ -45,7 +45,7 @@ var LanguageTypeMap = map[string]LanguageType{
 }
 
 var LanguageExtensionMap = map[LanguageType]string{
-	CPP: ".cpp",
+	CPP: "cpp",
 }
 
 var LanguageVersionMap = map[LanguageType]map[string]string{
