@@ -5,18 +5,21 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
-	"github.com/mini-maxit/worker/internal/constants"
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/constants"
 )
 
 type Config struct {
-	RabbitMQURL     string
-	FileStorageURL  string
-	WorkerQueueName string
-	MaxWorkers      int
-	JobsDataVolume  string
+	RabbitMQURL       string
+	StorageBaseUrl    string
+	ConsumeQueueName  string
+	ResponseQueueName string
+	MaxWorkers        int
+	JobsDataVolume    string
+	VerifierFlags     []string
 }
 
 func NewConfig() *Config {
@@ -38,16 +41,19 @@ func NewConfig() *Config {
 	}
 
 	rabbitmqURL := rabbitmqConfig()
-	fileStorageURL := fileStorageConfig()
-	workerQueueName, maxWorkers := workerConfig()
+	storageBaseUrl := storageConfig()
+	workerQueueName, responseQueueName, maxWorkers := workerConfig()
 	jobsDataVolume := dockerConfig()
+	verifierFlagsStr := verifierConfig()
 
 	return &Config{
-		RabbitMQURL:     rabbitmqURL,
-		FileStorageURL:  fileStorageURL,
-		WorkerQueueName: workerQueueName,
-		MaxWorkers:      int(maxWorkers),
-		JobsDataVolume:  jobsDataVolume,
+		RabbitMQURL:       rabbitmqURL,
+		StorageBaseUrl:    storageBaseUrl,
+		ConsumeQueueName:  workerQueueName,
+		ResponseQueueName: responseQueueName,
+		MaxWorkers:        int(maxWorkers),
+		JobsDataVolume:    jobsDataVolume,
+		VerifierFlags:     verifierFlagsStr,
 	}
 }
 
@@ -84,36 +90,41 @@ func rabbitmqConfig() string {
 	return rabbitmqURL
 }
 
-func fileStorageConfig() string {
+func storageConfig() string {
 	logger := logger.NewNamedLogger("config")
 
-	fileStorageHost := os.Getenv("FILESTORAGE_HOST")
-	if fileStorageHost == "" {
-		fileStorageHost = constants.DefaultFileStorageHost
-		logger.Warnf("FILESTORAGE_HOST is not set, using default value %s", constants.DefaultFileStorageHost)
+	storageHost := os.Getenv("STORAGE_HOST")
+	if storageHost == "" {
+		storageHost = constants.DefaultStorageHost
+		logger.Warnf("STORAGE_HOST is not set, using default value %s", constants.DefaultStorageHost)
 	}
-	fileStoragePortStr := os.Getenv("FILESTORAGE_PORT")
-	if fileStoragePortStr == "" {
-		fileStoragePortStr = constants.DefaultFilesStoragePort
-		logger.Warnf("FILESTORAGE_PORT is not set, using default value %s", constants.DefaultFilesStoragePort)
+	storagePortStr := os.Getenv("STORAGE_PORT")
+	if storagePortStr == "" {
+		storagePortStr = constants.DefaultStoragePort
+		logger.Warnf("STORAGE_PORT is not set, using default value %s", constants.DefaultStoragePort)
 	}
-	fileStoragePort, err := strconv.ParseUint(fileStoragePortStr, 10, 16)
+	storagePort, err := strconv.ParseUint(storagePortStr, 10, 16)
 	if err != nil {
-		logger.Fatalf("failed to parse FILESTORAGE_PORT with error: %v", err)
+		logger.Fatalf("failed to parse STORAGE_PORT with error: %v", err)
 	}
 
-	fileStorageURL := fmt.Sprintf("http://%s:%d", fileStorageHost, fileStoragePort)
+	storageURL := fmt.Sprintf("http://%s:%d", storageHost, storagePort)
 
-	return fileStorageURL
+	return storageURL
 }
 
-func workerConfig() (string, int64) {
+func workerConfig() (string, string, int64) {
 	logger := logger.NewNamedLogger("config")
 
 	workerQueueName := os.Getenv("WORKER_QUEUE_NAME")
 	if workerQueueName == "" {
 		workerQueueName = constants.DefaultWorkerQueueName
 		logger.Warnf("WORKER_QUEUE_NAME is not set, using default value %s", constants.DefaultWorkerQueueName)
+	}
+	responseQueueName := os.Getenv("RESPONSE_QUEUE_NAME")
+	if responseQueueName == "" {
+		responseQueueName = constants.DefaultResponseQueueName
+		logger.Warnf("RESPONSE_QUEUE_NAME is not set, using default value %s", constants.DefaultResponseQueueName)
 	}
 	maxWorkersStr := os.Getenv("MAX_WORKERS")
 	if maxWorkersStr == "" {
@@ -125,7 +136,7 @@ func workerConfig() (string, int64) {
 		logger.Fatalf("failed to parse MAX_WORKERS with error: %v", err)
 	}
 
-	return workerQueueName, maxWorkers
+	return workerQueueName, responseQueueName, maxWorkers
 }
 
 func dockerConfig() string {
@@ -138,4 +149,16 @@ func dockerConfig() string {
 	}
 
 	return jobsDataVolume
+}
+
+func verifierConfig() []string {
+	logger := logger.NewNamedLogger("config")
+
+	verifierFlagsStr := os.Getenv("VERIFIER_FLAGS")
+	if verifierFlagsStr == "" {
+		verifierFlagsStr = constants.DefaultVerifierFlags
+		logger.Warnf("VERIFIER_FLAGS is not set, using default value %s", constants.DefaultVerifierFlags)
+	}
+
+	return strings.Split(verifierFlagsStr, ",")
 }
