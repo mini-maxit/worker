@@ -13,38 +13,38 @@ import (
 
 type Responder interface {
 	PublishErrorToResponseQueue(
-		messageType, messageID string,
+		messageType, messageID, respoonsQueue string,
 		err error,
 	)
 	PublishSucessHandshakeRespond(
-		messageType, messageID string,
+		messageType, messageID, responseQueue string,
 		languageSpecs []languages.LanguageSpec,
 	) error
 	PublishSucessStatusRespond(
-		messageType, messageID string,
+		messageType, messageID, responseQueue string,
 		statusMap map[string]interface{},
 	) error
 	PublishPayloadTaskRespond(
-		messageType, messageID string,
+		messageType, messageID, responseQueue string,
 		taskResult solution.Result,
 	) error
 }
 
 type responder struct {
-	logger            *zap.SugaredLogger
-	channel           *amqp.Channel
-	responseQueueName string
+	logger               *zap.SugaredLogger
+	channel              *amqp.Channel
+	defaultResponseQueue string
 }
 
 func NewResponder(channel *amqp.Channel, responseQueueName string) Responder {
 	return &responder{
-		logger:            logger.NewNamedLogger("responder"),
-		channel:           channel,
-		responseQueueName: responseQueueName,
+		logger:               logger.NewNamedLogger("responder"),
+		channel:              channel,
+		defaultResponseQueue: responseQueueName,
 	}
 }
 
-func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, err error) {
+func (r *responder) PublishErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
 	errorPayload := map[string]string{"error": err.Error()}
 	payload, jsonErr := json.Marshal(errorPayload)
 	if jsonErr != nil {
@@ -65,7 +65,12 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, e
 		return
 	}
 
-	err = r.channel.Publish("", r.responseQueueName, false, false, amqp.Publishing{
+	queueName := r.defaultResponseQueue
+	if len(responseQueue) > 0 {
+		queueName = responseQueue
+	}
+
+	err = r.channel.Publish("", queueName, false, false, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: messageID,
 		Body:          responseJSON,
@@ -79,18 +84,24 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID string, e
 	r.logger.Infof("Published error message to response queue: %s", messageID)
 }
 
-func (r *responder) PublishPayloadTaskRespond(messageType, messageID string, taskResult solution.Result) error {
+func (r *responder) PublishPayloadTaskRespond(
+	messageType string,
+	messageID string,
+	responseQueue string,
+	taskResult solution.Result,
+) error {
 	payload, err := json.Marshal(taskResult)
 	if err != nil {
 		return err
 	}
 
-	return r.publishRespondMessage(messageType, messageID, payload)
+	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
 }
 
 func (r *responder) PublishSucessHandshakeRespond(
 	messageType string,
 	messageID string,
+	responseQueue string,
 	languageSpecs []languages.LanguageSpec,
 ) error {
 	// Wrap languages array in the expected HandShakeResponsePayload format
@@ -107,19 +118,24 @@ func (r *responder) PublishSucessHandshakeRespond(
 
 	r.logger.Info("payload: ", string(payload))
 
-	return r.publishRespondMessage(messageType, messageID, payload)
+	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
 }
 
-func (r *responder) PublishSucessStatusRespond(messageType, messageID string, statusMap map[string]interface{}) error {
+func (r *responder) PublishSucessStatusRespond(
+	messageType string,
+	messageID string,
+	responseQueue string,
+	statusMap map[string]interface{},
+) error {
 	payload, err := json.Marshal(statusMap)
 	if err != nil {
 		return err
 	}
 
-	return r.publishRespondMessage(messageType, messageID, payload)
+	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
 }
 
-func (r *responder) publishRespondMessage(messageType, messageID string, payload []byte) error {
+func (r *responder) publishRespondMessage(messageType, messageID, responseQueue string, payload []byte) error {
 	queueMessage := messages.ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
@@ -132,8 +148,13 @@ func (r *responder) publishRespondMessage(messageType, messageID string, payload
 		return jsonErr
 	}
 
-	r.logger.Infof("Publishing response message to response queue: %s", r.responseQueueName)
-	err := r.channel.Publish("", r.responseQueueName, false, false, amqp.Publishing{
+	queueName := r.defaultResponseQueue
+	if len(responseQueue) > 0 {
+		queueName = responseQueue
+	}
+
+	r.logger.Infof("Publishing response message to response queue: %s", queueName)
+	err := r.channel.Publish("", queueName, false, false, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
 	})
