@@ -57,42 +57,62 @@ func (c *consumer) Listen() {
 
 	c.logger.Infof("Listening for messages on queue %s", c.workerQueueName)
 
-	msgs, err := c.channel.Consume(c.workerQueueName, "", true, false, false, false, nil)
+	msgs, err := c.channel.Consume(c.workerQueueName, "", false, false, false, false, nil)
 	if err != nil {
 		c.logger.Panicf("Failed to consume messages from queue %s: %s", c.workerQueueName, err)
 	}
 
 	for msg := range msgs {
-		var queueMessage messages.QueueMessage
-
-		err := json.Unmarshal(msg.Body, &queueMessage)
-		if err != nil {
-			c.logger.Errorf("Failed to unmarshal message: %s", err)
-			c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
-			continue
-		}
-
-		switch queueMessage.Type {
-		case constants.QueueMessageTypeTask:
-			c.logger.Infof("Received task message: %s", queueMessage.MessageID)
-			c.handleTaskMessage(queueMessage, msg.ReplyTo)
-		case constants.QueueMessageTypeStatus:
-			c.logger.Infof("Received status message: %s", queueMessage.MessageID)
-			c.handleStatusMessage(queueMessage, msg.ReplyTo)
-		case constants.QueueMessageTypeHandshake:
-			c.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
-			c.handleHandshakeMessage(queueMessage, msg.ReplyTo)
-		default:
-			c.logger.Errorf("Unknown message type: %s", queueMessage.Type)
-			c.responder.PublishErrorToResponseQueue(
-				queueMessage.Type,
-				queueMessage.MessageID,
-				msg.ReplyTo,
-				errors.ErrUnknownMessageType)
-			continue
-		}
+		go func(m amqp.Delivery) {
+			c.processMessage(m)
+		}(msg)
 	}
 }
+
+func (c *consumer) processMessage(msg amqp.Delivery) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Errorf("Panic while processing message: %v", r)
+			err := msg.Nack(false, true)
+			if err != nil {
+				c.logger.Errorf("Failed to nack message: %s", err)
+			}
+		}
+	}()
+	var queueMessage messages.QueueMessage
+
+	err := json.Unmarshal(msg.Body, &queueMessage)
+	if err != nil {
+		c.logger.Errorf("Failed to unmarshal message: %s", err)
+		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
+		return
+	}
+
+	switch queueMessage.Type {
+	case constants.QueueMessageTypeTask:
+		c.logger.Infof("Received task message: %s", queueMessage.MessageID)
+		c.handleTaskMessage(queueMessage, msg.ReplyTo)
+	case constants.QueueMessageTypeStatus:
+		c.logger.Infof("Received status message: %s", queueMessage.MessageID)
+		c.handleStatusMessage(queueMessage, msg.ReplyTo)
+	case constants.QueueMessageTypeHandshake:
+		c.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
+		c.handleHandshakeMessage(queueMessage, msg.ReplyTo)
+	default:
+		c.logger.Errorf("Unknown message type: %s", queueMessage.Type)
+		c.responder.PublishErrorToResponseQueue(
+			queueMessage.Type,
+			queueMessage.MessageID,
+			msg.ReplyTo,
+			errors.ErrUnknownMessageType)
+	}
+
+	err = msg.Ack(false)
+	if err != nil {
+		c.logger.Errorf("Failed to ack message: %s", err)
+	}
+}
+
 func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) error {
 	priority := constants.RabbitMQRequeuePriority
 
@@ -102,7 +122,7 @@ func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) 
 		return err
 	}
 
-	err = c.channel.Publish("", c.workerQueueName, false, false, amqp.Publishing{
+	err = c.responder.Publish(c.workerQueueName, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: queueMessage.MessageID,
 		Body:          queueMessageJSON,

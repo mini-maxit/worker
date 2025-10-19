@@ -54,6 +54,7 @@ func main() {
 	executor := executor.NewExecutor(config.JobsDataVolume, cli)
 	verifier := verifier.NewVerifier(config.VerifierFlags)
 	responder := responder.NewResponder(workerChannel, config.ResponseQueueName)
+	defer responder.Close()
 	scheduler := scheduler.NewScheduler(config.MaxWorkers, compiler, packager, executor, verifier, responder)
 	consumer := consumer.NewConsumer(workerChannel, config.ConsumeQueueName, scheduler, responder)
 

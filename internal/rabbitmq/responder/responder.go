@@ -28,20 +28,55 @@ type Responder interface {
 		messageType, messageID, responseQueue string,
 		taskResult solution.Result,
 	) error
+	Publish(queueName string, publishing amqp.Publishing) error
+	Close()
+}
+
+type publishRequest struct {
+	queueName  string
+	publishing amqp.Publishing
+	done       chan error
 }
 
 type responder struct {
 	logger               *zap.SugaredLogger
 	channel              *amqp.Channel
 	defaultResponseQueue string
+	publishChan          chan publishRequest
 }
 
 func NewResponder(channel *amqp.Channel, responseQueueName string) Responder {
-	return &responder{
+	r := &responder{
 		logger:               logger.NewNamedLogger("responder"),
 		channel:              channel,
 		defaultResponseQueue: responseQueueName,
+		publishChan:          make(chan publishRequest, 100),
 	}
+
+	go r.publishWorker()
+	return r
+}
+
+func (r *responder) publishWorker() {
+	for req := range r.publishChan {
+		err := r.channel.Publish("", req.queueName, false, false, req.publishing)
+		req.done <- err
+		close(req.done)
+	}
+}
+
+func (r *responder) Publish(queueName string, publishing amqp.Publishing) error {
+	done := make(chan error, 1)
+	r.publishChan <- publishRequest{
+		queueName:  queueName,
+		publishing: publishing,
+		done:       done,
+	}
+	return <-done
+}
+
+func (r *responder) Close() {
+	close(r.publishChan)
 }
 
 func (r *responder) PublishErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
@@ -70,7 +105,7 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID, response
 		queueName = responseQueue
 	}
 
-	err = r.channel.Publish("", queueName, false, false, amqp.Publishing{
+	err = r.Publish(queueName, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: messageID,
 		Body:          responseJSON,
@@ -154,7 +189,7 @@ func (r *responder) publishRespondMessage(messageType, messageID, responseQueue 
 	}
 
 	r.logger.Infof("Publishing response message to response queue: %s", queueName)
-	err := r.channel.Publish("", queueName, false, false, amqp.Publishing{
+	err := r.Publish(queueName, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
 	})
