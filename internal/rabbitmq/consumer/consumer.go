@@ -64,10 +64,11 @@ func (c *consumer) Listen() {
 
 	for msg := range msgs {
 		var queueMessage messages.QueueMessage
+
 		err := json.Unmarshal(msg.Body, &queueMessage)
 		if err != nil {
 			c.logger.Errorf("Failed to unmarshal message: %s", err)
-			c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, err)
+			c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
 			continue
 		}
 
@@ -77,15 +78,16 @@ func (c *consumer) Listen() {
 			c.handleTaskMessage(queueMessage, msg.ReplyTo)
 		case constants.QueueMessageTypeStatus:
 			c.logger.Infof("Received status message: %s", queueMessage.MessageID)
-			c.handleStatusMessage(queueMessage)
+			c.handleStatusMessage(queueMessage, msg.ReplyTo)
 		case constants.QueueMessageTypeHandshake:
 			c.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
-			c.handleHandshakeMessage(queueMessage)
+			c.handleHandshakeMessage(queueMessage, msg.ReplyTo)
 		default:
 			c.logger.Errorf("Unknown message type: %s", queueMessage.Type)
 			c.responder.PublishErrorToResponseQueue(
 				queueMessage.Type,
 				queueMessage.MessageID,
+				msg.ReplyTo,
 				errors.ErrUnknownMessageType)
 			continue
 		}
@@ -124,6 +126,7 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 		c.responder.PublishErrorToResponseQueue(
 			queueMessage.Type,
 			queueMessage.MessageID,
+			replyTo,
 			err)
 		return
 	}
@@ -146,27 +149,28 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 	c.responder.PublishErrorToResponseQueue(
 		queueMessage.Type,
 		queueMessage.MessageID,
+		replyTo,
 		err)
 }
 
-func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage) {
+func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, replyTo string) {
 	c.logger.Infof("Processing status message")
 	status := c.scheduler.GetWorkersStatus()
 
-	err := c.responder.PublishSucessStatusRespond(queueMessage.Type, queueMessage.MessageID, status)
+	err := c.responder.PublishSucessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
 	if err != nil {
 		c.logger.Errorf("Failed to publish status message: %s", err)
-		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, err)
+		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)
 	}
 }
 
-func (c *consumer) handleHandshakeMessage(queueMessage messages.QueueMessage) {
+func (c *consumer) handleHandshakeMessage(queueMessage messages.QueueMessage, replyTo string) {
 	c.logger.Infof("Processing handshake message")
 	languages := languages.GetSupportedLanguagesWithVersions()
 
-	err := c.responder.PublishSucessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, languages)
+	err := c.responder.PublishSucessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
 	if err != nil {
 		c.logger.Errorf("Failed to publish supported languages: %s", err)
-		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, err)
+		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)
 	}
 }

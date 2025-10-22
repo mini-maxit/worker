@@ -106,7 +106,7 @@ func (s *scheduler) ProcessTask(responseQueueName, messageID string, task *messa
 			}
 		}()
 
-		w.ProcessTask(messageID, task)
+		w.ProcessTask(messageID, responseQueueName, task)
 	}(worker)
 
 	return nil
