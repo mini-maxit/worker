@@ -14,6 +14,7 @@ import (
 
 type Config struct {
 	RabbitMQURL       string
+	PublishChanSize   int
 	StorageBaseUrl    string
 	ConsumeQueueName  string
 	ResponseQueueName string
@@ -40,7 +41,7 @@ func NewConfig() *Config {
 		}
 	}
 
-	rabbitmqURL := rabbitmqConfig()
+	rabbitmqURL, publishChanSize := rabbitmqConfig()
 	storageBaseUrl := storageConfig()
 	workerQueueName, responseQueueName, maxWorkers := workerConfig()
 	jobsDataVolume := dockerConfig()
@@ -48,6 +49,7 @@ func NewConfig() *Config {
 
 	return &Config{
 		RabbitMQURL:       rabbitmqURL,
+		PublishChanSize:   publishChanSize,
 		StorageBaseUrl:    storageBaseUrl,
 		ConsumeQueueName:  workerQueueName,
 		ResponseQueueName: responseQueueName,
@@ -57,7 +59,7 @@ func NewConfig() *Config {
 	}
 }
 
-func rabbitmqConfig() string {
+func rabbitmqConfig() (string, int) {
 	logger := logger.NewNamedLogger("config")
 
 	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
@@ -84,10 +86,22 @@ func rabbitmqConfig() string {
 		rabbitmqPassword = constants.DefaultRabbitmqPassword
 		logger.Warnf("RABBITMQ_PASSWORD is not set, using default value %s", constants.DefaultRabbitmqPassword)
 	}
+	var publishChanSize int64
+	publishChanSizeStr := os.Getenv("RABBITMQ_PUBLISH_CHAN_SIZE")
+	if publishChanSizeStr == "" {
+		publishChanSize = constants.DefaultRabbitmqPublishChanSize
+		logger.Warnf("RABBITMQ_PUBLISH_CHAN_SIZE is not set, using default value %d",
+			constants.DefaultRabbitmqPublishChanSize)
+	} else {
+		publishChanSize, err = strconv.ParseInt(publishChanSizeStr, 10, 8)
+		if err != nil {
+			logger.Fatalf("failed to parse RABBITMQ_PUBLISH_CHAN_SIZE with error: %v", err)
+		}
+	}
 
 	rabbitmqURL := fmt.Sprintf("amqp://%s:%s@%s:%d/", rabbitmqUser, rabbitmqPassword, rabbitmqHost, rabbitmqPort)
 
-	return rabbitmqURL
+	return rabbitmqURL, int(publishChanSize)
 }
 
 func storageConfig() string {
@@ -126,14 +140,17 @@ func workerConfig() (string, string, int64) {
 		responseQueueName = constants.DefaultResponseQueueName
 		logger.Warnf("RESPONSE_QUEUE_NAME is not set, using default value %s", constants.DefaultResponseQueueName)
 	}
+	var maxWorkers int64
+	var err error
 	maxWorkersStr := os.Getenv("MAX_WORKERS")
 	if maxWorkersStr == "" {
-		maxWorkersStr = constants.DefaultMaxWorkersStr
-		logger.Warnf("MAX_WORKERS is not set, using default value %s", constants.DefaultMaxWorkersStr)
-	}
-	maxWorkers, err := strconv.ParseInt(maxWorkersStr, 10, 8)
-	if err != nil {
-		logger.Fatalf("failed to parse MAX_WORKERS with error: %v", err)
+		maxWorkers = constants.DefaultMaxWorkers
+		logger.Warnf("MAX_WORKERS is not set, using default value %d", constants.DefaultMaxWorkers)
+	} else {
+		maxWorkers, err = strconv.ParseInt(maxWorkersStr, 10, 8)
+		if err != nil {
+			logger.Fatalf("failed to parse MAX_WORKERS with error: %v", err)
+		}
 	}
 
 	return workerQueueName, responseQueueName, maxWorkers

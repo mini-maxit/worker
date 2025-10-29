@@ -43,20 +43,21 @@ const (
 
 // Configuration constants.
 const (
-	DefaultRabbitmqHost      = "localhost"
-	DefaultRabbitmqUser      = "guest"
-	DefaultRabbitmqPassword  = "guest"
-	DefaultRabbitmqPort      = "5672"
-	DefaultStorageHost       = "file-storage"
-	DefaultStoragePort       = "8888"
-	DefaultLogPath           = "./internal/logger/logs/log.txt"
-	DefaultWorkerQueueName   = "worker_queue"
-	DefaultResponseQueueName = "response_queue"
-	DefaultMaxWorkersStr     = "10"
-	RuntimeImagePrefix       = "seber/runtime"
-	ContainerMaxRunTime      = 30
-	DefaultJobsDataVolume    = "maxit_worker_jobs-data"
-	DefaultVerifierFlags     = "-w"
+	DefaultRabbitmqHost            = "localhost"
+	DefaultRabbitmqUser            = "guest"
+	DefaultRabbitmqPassword        = "guest"
+	DefaultRabbitmqPort            = "5672"
+	DefaultStorageHost             = "file-storage"
+	DefaultStoragePort             = "8888"
+	DefaultLogPath                 = "./internal/logger/logs/log.txt"
+	DefaultWorkerQueueName         = "worker_queue"
+	DefaultResponseQueueName       = "response_queue"
+	DefaultRabbitmqPublishChanSize = 100
+	DefaultMaxWorkers              = 10
+	RuntimeImagePrefix             = "seber/runtime"
+	ContainerMaxRunTime            = 30
+	DefaultJobsDataVolume          = "maxit_worker_jobs-data"
+	DefaultVerifierFlags           = "-w"
 )
 
 // Solution package and temporary directory paths.

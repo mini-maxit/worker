@@ -57,7 +57,7 @@ func (c *consumer) Listen() {
 
 	c.logger.Infof("Listening for messages on queue %s", c.workerQueueName)
 
-	msgs, err := c.channel.Consume(c.workerQueueName, "", false, false, false, false, nil)
+	msgs, err := c.channel.Consume(c.workerQueueName, "", true, false, false, false, nil)
 	if err != nil {
 		c.logger.Panicf("Failed to consume messages from queue %s: %s", c.workerQueueName, err)
 	}
@@ -73,10 +73,6 @@ func (c *consumer) processMessage(msg amqp.Delivery) {
 	defer func() {
 		if r := recover(); r != nil {
 			c.logger.Errorf("Panic while processing message: %v", r)
-			err := msg.Nack(false, true)
-			if err != nil {
-				c.logger.Errorf("Failed to nack message: %s", err)
-			}
 		}
 	}()
 	var queueMessage messages.QueueMessage
@@ -105,11 +101,6 @@ func (c *consumer) processMessage(msg amqp.Delivery) {
 			queueMessage.MessageID,
 			msg.ReplyTo,
 			errors.ErrUnknownMessageType)
-	}
-
-	err = msg.Ack(false)
-	if err != nil {
-		c.logger.Errorf("Failed to ack message: %s", err)
 	}
 }
 

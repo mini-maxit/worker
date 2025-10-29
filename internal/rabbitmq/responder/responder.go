@@ -2,8 +2,10 @@ package responder
 
 import (
 	"encoding/json"
+	"sync"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
@@ -29,7 +31,7 @@ type Responder interface {
 		taskResult solution.Result,
 	) error
 	Publish(queueName string, publishing amqp.Publishing) error
-	Close()
+	Close() error
 }
 
 type publishRequest struct {
@@ -43,14 +45,16 @@ type responder struct {
 	channel              *amqp.Channel
 	defaultResponseQueue string
 	publishChan          chan publishRequest
+	mu                   sync.Mutex
+	closed               bool
 }
 
-func NewResponder(channel *amqp.Channel, responseQueueName string) Responder {
+func NewResponder(channel *amqp.Channel, responseQueueName string, publishChanSize int) Responder {
 	r := &responder{
 		logger:               logger.NewNamedLogger("responder"),
 		channel:              channel,
 		defaultResponseQueue: responseQueueName,
-		publishChan:          make(chan publishRequest, 100),
+		publishChan:          make(chan publishRequest, publishChanSize),
 	}
 
 	go r.publishWorker()
@@ -66,7 +70,21 @@ func (r *responder) publishWorker() {
 }
 
 func (r *responder) Publish(queueName string, publishing amqp.Publishing) error {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return errors.ErrResponderClosed
+	}
+	r.mu.Unlock()
+
 	done := make(chan error, 1)
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			done <- errors.ErrResponderClosed
+		}
+	}()
+
 	r.publishChan <- publishRequest{
 		queueName:  queueName,
 		publishing: publishing,
@@ -75,8 +93,17 @@ func (r *responder) Publish(queueName string, publishing amqp.Publishing) error 
 	return <-done
 }
 
-func (r *responder) Close() {
+func (r *responder) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.closed {
+		return errors.ErrResponderClosed
+	}
+
+	r.closed = true
 	close(r.publishChan)
+	return nil
 }
 
 func (r *responder) PublishErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
