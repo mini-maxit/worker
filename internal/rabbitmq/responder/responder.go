@@ -15,7 +15,7 @@ import (
 
 type Responder interface {
 	PublishErrorToResponseQueue(
-		messageType, messageID, respoonsQueue string,
+		messageType, messageID, responseQueue string,
 		err error,
 	)
 	PublishSucessHandshakeRespond(
