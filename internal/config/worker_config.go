@@ -51,7 +51,7 @@ func NewConfig() *Config {
 		PublishChanSize:  publishChanSize,
 		StorageBaseUrl:   storageBaseUrl,
 		ConsumeQueueName: workerQueueName,
-		MaxWorkers:       int(maxWorkers),
+		MaxWorkers:       maxWorkers,
 		JobsDataVolume:   jobsDataVolume,
 		VerifierFlags:    verifierFlagsStr,
 	}
@@ -99,7 +99,7 @@ func rabbitmqConfig() (string, int) {
 
 	rabbitmqURL := fmt.Sprintf("amqp://%s:%s@%s:%d/", rabbitmqUser, rabbitmqPassword, rabbitmqHost, rabbitmqPort)
 
-	return rabbitmqURL, int(publishChanSize)
+	return rabbitmqURL, publishChanSize
 }
 
 func storageConfig() string {
@@ -125,7 +125,7 @@ func storageConfig() string {
 	return storageURL
 }
 
-func workerConfig() (string, int64) {
+func workerConfig() (string, int) {
 	logger := logger.NewNamedLogger("config")
 
 	workerQueueName := os.Getenv("WORKER_QUEUE_NAME")
@@ -133,14 +133,14 @@ func workerConfig() (string, int64) {
 		workerQueueName = constants.DefaultWorkerQueueName
 		logger.Warnf("WORKER_QUEUE_NAME is not set, using default value %s", constants.DefaultWorkerQueueName)
 	}
-	var maxWorkers int64
+	var maxWorkers int
 	var err error
 	maxWorkersStr := os.Getenv("MAX_WORKERS")
 	if maxWorkersStr == "" {
 		maxWorkers = constants.DefaultMaxWorkers
 		logger.Warnf("MAX_WORKERS is not set, using default value %d", constants.DefaultMaxWorkers)
 	} else {
-		maxWorkers, err = strconv.ParseInt(maxWorkersStr, 10, 8)
+		maxWorkers, err = strconv.Atoi(maxWorkersStr)
 		if err != nil {
 			logger.Fatalf("failed to parse MAX_WORKERS with error: %v", err)
 		}
