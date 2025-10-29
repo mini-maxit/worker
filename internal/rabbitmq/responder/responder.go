@@ -67,7 +67,7 @@ func (r *responder) publishWorker() {
 	}
 }
 
-func (r *responder) Publish(queueName string, publishing amqp.Publishing) error {
+func (r *responder) Publish(queueName string, publishing amqp.Publishing) (err error) {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
@@ -79,7 +79,7 @@ func (r *responder) Publish(queueName string, publishing amqp.Publishing) error 
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			done <- errors.ErrResponderClosed
+			err = errors.ErrResponderClosed
 		}
 	}()
 
