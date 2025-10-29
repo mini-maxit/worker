@@ -84,14 +84,14 @@ func rabbitmqConfig() (string, int) {
 		rabbitmqPassword = constants.DefaultRabbitmqPassword
 		logger.Warnf("RABBITMQ_PASSWORD is not set, using default value %s", constants.DefaultRabbitmqPassword)
 	}
-	var publishChanSize int64
+	var publishChanSize int
 	publishChanSizeStr := os.Getenv("RABBITMQ_PUBLISH_CHAN_SIZE")
 	if publishChanSizeStr == "" {
 		publishChanSize = constants.DefaultRabbitmqPublishChanSize
 		logger.Warnf("RABBITMQ_PUBLISH_CHAN_SIZE is not set, using default value %d",
 			constants.DefaultRabbitmqPublishChanSize)
 	} else {
-		publishChanSize, err = strconv.ParseInt(publishChanSizeStr, 10, 64)
+		publishChanSize, err = strconv.Atoi(publishChanSizeStr)
 		if err != nil {
 			logger.Fatalf("failed to parse RABBITMQ_PUBLISH_CHAN_SIZE with error: %v", err)
 		}
