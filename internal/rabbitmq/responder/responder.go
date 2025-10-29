@@ -41,20 +41,18 @@ type publishRequest struct {
 }
 
 type responder struct {
-	logger               *zap.SugaredLogger
-	channel              *amqp.Channel
-	defaultResponseQueue string
-	publishChan          chan publishRequest
-	mu                   sync.Mutex
-	closed               bool
+	logger      *zap.SugaredLogger
+	channel     *amqp.Channel
+	publishChan chan publishRequest
+	mu          sync.Mutex
+	closed      bool
 }
 
-func NewResponder(channel *amqp.Channel, responseQueueName string, publishChanSize int) Responder {
+func NewResponder(channel *amqp.Channel, publishChanSize int) Responder {
 	r := &responder{
-		logger:               logger.NewNamedLogger("responder"),
-		channel:              channel,
-		defaultResponseQueue: responseQueueName,
-		publishChan:          make(chan publishRequest, publishChanSize),
+		logger:      logger.NewNamedLogger("responder"),
+		channel:     channel,
+		publishChan: make(chan publishRequest, publishChanSize),
 	}
 
 	go r.publishWorker()
@@ -127,12 +125,7 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID, response
 		return
 	}
 
-	queueName := r.defaultResponseQueue
-	if len(responseQueue) > 0 {
-		queueName = responseQueue
-	}
-
-	err = r.Publish(queueName, amqp.Publishing{
+	err = r.channel.Publish("", responseQueue, false, false, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: messageID,
 		Body:          responseJSON,
@@ -210,13 +203,7 @@ func (r *responder) publishRespondMessage(messageType, messageID, responseQueue 
 		return jsonErr
 	}
 
-	queueName := r.defaultResponseQueue
-	if len(responseQueue) > 0 {
-		queueName = responseQueue
-	}
-
-	r.logger.Infof("Publishing response message to response queue: %s", queueName)
-	err := r.Publish(queueName, amqp.Publishing{
+	err := r.channel.Publish("", responseQueue, false, false, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
 	})

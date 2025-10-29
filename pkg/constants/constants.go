@@ -51,7 +51,6 @@ const (
 	DefaultStoragePort             = "8888"
 	DefaultLogPath                 = "./internal/logger/logs/log.txt"
 	DefaultWorkerQueueName         = "worker_queue"
-	DefaultResponseQueueName       = "response_queue"
 	DefaultRabbitmqPublishChanSize = 100
 	DefaultMaxWorkers              = 10
 	RuntimeImagePrefix             = "seber/runtime"

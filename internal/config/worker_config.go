@@ -13,14 +13,13 @@ import (
 )
 
 type Config struct {
-	RabbitMQURL       string
-	PublishChanSize   int
-	StorageBaseUrl    string
-	ConsumeQueueName  string
-	ResponseQueueName string
-	MaxWorkers        int
-	JobsDataVolume    string
-	VerifierFlags     []string
+	RabbitMQURL      string
+	PublishChanSize  int
+	StorageBaseUrl   string
+	ConsumeQueueName string
+	MaxWorkers       int
+	JobsDataVolume   string
+	VerifierFlags    []string
 }
 
 func NewConfig() *Config {
@@ -43,19 +42,18 @@ func NewConfig() *Config {
 
 	rabbitmqURL, publishChanSize := rabbitmqConfig()
 	storageBaseUrl := storageConfig()
-	workerQueueName, responseQueueName, maxWorkers := workerConfig()
+	workerQueueName, maxWorkers := workerConfig()
 	jobsDataVolume := dockerConfig()
 	verifierFlagsStr := verifierConfig()
 
 	return &Config{
-		RabbitMQURL:       rabbitmqURL,
-		PublishChanSize:   publishChanSize,
-		StorageBaseUrl:    storageBaseUrl,
-		ConsumeQueueName:  workerQueueName,
-		ResponseQueueName: responseQueueName,
-		MaxWorkers:        int(maxWorkers),
-		JobsDataVolume:    jobsDataVolume,
-		VerifierFlags:     verifierFlagsStr,
+		RabbitMQURL:      rabbitmqURL,
+		PublishChanSize:  publishChanSize,
+		StorageBaseUrl:   storageBaseUrl,
+		ConsumeQueueName: workerQueueName,
+		MaxWorkers:       int(maxWorkers),
+		JobsDataVolume:   jobsDataVolume,
+		VerifierFlags:    verifierFlagsStr,
 	}
 }
 
@@ -127,18 +125,13 @@ func storageConfig() string {
 	return storageURL
 }
 
-func workerConfig() (string, string, int64) {
+func workerConfig() (string, int64) {
 	logger := logger.NewNamedLogger("config")
 
 	workerQueueName := os.Getenv("WORKER_QUEUE_NAME")
 	if workerQueueName == "" {
 		workerQueueName = constants.DefaultWorkerQueueName
 		logger.Warnf("WORKER_QUEUE_NAME is not set, using default value %s", constants.DefaultWorkerQueueName)
-	}
-	responseQueueName := os.Getenv("RESPONSE_QUEUE_NAME")
-	if responseQueueName == "" {
-		responseQueueName = constants.DefaultResponseQueueName
-		logger.Warnf("RESPONSE_QUEUE_NAME is not set, using default value %s", constants.DefaultResponseQueueName)
 	}
 	var maxWorkers int64
 	var err error
@@ -153,7 +146,7 @@ func workerConfig() (string, string, int64) {
 		}
 	}
 
-	return workerQueueName, responseQueueName, maxWorkers
+	return workerQueueName, maxWorkers
 }
 
 func dockerConfig() string {
