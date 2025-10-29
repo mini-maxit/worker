@@ -187,7 +187,6 @@ func (v *verifier) readExecutionResultFiles(
 			return nil, err
 		}
 
-
 		var exitCode int
 		var execTime float64
 		_, err = fmt.Fscanf(file, "%d %f\n", &exitCode, &execTime)

@@ -53,7 +53,7 @@ func main() {
 	packager := packager.NewPackager(storage)
 	executor := executor.NewExecutor(config.JobsDataVolume, cli)
 	verifier := verifier.NewVerifier(config.VerifierFlags)
-	responder := responder.NewResponder(workerChannel, config.ResponseQueueName)
+	responder := responder.NewResponder(workerChannel)
 	scheduler := scheduler.NewScheduler(config.MaxWorkers, compiler, packager, executor, verifier, responder)
 	consumer := consumer.NewConsumer(workerChannel, config.ConsumeQueueName, scheduler, responder)
 

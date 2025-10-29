@@ -21,7 +21,7 @@ import (
 )
 
 type Worker interface {
-	ProcessTask(messageID string, task *messages.TaskQueueMessage)
+	ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage)
 	GetStatus() string
 	UpdateStatus(status string)
 	GetProcessingMessageID() string
@@ -32,6 +32,7 @@ type worker struct {
 	id                  int
 	status              string
 	processingMessageID string
+	responseQueue       string
 	compiler            compiler.Compiler
 	packager            packager.Packager
 	executor            executor.Executor
@@ -79,7 +80,7 @@ func (ws *worker) GetProcessingMessageID() string {
 	return ws.processingMessageID
 }
 
-func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage) {
+func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage) {
 	defer func() {
 		if r := recover(); r != nil {
 			if err, ok := r.(error); ok {
@@ -92,7 +93,11 @@ func (ws *worker) ProcessTask(messageID string, task *messages.TaskQueueMessage)
 
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
 	ws.processingMessageID = messageID
-	defer func() { ws.processingMessageID = "" }()
+	ws.responseQueue = responseQueue
+	defer func() {
+		ws.processingMessageID = ""
+		ws.responseQueue = ""
+	}()
 
 	// Parse language type
 	langType, err := languages.ParseLanguageType(task.LanguageType)
@@ -175,17 +180,22 @@ func (ws *worker) publishPayload(solutionResult solution.Result) {
 	publishErr := ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
 		ws.processingMessageID,
+		ws.responseQueue,
 		solutionResult)
 
 	if publishErr != nil {
 		ws.logger.Errorf("Failed to publish success response: %s", publishErr)
-		ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, publishErr)
+		ws.responder.PublishErrorToResponseQueue(
+			constants.QueueMessageTypeTask,
+			ws.processingMessageID,
+			ws.responseQueue,
+			publishErr)
 	}
 }
 
 func (ws *worker) publishError(err error) {
 	ws.logger.Errorf("Error: %s", err)
-	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, err)
+	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, ws.responseQueue, err)
 }
 
 func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
@@ -201,7 +211,9 @@ func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDir
 	}
 	respErr := ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
-		ws.processingMessageID, solutionResult,
+		ws.processingMessageID,
+		ws.responseQueue,
+		solutionResult,
 	)
 	if respErr != nil {
 		ws.logger.Errorf("Failed to publish response: %s", respErr)
