@@ -79,6 +79,7 @@ func (r *responder) Publish(queueName string, publishing amqp.Publishing) (err e
 
 	defer func() {
 		if rec := recover(); rec != nil {
+			r.logger.Errorf("panic in Publish: %v", rec)
 			err = errors.ErrResponderClosed
 		}
 	}()
