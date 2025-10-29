@@ -2,9 +2,9 @@ package logger
 
 import (
 	"os"
-	"sync"
+	"path/filepath"
+	"runtime"
 
-	"github.com/mini-maxit/worker/pkg/constants"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -17,63 +17,93 @@ const (
 	msgKey    = "msg"
 )
 
-var (
-	sugarLogger  *zap.SugaredLogger
-	currentLevel zap.AtomicLevel
-	once         sync.Once
-)
+var sugarLogger *zap.SugaredLogger
 
-func InitializeLogger() {
-	once.Do(func() {
-		currentLevel = zap.NewAtomicLevelAt(zap.InfoLevel) // Default to InfoLevel
+// getProjectRoot finds the project root directory by looking for go.mod file.
+func getProjectRoot() string {
+	// Get the current file's directory.
+	_, currentFile, _, _ := runtime.Caller(0)
+	currentDir := filepath.Dir(currentFile)
 
-		fileSync := zapcore.AddSync(&lumberjack.Logger{
-			Filename: constants.DefaultLogPath,
-			MaxAge:   1,
-			Compress: true,
-		})
-
-		consoleSync := zapcore.AddSync(os.Stdout)
-
-		encoderConfig := zapcore.EncoderConfig{
-			TimeKey:        timeKey,
-			LevelKey:       levelKey,
-			NameKey:        "source",
-			MessageKey:     msgKey,
-			EncodeTime:     zapcore.ISO8601TimeEncoder,
-			EncodeLevel:    zapcore.CapitalLevelEncoder,
-			EncodeDuration: zapcore.StringDurationEncoder,
+	// Walk up the directory tree to find go.mod.
+	for {
+		goModPath := filepath.Join(currentDir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			return currentDir
 		}
 
-		fileCore := zapcore.NewCore(
-			zapcore.NewConsoleEncoder(encoderConfig),
-			fileSync,
-			currentLevel, // Use dynamic log level
-		)
+		parent := filepath.Dir(currentDir)
+		if parent == currentDir {
+			// Reached the root directory, fallback to current working directory.
+			wd, _ := os.Getwd()
+			return wd
+		}
+		currentDir = parent
+	}
+}
 
-		consoleCore := zapcore.NewCore(
-			zapcore.NewConsoleEncoder(encoderConfig),
-			consoleSync,
-			currentLevel, // Use dynamic log level
-		)
+// getLogPath returns the absolute path to the log file in the project root.
+func getLogPath() string {
+	projectRoot := getProjectRoot()
+	logDir := os.Getenv("LOG_DIR")
+	if logDir == "" {
+		logDir = "logs"
+	}
 
-		core := zapcore.NewTee(fileCore, consoleCore)
+	return filepath.Join(projectRoot, logDir, "app.log")
+}
 
-		logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-		sugarLogger = logger.Sugar()
+func initializeLogger() {
+	logPath := getLogPath()
+
+	logDir := filepath.Dir(logPath)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		logPath = "app.log"
+	}
+
+	w := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   logPath,
+		MaxSize:    50,
+		MaxBackups: 10,
+		MaxAge:     28,
+		Compress:   true,
+		LocalTime:  true,
 	})
+
+	stdWriter := zapcore.AddSync(os.Stdout)
+
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:        timeKey,
+		LevelKey:       levelKey,
+		NameKey:        sourceKey,
+		MessageKey:     msgKey,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeLevel:    zapcore.CapitalLevelEncoder,
+		EncodeDuration: zapcore.StringDurationEncoder,
+	}
+
+	fileCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		w,
+		zap.InfoLevel,
+	)
+
+	stdCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		stdWriter,
+		zap.InfoLevel,
+	)
+
+	core := zapcore.NewTee(fileCore, stdCore)
+
+	log := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+	sugarLogger = log.Sugar()
 }
 
-func NewNamedLogger(serviceName string) *zap.SugaredLogger {
+// NewNamedLogger creates a new named SugaredLogger for a given service.
+func NewNamedLogger(name string) *zap.SugaredLogger {
 	if sugarLogger == nil {
-		InitializeLogger()
+		initializeLogger()
 	}
-	return sugarLogger.Named(serviceName)
-}
-
-func SetLoggerLevel(level zapcore.Level) {
-	if sugarLogger == nil {
-		InitializeLogger()
-	}
-	currentLevel.SetLevel(level)
+	return sugarLogger.Named(name)
 }
