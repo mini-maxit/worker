@@ -22,8 +22,14 @@ var sugarLogger *zap.SugaredLogger
 // getProjectRoot finds the project root directory by looking for go.mod file.
 func getProjectRoot() string {
 	// Get the current file's directory.
-	_, currentFile, _, _ := runtime.Caller(0)
-	currentDir := filepath.Dir(currentFile)
+	_, currentFile, _, ok := runtime.Caller(0)
+	var currentDir string
+	if !ok || currentFile == "" {
+		wd, _ := os.Getwd()
+		currentDir = wd
+	} else {
+		currentDir = filepath.Dir(currentFile)
+	}
 
 	// Walk up the directory tree to find go.mod.
 	for {
