@@ -12,4 +12,5 @@ var (
 	ErrContainerFailed             = errors.New("container failed to execute")
 	ErrSubmissionFileLocationEmpty = errors.New("submission file location is empty")
 	ErrCompilationFailed           = errors.New("compilation failed")
+	ErrResponderClosed             = errors.New("responder is closed")
 )
