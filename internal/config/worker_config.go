@@ -91,7 +91,7 @@ func rabbitmqConfig() (string, int) {
 		logger.Warnf("RABBITMQ_PUBLISH_CHAN_SIZE is not set, using default value %d",
 			constants.DefaultRabbitmqPublishChanSize)
 	} else {
-		publishChanSize, err = strconv.ParseInt(publishChanSizeStr, 10, 8)
+		publishChanSize, err = strconv.ParseInt(publishChanSizeStr, 10, 64)
 		if err != nil {
 			logger.Fatalf("failed to parse RABBITMQ_PUBLISH_CHAN_SIZE with error: %v", err)
 		}
