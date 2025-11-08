@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/internal/rabbitmq/channel"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
@@ -42,16 +43,16 @@ type publishRequest struct {
 
 type responder struct {
 	logger      *zap.SugaredLogger
-	channel     *amqp.Channel
+	channel     channel.Channel
 	publishChan chan publishRequest
 	mu          sync.Mutex
 	closed      bool
 }
 
-func NewResponder(channel *amqp.Channel, publishChanSize int) Responder {
+func NewResponder(ch channel.Channel, publishChanSize int) Responder {
 	r := &responder{
 		logger:      logger.NewNamedLogger("responder"),
-		channel:     channel,
+		channel:     ch,
 		publishChan: make(chan publishRequest, publishChanSize),
 	}
 

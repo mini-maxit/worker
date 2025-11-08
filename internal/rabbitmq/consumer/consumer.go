@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/internal/rabbitmq/channel"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/internal/scheduler"
 	"github.com/mini-maxit/worker/pkg/constants"
@@ -21,7 +22,7 @@ type Consumer interface {
 }
 
 type consumer struct {
-	channel         *amqp.Channel
+	channel         channel.Channel
 	workerQueueName string
 	scheduler       scheduler.Scheduler
 	responder       responder.Responder
@@ -29,7 +30,7 @@ type consumer struct {
 }
 
 func NewConsumer(
-	mainChannel *amqp.Channel,
+	mainChannel channel.Channel,
 	workerQueueName string,
 	scheduler scheduler.Scheduler,
 	responder responder.Responder,
@@ -114,10 +115,9 @@ func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) 
 	}
 
 	err = c.responder.Publish(c.workerQueueName, amqp.Publishing{
-		ContentType:   "application/json",
-		CorrelationId: queueMessage.MessageID,
-		Body:          queueMessageJSON,
-		Priority:      uint8(priority),
+		ContentType: "application/json",
+		Body:        queueMessageJSON,
+		Priority:    uint8(priority),
 	})
 
 	if err != nil {
