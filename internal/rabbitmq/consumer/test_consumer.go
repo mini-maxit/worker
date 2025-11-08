@@ -99,7 +99,7 @@ func TestProcessMessage(t *testing.T) {
 		b, _ := json.Marshal(qm)
 
 		mockScheduler.EXPECT().GetWorkersStatus().Return(status).Times(1)
-		mockResponder.EXPECT().PublishSucessStatusRespond(
+		mockResponder.EXPECT().PublishSuccessStatusRespond(
 			constants.QueueMessageTypeStatus, "status-id", "reply", status,
 		).Return(nil).Times(1)
 
@@ -112,7 +112,7 @@ func TestProcessMessage(t *testing.T) {
 		b, _ := json.Marshal(qm)
 
 		// Expect responder to be called with a slice of LanguageSpec. We can't directly Eq the slice, so inspect in Do.
-		mockResponder.EXPECT().PublishSucessHandshakeRespond(
+		mockResponder.EXPECT().PublishSuccessHandshakeRespond(
 			constants.QueueMessageTypeHandshake, "hs-id", "reply", gomock.AssignableToTypeOf([]languages.LanguageSpec{}),
 		).Do(func(_ string, _ string, _ string, langs []languages.LanguageSpec) {
 			if len(langs) == 0 {

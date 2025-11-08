@@ -19,11 +19,11 @@ type Responder interface {
 		messageType, messageID, responseQueue string,
 		err error,
 	)
-	PublishSucessHandshakeRespond(
+	PublishSuccessHandshakeRespond(
 		messageType, messageID, responseQueue string,
 		languageSpecs []languages.LanguageSpec,
 	) error
-	PublishSucessStatusRespond(
+	PublishSuccessStatusRespond(
 		messageType, messageID, responseQueue string,
 		statusMap map[string]interface{},
 	) error
@@ -153,7 +153,7 @@ func (r *responder) PublishPayloadTaskRespond(
 	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
 }
 
-func (r *responder) PublishSucessHandshakeRespond(
+func (r *responder) PublishSuccessHandshakeRespond(
 	messageType string,
 	messageID string,
 	responseQueue string,
@@ -176,7 +176,7 @@ func (r *responder) PublishSucessHandshakeRespond(
 	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
 }
 
-func (r *responder) PublishSucessStatusRespond(
+func (r *responder) PublishSuccessStatusRespond(
 	messageType string,
 	messageID string,
 	responseQueue string,

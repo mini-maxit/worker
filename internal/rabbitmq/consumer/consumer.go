@@ -168,7 +168,7 @@ func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, reply
 	c.logger.Infof("Processing status message")
 	status := c.scheduler.GetWorkersStatus()
 
-	err := c.responder.PublishSucessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
+	err := c.responder.PublishSuccessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
 	if err != nil {
 		c.logger.Errorf("Failed to publish status message: %s", err)
 		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)
@@ -179,7 +179,7 @@ func (c *consumer) handleHandshakeMessage(queueMessage messages.QueueMessage, re
 	c.logger.Infof("Processing handshake message")
 	languages := languages.GetSupportedLanguagesWithVersions()
 
-	err := c.responder.PublishSucessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
+	err := c.responder.PublishSuccessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
 	if err != nil {
 		c.logger.Errorf("Failed to publish supported languages: %s", err)
 		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)

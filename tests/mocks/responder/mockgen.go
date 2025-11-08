@@ -96,30 +96,30 @@ func (mr *MockResponderMockRecorder) PublishPayloadTaskRespond(messageType, mess
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishPayloadTaskRespond", reflect.TypeOf((*MockResponder)(nil).PublishPayloadTaskRespond), messageType, messageID, responseQueue, taskResult)
 }
 
-// PublishSucessHandshakeRespond mocks base method.
-func (m *MockResponder) PublishSucessHandshakeRespond(messageType, messageID, responseQueue string, languageSpecs []languages.LanguageSpec) error {
+// PublishSuccessHandshakeRespond mocks base method.
+func (m *MockResponder) PublishSuccessHandshakeRespond(messageType, messageID, responseQueue string, languageSpecs []languages.LanguageSpec) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishSucessHandshakeRespond", messageType, messageID, responseQueue, languageSpecs)
+	ret := m.ctrl.Call(m, "PublishSuccessHandshakeRespond", messageType, messageID, responseQueue, languageSpecs)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PublishSucessHandshakeRespond indicates an expected call of PublishSucessHandshakeRespond.
-func (mr *MockResponderMockRecorder) PublishSucessHandshakeRespond(messageType, messageID, responseQueue, languageSpecs any) *gomock.Call {
+// PublishSuccessHandshakeRespond indicates an expected call of PublishSuccessHandshakeRespond.
+func (mr *MockResponderMockRecorder) PublishSuccessHandshakeRespond(messageType, messageID, responseQueue, languageSpecs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishSucessHandshakeRespond", reflect.TypeOf((*MockResponder)(nil).PublishSucessHandshakeRespond), messageType, messageID, responseQueue, languageSpecs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishSuccessHandshakeRespond", reflect.TypeOf((*MockResponder)(nil).PublishSuccessHandshakeRespond), messageType, messageID, responseQueue, languageSpecs)
 }
 
-// PublishSucessStatusRespond mocks base method.
-func (m *MockResponder) PublishSucessStatusRespond(messageType, messageID, responseQueue string, statusMap map[string]any) error {
+// PublishSuccessStatusRespond mocks base method.
+func (m *MockResponder) PublishSuccessStatusRespond(messageType, messageID, responseQueue string, statusMap map[string]any) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishSucessStatusRespond", messageType, messageID, responseQueue, statusMap)
+	ret := m.ctrl.Call(m, "PublishSuccessStatusRespond", messageType, messageID, responseQueue, statusMap)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PublishSucessStatusRespond indicates an expected call of PublishSucessStatusRespond.
-func (mr *MockResponderMockRecorder) PublishSucessStatusRespond(messageType, messageID, responseQueue, statusMap any) *gomock.Call {
+// PublishSuccessStatusRespond indicates an expected call of PublishSuccessStatusRespond.
+func (mr *MockResponderMockRecorder) PublishSuccessStatusRespond(messageType, messageID, responseQueue, statusMap any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishSucessStatusRespond", reflect.TypeOf((*MockResponder)(nil).PublishSucessStatusRespond), messageType, messageID, responseQueue, statusMap)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishSuccessStatusRespond", reflect.TypeOf((*MockResponder)(nil).PublishSuccessStatusRespond), messageType, messageID, responseQueue, statusMap)
 }

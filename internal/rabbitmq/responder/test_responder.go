@@ -102,7 +102,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishSucessStatusRespond("status", "sid", "status-queue", statusMap); err != nil {
+	if err := r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusMap); err != nil {
 		t.Fatalf("PublishSucessStatusRespond returned error: %v", err)
 	}
 
@@ -129,7 +129,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishSucessHandshakeRespond("hs", "hid", "hs-queue", langs); err != nil {
+	if err := r.PublishSuccessHandshakeRespond("hs", "hid", "hs-queue", langs); err != nil {
 		t.Fatalf("PublishSucessHandshakeRespond returned error: %v", err)
 	}
 
