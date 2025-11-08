@@ -106,9 +106,6 @@ func TestNewCppCompilerIntegration(t *testing.T) {
 		t.Fatalf("NewCppCompiler returned error: %v", err)
 	}
 
-	// override logger with nop logger to avoid file side-effects
-	cc.logger = zap.NewNop().Sugar()
-
 	dir := t.TempDir()
 	src := writeSource(t, dir, "main2.cpp", `
 	#include <cstdio>

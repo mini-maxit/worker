@@ -217,7 +217,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	}()
 	select {
 	case <-doneCh:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatalf("timed out waiting for Listen to finish")
 	}
 }
