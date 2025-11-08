@@ -16,9 +16,6 @@ import (
 )
 
 func main() {
-	// Initialize the logger
-	logger.InitializeLogger()
-
 	logger := logger.NewNamedLogger("main")
 
 	logger.Info("Starting worker")
