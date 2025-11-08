@@ -127,14 +127,12 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID, response
 		return
 	}
 
-	err = r.channel.Publish("", responseQueue, false, false, amqp.Publishing{
+	if pubErr := r.Publish(responseQueue, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: messageID,
 		Body:          responseJSON,
-	})
-
-	if err != nil {
-		r.logger.Errorf("Failed to publish error message: %s", err)
+	}); pubErr != nil {
+		r.logger.Errorf("Failed to publish error message: %s", pubErr)
 		return
 	}
 
@@ -205,14 +203,8 @@ func (r *responder) publishRespondMessage(messageType, messageID, responseQueue 
 		return jsonErr
 	}
 
-	err := r.channel.Publish("", responseQueue, false, false, amqp.Publishing{
+	return r.Publish(responseQueue, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
