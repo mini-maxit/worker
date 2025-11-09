@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/internal/rabbitmq/channel"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/internal/scheduler"
 	"github.com/mini-maxit/worker/pkg/constants"
@@ -21,7 +22,7 @@ type Consumer interface {
 }
 
 type consumer struct {
-	channel         *amqp.Channel
+	channel         channel.Channel
 	workerQueueName string
 	scheduler       scheduler.Scheduler
 	responder       responder.Responder
@@ -29,7 +30,7 @@ type consumer struct {
 }
 
 func NewConsumer(
-	mainChannel *amqp.Channel,
+	mainChannel channel.Channel,
 	workerQueueName string,
 	scheduler scheduler.Scheduler,
 	responder responder.Responder,
@@ -63,36 +64,47 @@ func (c *consumer) Listen() {
 	}
 
 	for msg := range msgs {
-		var queueMessage messages.QueueMessage
-
-		err := json.Unmarshal(msg.Body, &queueMessage)
-		if err != nil {
-			c.logger.Errorf("Failed to unmarshal message: %s", err)
-			c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
-			continue
-		}
-
-		switch queueMessage.Type {
-		case constants.QueueMessageTypeTask:
-			c.logger.Infof("Received task message: %s", queueMessage.MessageID)
-			c.handleTaskMessage(queueMessage, msg.ReplyTo)
-		case constants.QueueMessageTypeStatus:
-			c.logger.Infof("Received status message: %s", queueMessage.MessageID)
-			c.handleStatusMessage(queueMessage, msg.ReplyTo)
-		case constants.QueueMessageTypeHandshake:
-			c.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
-			c.handleHandshakeMessage(queueMessage, msg.ReplyTo)
-		default:
-			c.logger.Errorf("Unknown message type: %s", queueMessage.Type)
-			c.responder.PublishErrorToResponseQueue(
-				queueMessage.Type,
-				queueMessage.MessageID,
-				msg.ReplyTo,
-				errors.ErrUnknownMessageType)
-			continue
-		}
+		go func(m amqp.Delivery) {
+			c.processMessage(m)
+		}(msg)
 	}
 }
+
+func (c *consumer) processMessage(msg amqp.Delivery) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Errorf("Panic while processing message: %v", r)
+		}
+	}()
+	var queueMessage messages.QueueMessage
+
+	err := json.Unmarshal(msg.Body, &queueMessage)
+	if err != nil {
+		c.logger.Errorf("Failed to unmarshal message: %s", err)
+		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
+		return
+	}
+
+	switch queueMessage.Type {
+	case constants.QueueMessageTypeTask:
+		c.logger.Infof("Received task message: %s", queueMessage.MessageID)
+		c.handleTaskMessage(queueMessage, msg.ReplyTo)
+	case constants.QueueMessageTypeStatus:
+		c.logger.Infof("Received status message: %s", queueMessage.MessageID)
+		c.handleStatusMessage(queueMessage, msg.ReplyTo)
+	case constants.QueueMessageTypeHandshake:
+		c.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
+		c.handleHandshakeMessage(queueMessage, msg.ReplyTo)
+	default:
+		c.logger.Errorf("Unknown message type: %s", queueMessage.Type)
+		c.responder.PublishErrorToResponseQueue(
+			queueMessage.Type,
+			queueMessage.MessageID,
+			msg.ReplyTo,
+			errors.ErrUnknownMessageType)
+	}
+}
+
 func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) error {
 	priority := constants.RabbitMQRequeuePriority
 
@@ -102,11 +114,10 @@ func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) 
 		return err
 	}
 
-	err = c.channel.Publish("", c.workerQueueName, false, false, amqp.Publishing{
-		ContentType:   "application/json",
-		CorrelationId: queueMessage.MessageID,
-		Body:          queueMessageJSON,
-		Priority:      uint8(priority),
+	err = c.responder.Publish(c.workerQueueName, amqp.Publishing{
+		ContentType: "application/json",
+		Body:        queueMessageJSON,
+		Priority:    uint8(priority),
 	})
 
 	if err != nil {
@@ -157,7 +168,7 @@ func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, reply
 	c.logger.Infof("Processing status message")
 	status := c.scheduler.GetWorkersStatus()
 
-	err := c.responder.PublishSucessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
+	err := c.responder.PublishSuccessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
 	if err != nil {
 		c.logger.Errorf("Failed to publish status message: %s", err)
 		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)
@@ -168,7 +179,7 @@ func (c *consumer) handleHandshakeMessage(queueMessage messages.QueueMessage, re
 	c.logger.Infof("Processing handshake message")
 	languages := languages.GetSupportedLanguagesWithVersions()
 
-	err := c.responder.PublishSucessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
+	err := c.responder.PublishSuccessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
 	if err != nil {
 		c.logger.Errorf("Failed to publish supported languages: %s", err)
 		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)

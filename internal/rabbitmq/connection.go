@@ -5,6 +5,7 @@ import (
 
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/logger"
+	ch "github.com/mini-maxit/worker/internal/rabbitmq/channel"
 	"github.com/mini-maxit/worker/pkg/constants"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -35,15 +36,15 @@ func NewRabbitMqConnection(config *config.Config) *amqp.Connection {
 	return conn
 }
 
-func NewRabbitMQChannel(conn *amqp.Connection) *amqp.Channel {
+func NewRabbitMQChannel(conn *amqp.Connection) ch.Channel {
 	logger := logger.NewNamedLogger("rabbitmq")
 
 	logger.Info("Creating RabbitMQ channel")
 
-	ch, err := conn.Channel()
+	amqpCh, err := conn.Channel()
 	if err != nil {
 		logger.Panicf("Failed to open a channel: %s", err)
 	}
 
-	return ch
+	return ch.NewAmqpChannel(amqpCh)
 }

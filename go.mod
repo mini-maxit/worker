@@ -8,6 +8,7 @@ require (
 	github.com/docker/docker v28.1.1+incompatible
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.10.0
+	go.uber.org/mock v0.6.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
