@@ -9,18 +9,9 @@ import (
 	"errors"
 
 	pkgErr "github.com/mini-maxit/worker/pkg/errors"
+	"github.com/mini-maxit/worker/tests"
 	"go.uber.org/zap"
 )
-
-// helper to write a source file.
-func writeSource(t *testing.T, dir, name, content string) string {
-	t.Helper()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write source file: %v", err)
-	}
-	return path
-}
 
 func TestRequiresCompilation(t *testing.T) {
 	c := &CppCompiler{version: "c++17", logger: zap.NewNop().Sugar()}
@@ -31,7 +22,7 @@ func TestRequiresCompilation(t *testing.T) {
 
 func TestCompileSuccess(t *testing.T) {
 	dir := t.TempDir()
-	src := writeSource(t, dir, "main.cpp", `
+	src := tests.WriteFile(t, dir, "main.cpp", `
 
 		#include <iostream>
 
@@ -67,7 +58,7 @@ func TestCompileSuccess(t *testing.T) {
 func TestCompileFailureProducesErrorFile(t *testing.T) {
 	dir := t.TempDir()
 	// intentionally broken C++ source
-	src := writeSource(t, dir, "bad.cpp", `
+	src := tests.WriteFile(t, dir, "bad.cpp", `
 
 		#include <iostream>
 
@@ -107,7 +98,7 @@ func TestNewCppCompilerIntegration(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	src := writeSource(t, dir, "main2.cpp", `
+	src := tests.WriteFile(t, dir, "main2.cpp", `
 	#include <cstdio>
 
 		int main() {

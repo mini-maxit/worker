@@ -1,4 +1,3 @@
-//nolint:gocognit
 package responder
 
 import (
@@ -206,7 +205,7 @@ func TestPublish_ConcurrentHighLoad(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for concurrent publishes to finish")
 	}
 

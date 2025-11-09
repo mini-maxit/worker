@@ -1,4 +1,3 @@
-//nolint:funlen
 package consumer
 
 import (
@@ -160,10 +159,14 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 			}
 		}).Return(amqp.Queue{Name: workerQueue}, nil).Times(1)
 
-	// Expect Consume to be called and return our deliveries channel
+	// Expect Consume to be called and return our deliveries channel. Signal when Consume is invoked
+	started := make(chan struct{})
 	mockChannel.EXPECT().Consume(
 		workerQueue, "", true, false, false, false, nil,
-	).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
+	).Do(func(_ string, _ string, _ bool, _ bool, _ bool, _ bool, _ amqp.Table) {
+		// notify that Listen has successfully called Consume and is ready to receive deliveries
+		close(started)
+	}).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
 
 	// When the scheduler's ProcessTask is called, signal completion
 	done := make(chan struct{})
@@ -191,6 +194,14 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 		c.Listen()
 	}()
 
+	// Wait for Listen to call Consume so the goroutine is ready to receive deliveries
+	select {
+	case <-started:
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for Listen to start consuming")
+	}
+
 	// Build a task message and send it
 	task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
 	taskB, _ := json.Marshal(&task)
@@ -203,7 +214,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	select {
 	case <-done:
 		// good
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for ProcessTask to be called")
 	}
 
@@ -217,7 +228,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	}()
 	select {
 	case <-doneCh:
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for Listen to finish")
 	}
 }

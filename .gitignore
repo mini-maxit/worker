@@ -35,4 +35,4 @@ go.work.sum
 .vscode
 
 #logs
-logs/*
+log.txt
