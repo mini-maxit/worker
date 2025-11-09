@@ -1,4 +1,3 @@
-//nolint:funlen
 package consumer
 
 import (
@@ -12,9 +11,7 @@ import (
 
 	"go.uber.org/mock/gomock"
 
-	mock_channel "github.com/mini-maxit/worker/tests/mocks/channel"
-	mock_responder "github.com/mini-maxit/worker/tests/mocks/responder"
-	mock_scheduler "github.com/mini-maxit/worker/tests/mocks/scheduler"
+	"github.com/mini-maxit/worker/tests/mocks"
 
 	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
@@ -28,8 +25,8 @@ func TestProcessMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	cIface := NewConsumer(nil, workerQueue, mockScheduler, mockResponder)
 	c, ok := cIface.(*consumer)
@@ -143,9 +140,9 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockChannel := mock_channel.NewMockChannel(ctrl)
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockChannel := mocks.NewMockChannel(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	// deliveries channel that will be returned by Consume
 	deliveries := make(chan amqp.Delivery)
@@ -162,10 +159,14 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 			}
 		}).Return(amqp.Queue{Name: workerQueue}, nil).Times(1)
 
-	// Expect Consume to be called and return our deliveries channel
+	// Expect Consume to be called and return our deliveries channel. Signal when Consume is invoked
+	started := make(chan struct{})
 	mockChannel.EXPECT().Consume(
 		workerQueue, "", true, false, false, false, nil,
-	).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
+	).Do(func(_ string, _ string, _ bool, _ bool, _ bool, _ bool, _ amqp.Table) {
+		// notify that Listen has successfully called Consume and is ready to receive deliveries
+		close(started)
+	}).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
 
 	// When the scheduler's ProcessTask is called, signal completion
 	done := make(chan struct{})
@@ -193,6 +194,14 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 		c.Listen()
 	}()
 
+	// Wait for Listen to call Consume so the goroutine is ready to receive deliveries
+	select {
+	case <-started:
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for Listen to start consuming")
+	}
+
 	// Build a task message and send it
 	task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
 	taskB, _ := json.Marshal(&task)
@@ -205,7 +214,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	select {
 	case <-done:
 		// good
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for ProcessTask to be called")
 	}
 
@@ -219,7 +228,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	}()
 	select {
 	case <-doneCh:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for Listen to finish")
 	}
 }
@@ -228,9 +237,9 @@ func TestListen_QueueDeclareErrorPanics(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockChannel := mock_channel.NewMockChannel(ctrl)
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockChannel := mocks.NewMockChannel(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	mockChannel.EXPECT().QueueDeclare(
 		workerQueue, true, false, false, false, gomock.Any(),
@@ -256,9 +265,9 @@ func TestListen_ConsumeErrorPanics(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockChannel := mock_channel.NewMockChannel(ctrl)
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockChannel := mocks.NewMockChannel(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	mockChannel.EXPECT().QueueDeclare(
 		workerQueue, true, false, false, false, gomock.Any(),

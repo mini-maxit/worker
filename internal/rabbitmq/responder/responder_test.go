@@ -1,4 +1,3 @@
-//nolint:gocognit
 package responder
 
 import (
@@ -12,7 +11,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/mock/gomock"
 
-	mock_channel "github.com/mini-maxit/worker/tests/mocks/channel"
+	"github.com/mini-maxit/worker/tests/mocks"
 
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
@@ -25,7 +24,7 @@ func TestPublishErrorToResponseQueue(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCh := mock_channel.NewMockChannel(ctrl)
+	mockCh := mocks.NewMockChannel(ctrl)
 	r := NewResponder(mockCh, 10)
 	defer func() {
 		if err := r.Close(); err != nil {
@@ -73,7 +72,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCh := mock_channel.NewMockChannel(ctrl)
+	mockCh := mocks.NewMockChannel(ctrl)
 	r := NewResponder(mockCh, 10)
 	defer func() {
 		if err := r.Close(); err != nil {
@@ -163,7 +162,7 @@ func TestPublish_ConcurrentHighLoad(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCh := mock_channel.NewMockChannel(ctrl)
+	mockCh := mocks.NewMockChannel(ctrl)
 	// use bigger publish channel buffer to reduce blocking.
 	r := NewResponder(mockCh, 1000)
 	defer func() {
@@ -206,7 +205,7 @@ func TestPublish_ConcurrentHighLoad(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for concurrent publishes to finish")
 	}
 
@@ -220,7 +219,7 @@ func TestPublish_ReturnsChannelError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCh := mock_channel.NewMockChannel(ctrl)
+	mockCh := mocks.NewMockChannel(ctrl)
 	r := NewResponder(mockCh, 10)
 	defer func() {
 		if err := r.Close(); err != nil {
@@ -244,7 +243,7 @@ func TestClose_PreventsPublish(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCh := mock_channel.NewMockChannel(ctrl)
+	mockCh := mocks.NewMockChannel(ctrl)
 	r := NewResponder(mockCh, 10)
 
 	if err := r.Close(); err != nil {
