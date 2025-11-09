@@ -36,3 +36,4 @@ go.work.sum
 
 #logs
 log.txt
+logs/

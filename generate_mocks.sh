@@ -17,6 +17,7 @@ INTERFACES=(
 	"internal/stages/packager Packager"
 	"internal/stages/verifier Verifier"
 	"internal/storage Storage"
+	"internal/pipeline Worker"
 )
 
 
