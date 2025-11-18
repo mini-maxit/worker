@@ -24,8 +24,8 @@ if [[ -z "${USER_ERROR_FILES:-}" ]]; then
   exit 1
 fi
 
-read -r -a times <<< "${TIME_LIMITS:-}"
-read -r -a mems  <<< "${MEM_LIMITS:-}"
+read -r -a times <<< "${TIME_LIMITS_MS:-}"
+read -r -a mems  <<< "${MEM_LIMITS_KB:-}"
 read -r -a inputs <<< "${INPUT_FILES:-}"
 read -r -a user_outputs <<< "${USER_OUTPUT_FILES:-}"
 read -r -a user_errors <<< "${USER_ERROR_FILES:-}"
@@ -73,7 +73,7 @@ fi
 for idx in "${!inputs[@]}"; do
   testno=$((idx+1))
   infile="${inputs[idx]}"
-  tsec=${times[idx]}
+  tlimit_ms=${times[idx]}
   mlimit_kb=${mems[idx]}
 
   out="${user_outputs[idx]}"
@@ -89,22 +89,41 @@ for idx in "${!inputs[@]}"; do
   (
     start_ns=$(date +%s%N)
 
-    timeout --preserve-status "${tsec}s" bash -c \
-      "ulimit -v ${mlimit_kb} && \"$1\" < \"${infile}\"" \
+    # temp file to store peak memory from /usr/bin/time
+    peak_mem_file=$(mktemp)
+
+    tlimit_s=$(awk "BEGIN {print ${tlimit_ms}/1000}")
+
+    # Run the command with timeout and track peak memory usage
+    timeout --preserve-status "${tlimit_s}s" \
+      /usr/bin/time -f "%M" -o "${peak_mem_file}" \
+      bash -c "$1 < \"$infile\"" \
       > "${out}" 2> "${err}"
     code=$?
-    if   (( code == 143 )); then
-      echo "Time limit exceeded after ${tsec}s"    >> "${err}"
-    elif (( code == 134 )); then
-      echo "Memory limit exceeded max ${mlimit_kb}KB"  >> "${err}"
+
+    if [[ ! -s "${peak_mem_file}" ]]; then
+      peak_kb=0
+    else
+      peak_kb=$(grep -o '[0-9]*' "${peak_mem_file}" | tail -n 1)
+    fi
+    rm -f "${peak_mem_file}"
+
+
+    # Handle time limit exceeded
+    if (( code == 143 )); then
+      echo "Time limit exceeded after ${tlimit_ms}ms" >> "${err}"
+    # Check if memory usage exceeded the limit
+    elif (( peak_kb >= mlimit_kb )); then
+      echo "Memory limit exceeded max ${mlimit_kb}KB" >> "${err}"
+      code=134
     fi
 
     end_ns=$(date +%s%N)
     duration_ns=$((end_ns - start_ns))
     duration_sec=$(awk "BEGIN {printf \"%.6f\", ${duration_ns}/1000000000}")
 
-    # Write exit code and duration to exec result file
-    echo "$code $duration_sec" >> "${exec_result}"
+    # Write exit code, duration, and peak memory (KB) to exec result file
+    echo "$code $duration_sec $peak_kb" > "${exec_result}"
   )
 
 done

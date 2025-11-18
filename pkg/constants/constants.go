@@ -19,8 +19,8 @@ const (
 
 // TestCaseResult messages.
 const (
-	TestCaseMessageTimeOut             = "Solution timed out after %d s"
-	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d MB"
+	TestCaseMessageTimeOut             = "Solution timed out after %d ms"
+	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d kb"
 	TestCaseMessageRuntimeError        = "Solution encountered a runtime error"
 )
 
