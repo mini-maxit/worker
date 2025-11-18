@@ -97,7 +97,7 @@ for idx in "${!inputs[@]}"; do
     # Run the command with timeout and track peak memory usage
     timeout --preserve-status "${tlimit_s}s" \
       /usr/bin/time -f "%M" -o "${peak_mem_file}" \
-      bash -c "$1 < \"$infile\"" \
+      bash -c "ulimit -v ${mlimit_kb} && \"$1\" < \"$infile\"" \
       > "${out}" 2> "${err}"
     code=$?
 
@@ -113,6 +113,9 @@ for idx in "${!inputs[@]}"; do
     if (( code == 143 )); then
       echo "Time limit exceeded after ${tlimit_ms}ms" >> "${err}"
     # Check if memory usage exceeded the limit
+    elif ((code == 134 )); then
+      echo "Memory limit exceeded max ${mlimit_kb}KB" >> "${err}"
+
     elif (( peak_kb >= mlimit_kb )); then
       echo "Memory limit exceeded max ${mlimit_kb}KB" >> "${err}"
       code=134
