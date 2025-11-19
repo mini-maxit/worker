@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/stages/executor"
@@ -163,13 +164,15 @@ func (v *verifier) constructFinalMessage(
 	if finalStatus == solution.Success {
 		finalMessage = constants.SolutionMessageSuccess
 	} else {
+		var b strings.Builder
 		for i, message := range messages {
 			if i != 0 {
-				finalMessage += ", "
+				b.WriteString(", ")
 			}
-			finalMessage += fmt.Sprintf("%d. %s", (i + 1), message)
+			fmt.Fprintf(&b, "%d. %s", i+1, message)
 		}
-		finalMessage += "."
+		b.WriteString(".")
+		finalMessage = b.String()
 	}
 	return finalMessage, finalStatus
 }
