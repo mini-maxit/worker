@@ -22,15 +22,15 @@ import (
 
 type Worker interface {
 	ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage)
-	GetStatus() string
-	UpdateStatus(status string)
+	GetStatus() constants.WorkerStatus
+	UpdateStatus(status constants.WorkerStatus)
 	GetProcessingMessageID() string
 	GetId() int
 }
 
 type worker struct {
 	id                  int
-	status              string
+	status              constants.WorkerStatus
 	processingMessageID string
 	responseQueue       string
 	compiler            compiler.Compiler
@@ -68,11 +68,11 @@ func (ws *worker) GetId() int {
 	return ws.id
 }
 
-func (ws *worker) GetStatus() string {
+func (ws *worker) GetStatus() constants.WorkerStatus {
 	return ws.status
 }
 
-func (ws *worker) UpdateStatus(status string) {
+func (ws *worker) UpdateStatus(status constants.WorkerStatus) {
 	ws.status = status
 }
 

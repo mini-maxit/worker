@@ -28,11 +28,31 @@ const (
 	ExitCodeDifference = 1
 )
 
-// Worker specific constants.
+// WorkerStatus represents the status of a worker.
+type WorkerStatus int
+
+// Worker status enum values.
 const (
-	WorkerStatusIdle = "idle"
-	WorkerStatusBusy = "busy"
+	WorkerStatusIdle WorkerStatus = iota
+	WorkerStatusBusy
 )
+
+// String returns the string representation of the WorkerStatus.
+func (s WorkerStatus) String() string {
+	switch s {
+	case WorkerStatusIdle:
+		return "idle"
+	case WorkerStatusBusy:
+		return "busy"
+	default:
+		return "unknown"
+	}
+}
+
+// MarshalJSON implements json.Marshaler to serialize WorkerStatus as a string.
+func (s WorkerStatus) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + s.String() + `"`), nil
+}
 
 // Exit codes.
 const (

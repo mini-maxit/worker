@@ -61,10 +61,10 @@ func (s *scheduler) GetWorkersStatus() map[string]interface{} {
 
 	for id, worker := range s.workers {
 		if worker.GetStatus() == constants.WorkerStatusBusy {
-			statuses[id] = worker.GetStatus() + " Processing message: " + worker.GetProcessingMessageID()
+			statuses[id] = worker.GetStatus().String() + " Processing message: " + worker.GetProcessingMessageID()
 			continue
 		}
-		statuses[id] = worker.GetStatus()
+		statuses[id] = worker.GetStatus().String()
 	}
 
 	return map[string]interface{}{
