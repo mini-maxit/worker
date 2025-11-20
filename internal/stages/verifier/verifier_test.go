@@ -1,4 +1,4 @@
-package verifier
+package verifier_test
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/stages/packager"
+	. "github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"

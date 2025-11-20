@@ -1,4 +1,4 @@
-package responder
+package responder_test
 
 import (
 	"encoding/json"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/mini-maxit/worker/tests/mocks"
 
+	. "github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"

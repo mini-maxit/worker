@@ -1,15 +1,14 @@
-package scheduler
+package scheduler_test
 
 import (
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
 	gomock "go.uber.org/mock/gomock"
 
-	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/pipeline"
+	. "github.com/mini-maxit/worker/internal/scheduler"
 	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
@@ -32,13 +31,14 @@ func TestNewScheduler(t *testing.T) {
 		t.Fatalf("NewScheduler returned nil")
 	}
 
-	sImpl, ok := s.(*scheduler)
-	if !ok {
-		t.Fatalf("NewScheduler returned unexpected type: %T", s)
-	}
+	status := s.GetWorkersStatus()
 
-	if len(sImpl.workers) != maxWorkers {
-		t.Fatalf("expected %d workers, got %d", maxWorkers, len(sImpl.workers))
+	workers, ok := status["worker_status"].(map[int]string)
+	if !ok {
+		t.Fatalf("expected worker_status to be map[int]string, got %T", status["worker_status"])
+	}
+	if len(workers) != maxWorkers {
+		t.Fatalf("expected %d workers, got %d", maxWorkers, len(workers))
 	}
 }
 
@@ -54,12 +54,7 @@ func TestGetWorkersStatus(t *testing.T) {
 
 	w1.EXPECT().GetStatus().Return(constants.WorkerStatusIdle).Times(1)
 
-	s := &scheduler{
-		mu:         sync.Mutex{},
-		workers:    map[int]pipeline.Worker{0: w0, 1: w1},
-		maxWorkers: 2,
-		logger:     logger.NewNamedLogger("scheduler-test"),
-	}
+	s := NewSchedulerWithWorkers(2, map[int]pipeline.Worker{0: w0, 1: w1}, nil, nil, nil, nil, nil)
 
 	st := s.GetWorkersStatus()
 	if st == nil {
@@ -106,12 +101,7 @@ func TestProcessTask_SuccessAndMarkIdle(t *testing.T) {
 	// After processing, scheduler.markWorkerAsIdle should call UpdateStatus(Idle)
 	w.EXPECT().UpdateStatus(constants.WorkerStatusIdle).Times(1)
 
-	s := &scheduler{
-		mu:         sync.Mutex{},
-		workers:    map[int]pipeline.Worker{0: w},
-		maxWorkers: 1,
-		logger:     logger.NewNamedLogger("scheduler-test"),
-	}
+	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil, nil)
 
 	if err := s.ProcessTask("resp", "msg-id-1", &messages.TaskQueueMessage{}); err != nil {
 		t.Fatalf("unexpected error from ProcessTask: %v", err)
@@ -137,12 +127,7 @@ func TestProcessTask_NoFreeWorker(t *testing.T) {
 	// worker reports busy
 	w.EXPECT().GetStatus().Return(constants.WorkerStatusBusy).Times(1)
 
-	s := &scheduler{
-		mu:         sync.Mutex{},
-		workers:    map[int]pipeline.Worker{0: w},
-		maxWorkers: 1,
-		logger:     logger.NewNamedLogger("scheduler-test"),
-	}
+	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil, nil)
 
 	err := s.ProcessTask("resp", "msg-id-2", &messages.TaskQueueMessage{})
 	if err == nil {

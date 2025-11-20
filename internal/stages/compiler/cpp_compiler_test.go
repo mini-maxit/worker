@@ -1,4 +1,4 @@
-package compiler
+package compiler_test
 
 import (
 	"os"
@@ -8,13 +8,16 @@ import (
 
 	"errors"
 
+	. "github.com/mini-maxit/worker/internal/stages/compiler"
 	pkgErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/tests"
-	"go.uber.org/zap"
 )
 
 func TestRequiresCompilation(t *testing.T) {
-	c := &CppCompiler{version: "c++17", logger: zap.NewNop().Sugar()}
+	c, err := NewCppCompiler("17", "msg-test")
+	if err != nil {
+		t.Fatalf("NewCppCompiler returned error: %v", err)
+	}
 	if !c.RequiresCompilation() {
 		t.Fatalf("expected RequiresCompilation to be true")
 	}
@@ -35,7 +38,10 @@ func TestCompileSuccess(t *testing.T) {
 	out := filepath.Join(dir, "outbin")
 	compErr := filepath.Join(dir, "compile.err")
 
-	c := &CppCompiler{version: "c++17", logger: zap.NewNop().Sugar()}
+	c, err := NewCppCompiler("17", "msg-test")
+	if err != nil {
+		t.Fatalf("NewCppCompiler returned error: %v", err)
+	}
 
 	if err := c.Compile(src, out, compErr, "msg-id"); err != nil {
 		t.Fatalf("expected compile to succeed, got: %v", err)
@@ -70,9 +76,12 @@ func TestCompileFailureProducesErrorFile(t *testing.T) {
 	out := filepath.Join(dir, "outbad")
 	compErr := filepath.Join(dir, "compile.err")
 
-	c := &CppCompiler{version: "c++17", logger: zap.NewNop().Sugar()}
+	c, err := NewCppCompiler("17", "msg-id")
+	if err != nil {
+		t.Fatalf("NewCppCompiler returned error: %v", err)
+	}
 
-	err := c.Compile(src, out, compErr, "msg-id")
+	err = c.Compile(src, out, compErr, "msg-id")
 	if err == nil {
 		t.Fatalf("expected compile to fail for broken source")
 	}
