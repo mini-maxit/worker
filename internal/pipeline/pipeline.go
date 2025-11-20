@@ -22,23 +22,27 @@ import (
 
 type Worker interface {
 	ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage)
-	GetStatus() string
-	UpdateStatus(status string)
+	GetState() WorkerState
+	UpdateStatus(status constants.WorkerStatus)
 	GetProcessingMessageID() string
 	GetId() int
 }
 
+type WorkerState struct {
+	Status              constants.WorkerStatus `json:"status"`
+	ProcessingMessageID string                 `json:"processing_message_id"`
+}
+
 type worker struct {
-	id                  int
-	status              string
-	processingMessageID string
-	responseQueue       string
-	compiler            compiler.Compiler
-	packager            packager.Packager
-	executor            executor.Executor
-	verifier            verifier.Verifier
-	responder           responder.Responder
-	logger              *zap.SugaredLogger
+	id            int
+	state         WorkerState
+	responseQueue string
+	compiler      compiler.Compiler
+	packager      packager.Packager
+	executor      executor.Executor
+	verifier      verifier.Verifier
+	responder     responder.Responder
+	logger        *zap.SugaredLogger
 }
 
 func NewWorker(
@@ -52,15 +56,14 @@ func NewWorker(
 	logger := logger.NewNamedLogger(fmt.Sprintf("worker-%d", id))
 
 	return &worker{
-		id:                  id,
-		status:              constants.WorkerStatusIdle,
-		processingMessageID: "",
-		compiler:            compiler,
-		packager:            packager,
-		executor:            executor,
-		verifier:            verifier,
-		responder:           responder,
-		logger:              logger,
+		id:        id,
+		state:     WorkerState{Status: constants.WorkerStatusIdle, ProcessingMessageID: ""},
+		compiler:  compiler,
+		packager:  packager,
+		executor:  executor,
+		verifier:  verifier,
+		responder: responder,
+		logger:    logger,
 	}
 }
 
@@ -68,16 +71,16 @@ func (ws *worker) GetId() int {
 	return ws.id
 }
 
-func (ws *worker) GetStatus() string {
-	return ws.status
+func (ws *worker) GetState() WorkerState {
+	return ws.state
 }
 
-func (ws *worker) UpdateStatus(status string) {
-	ws.status = status
+func (ws *worker) UpdateStatus(status constants.WorkerStatus) {
+	ws.state.Status = status
 }
 
 func (ws *worker) GetProcessingMessageID() string {
-	return ws.processingMessageID
+	return ws.state.ProcessingMessageID
 }
 
 func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage) {
@@ -92,10 +95,10 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	}()
 
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
-	ws.processingMessageID = messageID
+	ws.state.ProcessingMessageID = messageID
 	ws.responseQueue = responseQueue
 	defer func() {
-		ws.processingMessageID = ""
+		ws.state.ProcessingMessageID = ""
 		ws.responseQueue = ""
 	}()
 
@@ -176,10 +179,10 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 }
 
 func (ws *worker) publishPayload(solutionResult solution.Result) {
-	ws.logger.Infof("Publishing payload response [MsgID: %s]", ws.processingMessageID)
+	ws.logger.Infof("Publishing payload response [MsgID: %s]", ws.state.ProcessingMessageID)
 	publishErr := ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
-		ws.processingMessageID,
+		ws.state.ProcessingMessageID,
 		ws.responseQueue,
 		solutionResult)
 
@@ -187,7 +190,7 @@ func (ws *worker) publishPayload(solutionResult solution.Result) {
 		ws.logger.Errorf("Failed to publish success response: %s", publishErr)
 		ws.responder.PublishErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
-			ws.processingMessageID,
+			ws.state.ProcessingMessageID,
 			ws.responseQueue,
 			publishErr)
 	}
@@ -195,7 +198,12 @@ func (ws *worker) publishPayload(solutionResult solution.Result) {
 
 func (ws *worker) publishError(err error) {
 	ws.logger.Errorf("Error: %s", err)
-	ws.responder.PublishErrorToResponseQueue(constants.QueueMessageTypeTask, ws.processingMessageID, ws.responseQueue, err)
+	ws.responder.PublishErrorToResponseQueue(
+		constants.QueueMessageTypeTask,
+		ws.state.ProcessingMessageID,
+		ws.responseQueue,
+		err,
+	)
 }
 
 func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
@@ -211,7 +219,7 @@ func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDir
 	}
 	respErr := ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
-		ws.processingMessageID,
+		ws.state.ProcessingMessageID,
 		ws.responseQueue,
 		solutionResult,
 	)

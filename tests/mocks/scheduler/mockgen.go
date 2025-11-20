@@ -41,10 +41,10 @@ func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
 }
 
 // GetWorkersStatus mocks base method.
-func (m *MockScheduler) GetWorkersStatus() map[string]any {
+func (m *MockScheduler) GetWorkersStatus() messages.ResponseWorkerStatusPayload {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkersStatus")
-	ret0, _ := ret[0].(map[string]any)
+	ret0, _ := ret[0].(messages.ResponseWorkerStatusPayload)
 	return ret0
 }
 

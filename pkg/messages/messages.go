@@ -1,6 +1,10 @@
 package messages
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/mini-maxit/worker/pkg/constants"
+)
 
 type QueueMessage struct {
 	Type      string          `json:"type"`
@@ -13,6 +17,18 @@ type ResponseQueueMessage struct {
 	MessageID string          `json:"message_id"`
 	Ok        bool            `json:"ok"`
 	Payload   json.RawMessage `json:"payload"`
+}
+
+type WorkerStatus struct {
+	WorkerID            int                    `json:"worker_id"`
+	Status              constants.WorkerStatus `json:"status"`
+	ProcessingMessageID string                 `json:"processing_message_id"`
+}
+
+type ResponseWorkerStatusPayload struct {
+	BusyWorkers  int            `json:"busy_workers"`
+	TotalWorkers int            `json:"total_workers"`
+	WorkerStatus []WorkerStatus `json:"worker_status"`
 }
 
 type FileLocation struct {
