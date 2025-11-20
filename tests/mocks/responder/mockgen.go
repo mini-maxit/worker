@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 
 	languages "github.com/mini-maxit/worker/pkg/languages"
+	messages "github.com/mini-maxit/worker/pkg/messages"
 	solution "github.com/mini-maxit/worker/pkg/solution"
 	amqp091 "github.com/rabbitmq/amqp091-go"
 	gomock "go.uber.org/mock/gomock"
@@ -111,15 +112,15 @@ func (mr *MockResponderMockRecorder) PublishSuccessHandshakeRespond(messageType,
 }
 
 // PublishSuccessStatusRespond mocks base method.
-func (m *MockResponder) PublishSuccessStatusRespond(messageType, messageID, responseQueue string, statusMap map[string]any) error {
+func (m *MockResponder) PublishSuccessStatusRespond(messageType, messageID, responseQueue string, status messages.ResponseWorkerStatusPayload) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishSuccessStatusRespond", messageType, messageID, responseQueue, statusMap)
+	ret := m.ctrl.Call(m, "PublishSuccessStatusRespond", messageType, messageID, responseQueue, status)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PublishSuccessStatusRespond indicates an expected call of PublishSuccessStatusRespond.
-func (mr *MockResponderMockRecorder) PublishSuccessStatusRespond(messageType, messageID, responseQueue, statusMap any) *gomock.Call {
+func (mr *MockResponderMockRecorder) PublishSuccessStatusRespond(messageType, messageID, responseQueue, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishSuccessStatusRespond", reflect.TypeOf((*MockResponder)(nil).PublishSuccessStatusRespond), messageType, messageID, responseQueue, statusMap)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishSuccessStatusRespond", reflect.TypeOf((*MockResponder)(nil).PublishSuccessStatusRespond), messageType, messageID, responseQueue, status)
 }

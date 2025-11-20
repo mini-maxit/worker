@@ -14,6 +14,7 @@ import (
 
 	mock_channel "github.com/mini-maxit/worker/tests/mocks/channel"
 
+	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
@@ -82,7 +83,11 @@ func TestPublishRespondHelpers(t *testing.T) {
 	}()
 
 	// Status
-	statusMap := map[string]interface{}{"w1": "idle"}
+	statusPayload := messages.ResponseWorkerStatusPayload{
+		BusyWorkers:  1,
+		TotalWorkers: 3,
+		WorkerStatus: []messages.WorkerStatus{{WorkerID: 1, Status: constants.WorkerStatusIdle, ProcessingMessageID: ""}},
+	}
 	mockCh.EXPECT().Publish("", "status-queue", false, false, gomock.AssignableToTypeOf(amqp.Publishing{})).Do(
 		func(_ string, _ string, _ bool, _ bool, pub amqp.Publishing) {
 			var resp messages.ResponseQueueMessage
@@ -102,7 +107,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusMap); err != nil {
+	if err := r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusPayload); err != nil {
 		t.Fatalf("PublishSucessStatusRespond returned error: %v", err)
 	}
 

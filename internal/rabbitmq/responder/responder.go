@@ -25,7 +25,7 @@ type Responder interface {
 	) error
 	PublishSuccessStatusRespond(
 		messageType, messageID, responseQueue string,
-		statusMap map[string]interface{},
+		status messages.ResponseWorkerStatusPayload,
 	) error
 	PublishPayloadTaskRespond(
 		messageType, messageID, responseQueue string,
@@ -180,9 +180,9 @@ func (r *responder) PublishSuccessStatusRespond(
 	messageType string,
 	messageID string,
 	responseQueue string,
-	statusMap map[string]interface{},
+	status messages.ResponseWorkerStatusPayload,
 ) error {
-	payload, err := json.Marshal(statusMap)
+	payload, err := json.Marshal(status)
 	if err != nil {
 		return err
 	}
