@@ -112,11 +112,23 @@ for idx in "${!inputs[@]}"; do
     # Handle time limit exceeded
     if (( code == 143 )); then
       echo "Time limit exceeded after ${tlimit_ms}ms" >> "${err}"
-    # Check if memory usage exceeded the limit
-    elif ((code == 134 )); then
-      echo "Memory limit exceeded max ${mlimit_kb}KB" >> "${err}"
+    fi
 
-    elif (( peak_kb >= mlimit_kb )); then
+    sig=0
+    if (( code > 128 )); then
+      sig=$((code - 128))
+    fi
+
+    is_mle=0
+    # SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(10) possibly mem limit exceeded, but this is NOT guaranteed by POSIX.
+    if (( sig == 9 || sig == 11 || sig == 6 || sig == 10 )); then
+      # Require that we were close to the memory limit
+      if (( peak_kb * 10 >= mlimit_kb * 9 )); then
+        is_mle=1
+      fi
+    fi
+
+    if ((is_mle)); then
       echo "Memory limit exceeded max ${mlimit_kb}KB" >> "${err}"
       code=134
     fi
