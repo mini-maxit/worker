@@ -13,4 +13,5 @@ var (
 	ErrSubmissionFileLocationEmpty = errors.New("submission file location is empty")
 	ErrCompilationFailed           = errors.New("compilation failed")
 	ErrResponderClosed             = errors.New("responder is closed")
+	ErrVolumeNotMounted            = errors.New("required volume is not mounted")
 )

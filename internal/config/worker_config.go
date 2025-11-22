@@ -20,6 +20,14 @@ type Config struct {
 	MaxWorkers       int
 	JobsDataVolume   string
 	VerifierFlags    []string
+	ExecutorDebug    ExecutorDebugConfig
+}
+
+type ExecutorDebugConfig struct {
+	RunCmd         string
+	MaxRuntimeSec  int
+	DockerImage    string
+	WaitTimeoutSec int
 }
 
 func NewConfig() *Config {
@@ -45,6 +53,7 @@ func NewConfig() *Config {
 	workerQueueName, maxWorkers := workerConfig()
 	jobsDataVolume := dockerConfig()
 	verifierFlagsStr := verifierConfig()
+	executorDebug := executorDebugConfig()
 
 	return &Config{
 		RabbitMQURL:      rabbitmqURL,
@@ -54,7 +63,39 @@ func NewConfig() *Config {
 		MaxWorkers:       maxWorkers,
 		JobsDataVolume:   jobsDataVolume,
 		VerifierFlags:    verifierFlagsStr,
+		ExecutorDebug:    executorDebug,
 	}
+}
+
+func executorDebugConfig() ExecutorDebugConfig {
+	logger := logger.NewNamedLogger("config")
+	var cfg ExecutorDebugConfig
+
+	cfg.RunCmd = os.Getenv("EXECUTOR_DEBUG_RUN_CMD")
+
+	maxRunStr := os.Getenv("EXECUTOR_DEBUG_MAX_RUNTIME")
+	if maxRunStr != "" {
+		v, err := strconv.Atoi(maxRunStr)
+		if err != nil {
+			logger.Warnf("failed to parse EXECUTOR_DEBUG_MAX_RUNTIME=%s: %v", maxRunStr, err)
+		} else {
+			cfg.MaxRuntimeSec = v
+		}
+	}
+
+	cfg.DockerImage = os.Getenv("EXECUTOR_DEBUG_DOCKER_IMAGE")
+
+	waitStr := os.Getenv("EXECUTOR_DEBUG_WAIT_TIMEOUT")
+	if waitStr != "" {
+		v, err := strconv.Atoi(waitStr)
+		if err != nil {
+			logger.Warnf("failed to parse EXECUTOR_DEBUG_WAIT_TIMEOUT=%s: %v", waitStr, err)
+		} else {
+			cfg.WaitTimeoutSec = v
+		}
+	}
+
+	return cfg
 }
 
 func rabbitmqConfig() (string, int) {
