@@ -179,8 +179,7 @@ func (d *executor) buildContainerConfig(
 		runCmd = constants.DockerTestScript + " ./" + bin
 	}
 	return &container.Config{
-		Image: dockerImage,
-		// Cmd:        []string{"bash", "-c", "while true; do sleep 1000; done"},
+		Image:       dockerImage,
 		Cmd:         []string{"bash", "-lc", runCmd},
 		WorkingDir:  userPackageDirPath,
 		Env:         env,
