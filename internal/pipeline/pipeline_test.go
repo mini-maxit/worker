@@ -269,17 +269,17 @@ func TestGetStatus(t *testing.T) {
 
 	w := pipeline.NewWorker(7, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
-	if status := w.GetStatus(); status != constants.WorkerStatusIdle {
+	if status := w.GetState(); status.Status != constants.WorkerStatusIdle {
 		t.Fatalf("expected initial status to be Idle, got %q", status)
 	}
 
 	w.UpdateStatus(constants.WorkerStatusBusy)
-	if status := w.GetStatus(); status != constants.WorkerStatusBusy {
+	if status := w.GetState(); status.Status != constants.WorkerStatusBusy {
 		t.Fatalf("expected status to be Busy, got %q", status)
 	}
 
 	w.UpdateStatus(constants.WorkerStatusIdle)
-	if status := w.GetStatus(); status != constants.WorkerStatusIdle {
+	if status := w.GetState(); status.Status != constants.WorkerStatusIdle {
 		t.Fatalf("expected status to be Idle after update, got %q", status)
 	}
 }

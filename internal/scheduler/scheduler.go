@@ -17,16 +17,15 @@ import (
 )
 
 type Scheduler interface {
-	GetWorkersStatus() map[string]interface{}
+	GetWorkersStatus() messages.ResponseWorkerStatusPayload
 	ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error
 }
 
 type scheduler struct {
-	mu               sync.Mutex
-	busyWorkersCount int
-	workers          map[int]pipeline.Worker
-	maxWorkers       int
-	logger           *zap.SugaredLogger
+	mu         sync.Mutex
+	workers    map[int]pipeline.Worker
+	maxWorkers int
+	logger     *zap.SugaredLogger
 }
 
 func NewScheduler(
@@ -70,25 +69,28 @@ func NewSchedulerWithWorkers(
 	}
 }
 
-func (s *scheduler) GetWorkersStatus() map[string]interface{} {
+func (s *scheduler) GetWorkersStatus() messages.ResponseWorkerStatusPayload {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	statuses := make(map[int]string, len(s.workers))
-
-	for id, worker := range s.workers {
-		status := worker.GetStatus()
-		if status == constants.WorkerStatusBusy {
-			statuses[id] = "Processing message: " + worker.GetProcessingMessageID()
-			continue
+	states := make([]messages.WorkerStatus, 0, len(s.workers))
+	busyWorkers := 0
+	for _, worker := range s.workers {
+		state := worker.GetState()
+		states = append(states, messages.WorkerStatus{
+			WorkerID:            worker.GetId(),
+			Status:              state.Status,
+			ProcessingMessageID: state.ProcessingMessageID,
+		})
+		if state.Status == constants.WorkerStatusBusy {
+			busyWorkers++
 		}
-		statuses[id] = status
 	}
 
-	return map[string]interface{}{
-		"busy_workers":  s.busyWorkersCount,
-		"total_workers": s.maxWorkers,
-		"worker_status": statuses,
+	return messages.ResponseWorkerStatusPayload{
+		BusyWorkers:  busyWorkers,
+		TotalWorkers: s.maxWorkers,
+		WorkerStatus: states,
 	}
 }
 
@@ -97,9 +99,8 @@ func (s *scheduler) getFreeWorker() (pipeline.Worker, error) {
 	defer s.mu.Unlock()
 
 	for _, worker := range s.workers {
-		if worker.GetStatus() == constants.WorkerStatusIdle {
+		if worker.GetState().Status == constants.WorkerStatusIdle {
 			worker.UpdateStatus(constants.WorkerStatusBusy)
-			s.busyWorkersCount++
 			return worker, nil
 		}
 	}
@@ -136,7 +137,6 @@ func (s *scheduler) markWorkerAsIdle(worker pipeline.Worker) {
 	defer s.mu.Unlock()
 
 	worker.UpdateStatus(constants.WorkerStatusIdle)
-	s.busyWorkersCount--
 
 	s.logger.Infof("Worker marked as idle [WorkerID: %d]", worker.GetId())
 }

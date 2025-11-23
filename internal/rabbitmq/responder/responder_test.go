@@ -14,6 +14,7 @@ import (
 	"github.com/mini-maxit/worker/tests/mocks"
 
 	. "github.com/mini-maxit/worker/internal/rabbitmq/responder"
+	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
@@ -82,7 +83,11 @@ func TestPublishRespondHelpers(t *testing.T) {
 	}()
 
 	// Status
-	statusMap := map[string]interface{}{"w1": "idle"}
+	statusPayload := messages.ResponseWorkerStatusPayload{
+		BusyWorkers:  1,
+		TotalWorkers: 3,
+		WorkerStatus: []messages.WorkerStatus{{WorkerID: 1, Status: constants.WorkerStatusIdle, ProcessingMessageID: ""}},
+	}
 	mockCh.EXPECT().Publish("", "status-queue", false, false, gomock.AssignableToTypeOf(amqp.Publishing{})).Do(
 		func(_ string, _ string, _ bool, _ bool, pub amqp.Publishing) {
 			var resp messages.ResponseQueueMessage
@@ -93,16 +98,16 @@ func TestPublishRespondHelpers(t *testing.T) {
 				t.Fatalf("expected Ok=true for status response")
 			}
 			// payload should match statusMap
-			var got map[string]interface{}
+			var got messages.ResponseWorkerStatusPayload
 			if err := json.Unmarshal(resp.Payload, &got); err != nil {
 				t.Fatalf("failed to unmarshal payload: %v", err)
 			}
-			if got["w1"] != "idle" {
+			if got.WorkerStatus[0].Status != constants.WorkerStatusIdle {
 				t.Fatalf("expected status payload to contain w1=idle")
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusMap); err != nil {
+	if err := r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusPayload); err != nil {
 		t.Fatalf("PublishSucessStatusRespond returned error: %v", err)
 	}
 

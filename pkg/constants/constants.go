@@ -29,9 +29,11 @@ const (
 )
 
 // Worker specific constants.
+type WorkerStatus int
+
 const (
-	WorkerStatusIdle = "idle"
-	WorkerStatusBusy = "busy"
+	WorkerStatusIdle WorkerStatus = iota
+	WorkerStatusBusy
 )
 
 // Exit codes.

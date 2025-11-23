@@ -1,10 +1,12 @@
 package compiler_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"errors"
 
@@ -49,7 +51,9 @@ func TestCompileSolutionIfNeeded_Success(t *testing.T) {
 	}
 
 	// run the produced binary to ensure it runs and returns 0
-	cmd := exec.Command(out)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, out)
 	if outb, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("running compiled binary failed: %v, output: %s", err, string(outb))
 	}

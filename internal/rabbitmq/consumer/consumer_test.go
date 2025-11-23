@@ -88,7 +88,11 @@ func TestProcessMessage(t *testing.T) {
 	})
 
 	t.Run("status success", func(t *testing.T) {
-		status := map[string]any{"w1": "idle"}
+		status := messages.ResponseWorkerStatusPayload{
+			BusyWorkers:  1,
+			TotalWorkers: 1,
+			WorkerStatus: []messages.WorkerStatus{{WorkerID: 1, Status: constants.WorkerStatusIdle}},
+		}
 		qm := messages.QueueMessage{Type: constants.QueueMessageTypeStatus, MessageID: "status-id", Payload: nil}
 		b, _ := json.Marshal(qm)
 

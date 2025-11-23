@@ -33,12 +33,8 @@ func TestNewScheduler(t *testing.T) {
 
 	status := s.GetWorkersStatus()
 
-	workers, ok := status["worker_status"].(map[int]string)
-	if !ok {
-		t.Fatalf("expected worker_status to be map[int]string, got %T", status["worker_status"])
-	}
-	if len(workers) != maxWorkers {
-		t.Fatalf("expected %d workers, got %d", maxWorkers, len(workers))
+	if len(status.WorkerStatus) != maxWorkers {
+		t.Fatalf("expected %d workers, got %d", maxWorkers, len(status.WorkerStatus))
 	}
 }
 
@@ -49,24 +45,38 @@ func TestGetWorkersStatus(t *testing.T) {
 	w0 := mocktests.NewMockWorker(ctrl)
 	w1 := mocktests.NewMockWorker(ctrl)
 
-	w0.EXPECT().GetStatus().Return(constants.WorkerStatusBusy).Times(1)
-	w0.EXPECT().GetProcessingMessageID().Return("msg-1").Times(1)
+	w0.EXPECT().GetState().Return(
+		pipeline.WorkerState{Status: constants.WorkerStatusBusy, ProcessingMessageID: "msg-1"},
+	).Times(1)
+	w0.EXPECT().GetId().Return(0).Times(1)
 
-	w1.EXPECT().GetStatus().Return(constants.WorkerStatusIdle).Times(1)
+	w1.EXPECT().GetState().Return(pipeline.WorkerState{Status: constants.WorkerStatusIdle}).Times(1)
+	w1.EXPECT().GetId().Return(1).Times(1)
 
 	s := NewSchedulerWithWorkers(2, map[int]pipeline.Worker{0: w0, 1: w1}, nil, nil, nil, nil, nil)
 
 	st := s.GetWorkersStatus()
-	if st == nil {
-		t.Fatalf("expected non-nil status map")
+	if len(st.WorkerStatus) != 2 {
+		t.Fatalf("expected 2 workers status, got %d", len(st.WorkerStatus))
 	}
 
-	totalWorkers, ok := st["total_workers"].(int)
-	if !ok {
-		t.Fatalf("expected total_workers to be int, got %T", st["total_workers"])
+	busyFound := false
+	idleFound := false
+	for _, ws := range st.WorkerStatus {
+		if ws.Status == constants.WorkerStatusBusy && ws.ProcessingMessageID == "msg-1" {
+			busyFound = true
+		}
+		if ws.Status == constants.WorkerStatusIdle {
+			idleFound = true
+		}
 	}
-	if totalWorkers != 2 {
-		t.Fatalf("expected total_workers 2, got %v", totalWorkers)
+
+	if !busyFound {
+		t.Fatalf("expected a busy worker processing message ID msg-1, none found")
+	}
+
+	if !idleFound {
+		t.Fatalf("expected an idle worker, none found")
 	}
 }
 
@@ -76,8 +86,8 @@ func TestProcessTask_SuccessAndMarkIdle(t *testing.T) {
 
 	w := mocktests.NewMockWorker(ctrl)
 
-	// Scheduler will call GetStatus to find free worker
-	w.EXPECT().GetStatus().Return(constants.WorkerStatusIdle).Times(1)
+	// Scheduler will call GetState to find free worker
+	w.EXPECT().GetState().Return(pipeline.WorkerState{Status: constants.WorkerStatusIdle}).Times(1)
 	// When a free worker is found, scheduler should call UpdateStatus(Busy)
 	w.EXPECT().UpdateStatus(constants.WorkerStatusBusy).Times(1)
 
@@ -125,7 +135,7 @@ func TestProcessTask_NoFreeWorker(t *testing.T) {
 
 	w := mocktests.NewMockWorker(ctrl)
 	// worker reports busy
-	w.EXPECT().GetStatus().Return(constants.WorkerStatusBusy).Times(1)
+	w.EXPECT().GetState().Return(pipeline.WorkerState{Status: constants.WorkerStatusBusy}).Times(1)
 
 	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil, nil)
 
