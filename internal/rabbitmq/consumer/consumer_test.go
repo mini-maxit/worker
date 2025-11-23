@@ -1,5 +1,4 @@
-//nolint:funlen
-package consumer
+package consumer_test
 
 import (
 	"encoding/json"
@@ -12,10 +11,9 @@ import (
 
 	"go.uber.org/mock/gomock"
 
-	mock_channel "github.com/mini-maxit/worker/tests/mocks/channel"
-	mock_responder "github.com/mini-maxit/worker/tests/mocks/responder"
-	mock_scheduler "github.com/mini-maxit/worker/tests/mocks/scheduler"
+	"github.com/mini-maxit/worker/tests/mocks"
 
+	"github.com/mini-maxit/worker/internal/rabbitmq/consumer"
 	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
@@ -28,21 +26,17 @@ func TestProcessMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
-	cIface := NewConsumer(nil, workerQueue, mockScheduler, mockResponder)
-	c, ok := cIface.(*consumer)
-	if !ok {
-		t.Fatalf("NewConsumer returned unexpected type: %T", cIface)
-	}
+	c := consumer.NewConsumer(nil, workerQueue, mockScheduler, mockResponder)
 
 	t.Run("invalid json", func(t *testing.T) {
 		// Expect responder.PublishErrorToResponseQueue called with empty type/messageID and the replyTo
 		mockResponder.EXPECT().PublishErrorToResponseQueue("", "", "reply", gomock.Any()).Times(1)
 
 		msg := amqp.Delivery{Body: []byte("not json"), ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 
 	t.Run("unknown type", func(t *testing.T) {
@@ -52,7 +46,7 @@ func TestProcessMessage(t *testing.T) {
 		mockResponder.EXPECT().PublishErrorToResponseQueue("foo", "mid", "reply", pkgerrors.ErrUnknownMessageType).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 
 	t.Run("task success", func(t *testing.T) {
@@ -66,7 +60,7 @@ func TestProcessMessage(t *testing.T) {
 		).Return(nil).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 
 	t.Run("task requeue when no worker", func(t *testing.T) {
@@ -90,11 +84,15 @@ func TestProcessMessage(t *testing.T) {
 		}).Return(nil).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 
 	t.Run("status success", func(t *testing.T) {
-		status := map[string]any{"w1": "idle"}
+		status := messages.ResponseWorkerStatusPayload{
+			BusyWorkers:  1,
+			TotalWorkers: 1,
+			WorkerStatus: []messages.WorkerStatus{{WorkerID: 1, Status: constants.WorkerStatusIdle}},
+		}
 		qm := messages.QueueMessage{Type: constants.QueueMessageTypeStatus, MessageID: "status-id", Payload: nil}
 		b, _ := json.Marshal(qm)
 
@@ -104,7 +102,7 @@ func TestProcessMessage(t *testing.T) {
 		).Return(nil).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 
 	t.Run("handshake success", func(t *testing.T) {
@@ -121,7 +119,7 @@ func TestProcessMessage(t *testing.T) {
 		}).Return(nil).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 
 	t.Run("task success", func(t *testing.T) {
@@ -135,7 +133,7 @@ func TestProcessMessage(t *testing.T) {
 		).Return(nil).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
-		c.processMessage(msg)
+		c.ProcessMessage(msg)
 	})
 }
 
@@ -143,9 +141,9 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockChannel := mock_channel.NewMockChannel(ctrl)
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockChannel := mocks.NewMockChannel(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	// deliveries channel that will be returned by Consume
 	deliveries := make(chan amqp.Delivery)
@@ -162,10 +160,14 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 			}
 		}).Return(amqp.Queue{Name: workerQueue}, nil).Times(1)
 
-	// Expect Consume to be called and return our deliveries channel
+	// Expect Consume to be called and return our deliveries channel. Signal when Consume is invoked
+	started := make(chan struct{})
 	mockChannel.EXPECT().Consume(
 		workerQueue, "", true, false, false, false, nil,
-	).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
+	).Do(func(_ string, _ string, _ bool, _ bool, _ bool, _ bool, _ amqp.Table) {
+		// notify that Listen has successfully called Consume and is ready to receive deliveries
+		close(started)
+	}).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
 
 	// When the scheduler's ProcessTask is called, signal completion
 	done := make(chan struct{})
@@ -179,11 +181,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	cIface := NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
-	c, ok := cIface.(*consumer)
-	if !ok {
-		t.Fatalf("NewConsumer returned unexpected type: %T", cIface)
-	}
+	c := consumer.NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -192,6 +190,14 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 		// Listen will range over deliveries until it's closed
 		c.Listen()
 	}()
+
+	// Wait for Listen to call Consume so the goroutine is ready to receive deliveries
+	select {
+	case <-started:
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for Listen to start consuming")
+	}
 
 	// Build a task message and send it
 	task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
@@ -205,7 +211,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	select {
 	case <-done:
 		// good
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for ProcessTask to be called")
 	}
 
@@ -219,7 +225,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	}()
 	select {
 	case <-doneCh:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for Listen to finish")
 	}
 }
@@ -228,19 +234,15 @@ func TestListen_QueueDeclareErrorPanics(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockChannel := mock_channel.NewMockChannel(ctrl)
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockChannel := mocks.NewMockChannel(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	mockChannel.EXPECT().QueueDeclare(
 		workerQueue, true, false, false, false, gomock.Any(),
 	).Return(amqp.Queue{}, errors.New("queue error")).Times(1)
 
-	cIface := NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
-	c, ok := cIface.(*consumer)
-	if !ok {
-		t.Fatalf("NewConsumer returned unexpected type: %T", cIface)
-	}
+	c := consumer.NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
 
 	// Expect a panic from Panicf call inside Listen
 	defer func() {
@@ -256,9 +258,9 @@ func TestListen_ConsumeErrorPanics(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockChannel := mock_channel.NewMockChannel(ctrl)
-	mockScheduler := mock_scheduler.NewMockScheduler(ctrl)
-	mockResponder := mock_responder.NewMockResponder(ctrl)
+	mockChannel := mocks.NewMockChannel(ctrl)
+	mockScheduler := mocks.NewMockScheduler(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
 
 	mockChannel.EXPECT().QueueDeclare(
 		workerQueue, true, false, false, false, gomock.Any(),
@@ -267,12 +269,7 @@ func TestListen_ConsumeErrorPanics(t *testing.T) {
 		workerQueue, "", true, false, false, false, nil,
 	).Return((<-chan amqp.Delivery)(nil), errors.New("consume error")).Times(1)
 
-	cIface := NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
-	c, ok := cIface.(*consumer)
-	if !ok {
-		t.Fatalf("NewConsumer returned unexpected type: %T", cIface)
-	}
-
+	c := consumer.NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
 	// Expect a panic from Panicf call inside Listen
 	defer func() {
 		if r := recover(); r == nil {

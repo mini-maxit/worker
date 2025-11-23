@@ -37,9 +37,26 @@ func NewScheduler(
 	responder responder.Responder,
 
 ) Scheduler {
-	workers := make(map[int]pipeline.Worker, maxWorkers)
-	for i := range maxWorkers {
-		workers[i] = pipeline.NewWorker(i, compiler, packager, executor, verifier, responder)
+	return NewSchedulerWithWorkers(maxWorkers, nil, compiler, packager, executor, verifier, responder)
+}
+
+// NewSchedulerWithWorkers creates a Scheduler using the provided worker map.
+// If `workers` is nil, it will create a worker map of size `maxWorkers`.
+// This constructor is useful for tests where mock workers need to be injected.
+func NewSchedulerWithWorkers(
+	maxWorkers int,
+	workers map[int]pipeline.Worker,
+	compiler compiler.Compiler,
+	packager packager.Packager,
+	executor executor.Executor,
+	verifier verifier.Verifier,
+	responder responder.Responder,
+) Scheduler {
+	if workers == nil {
+		workers = make(map[int]pipeline.Worker, maxWorkers)
+		for i := range maxWorkers {
+			workers[i] = pipeline.NewWorker(i, compiler, packager, executor, verifier, responder)
+		}
 	}
 
 	workerPoolLogger := logger.NewNamedLogger("workerPool")
