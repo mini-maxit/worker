@@ -22,11 +22,10 @@ type Scheduler interface {
 }
 
 type scheduler struct {
-	mu               sync.Mutex
-	busyWorkersCount int
-	workers          map[int]pipeline.Worker
-	maxWorkers       int
-	logger           *zap.SugaredLogger
+	mu         sync.Mutex
+	workers    map[int]pipeline.Worker
+	maxWorkers int
+	logger     *zap.SugaredLogger
 }
 
 func NewScheduler(
@@ -85,7 +84,6 @@ func (s *scheduler) getFreeWorker() (pipeline.Worker, error) {
 	for _, worker := range s.workers {
 		if worker.GetState().Status == constants.WorkerStatusIdle {
 			worker.UpdateStatus(constants.WorkerStatusBusy)
-			s.busyWorkersCount++
 			return worker, nil
 		}
 	}
@@ -122,7 +120,6 @@ func (s *scheduler) markWorkerAsIdle(worker pipeline.Worker) {
 	defer s.mu.Unlock()
 
 	worker.UpdateStatus(constants.WorkerStatusIdle)
-	s.busyWorkersCount--
 
 	s.logger.Infof("Worker marked as idle [WorkerID: %d]", worker.GetId())
 }
