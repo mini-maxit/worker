@@ -95,9 +95,10 @@ for idx in "${!inputs[@]}"; do
     tlimit_s=$(awk "BEGIN {print ${tlimit_ms}/1000}")
 
     # Run the command with timeout and track peak memory usage
+    hard_kb=$(( mlimit_kb + mlimit_kb / 10 ))
     timeout --preserve-status "${tlimit_s}s" \
       /usr/bin/time -f "%M" -o "${peak_mem_file}" \
-      bash -c "ulimit -v ${mlimit_kb} && \"$1\" < \"$infile\"" \
+      bash -c "ulimit -H -v ${hard_kb} && ulimit -S -v ${mlimit_kb} && \"$1\" < \"$infile\"" \
       > "${out}" 2> "${err}"
     code=$?
 
