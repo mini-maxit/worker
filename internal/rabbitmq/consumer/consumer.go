@@ -19,6 +19,7 @@ import (
 
 type Consumer interface {
 	Listen()
+	ProcessMessage(msg amqp.Delivery)
 }
 
 type consumer struct {
@@ -65,12 +66,12 @@ func (c *consumer) Listen() {
 
 	for msg := range msgs {
 		go func(m amqp.Delivery) {
-			c.processMessage(m)
+			c.ProcessMessage(m)
 		}(msg)
 	}
 }
 
-func (c *consumer) processMessage(msg amqp.Delivery) {
+func (c *consumer) ProcessMessage(msg amqp.Delivery) {
 	defer func() {
 		if r := recover(); r != nil {
 			c.logger.Errorf("Panic while processing message: %v", r)

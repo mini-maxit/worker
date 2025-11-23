@@ -33,3 +33,7 @@ go.work.sum
 
 # vscode
 .vscode
+
+#logs
+log.txt
+logs/
