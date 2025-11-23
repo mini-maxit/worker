@@ -108,23 +108,20 @@ for idx in "${!inputs[@]}"; do
     fi
     rm -f "${peak_mem_file}"
 
-
-    # Handle time limit exceeded
-    if (( code == 143 )); then
-      echo "Time limit exceeded after ${tlimit_ms}ms" >> "${err}"
-    fi
-
     sig=0
     if (( code > 128 )); then
       sig=$((code - 128))
     fi
 
     is_mle=0
+    if (( sig == 15 )); then
+      echo "Time limit exceeded after ${tlimit_ms}ms" >> "${err}"
     # SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(10) possibly mem limit exceeded, but this is NOT guaranteed by POSIX.
-    if (( sig == 9 || sig == 11 || sig == 6 || sig == 10 )); then
+    elif (( sig == 9 || sig == 11 || sig == 6 || sig == 10 )); then
       # Require that we were close to the memory limit
-      if (( peak_kb * 10 >= mlimit_kb * 9 )); then
-        is_mle=1
+      threshold_kb=$(( mlimit_kb * 9 / 10 ))
+      if (( peak_kb >= threshold_kb )); then
+      is_mle=1
       fi
     fi
 
