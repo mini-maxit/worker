@@ -12,7 +12,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 
-	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/docker"
 	"go.uber.org/zap"
 
@@ -45,23 +44,17 @@ type Executor interface {
 type executor struct {
 	logger *zap.SugaredLogger
 	docker docker.DockerClient
-	debug  config.ExecutorDebugConfig
 }
 
-func NewExecutor(dCli docker.DockerClient, debug config.ExecutorDebugConfig) Executor {
+func NewExecutor(dCli docker.DockerClient) Executor {
 	logger := logger.NewNamedLogger("docker-executor")
-	return &executor{docker: dCli, logger: logger, debug: debug}
+	return &executor{docker: dCli, logger: logger}
 }
 
 func (d *executor) ExecuteCommand(
 	cfg CommandConfig,
 ) error {
-	maxRuntimeSec := int(constants.ContainerMaxRunTime)
-	if d.debug.MaxRuntimeSec > 0 {
-		maxRuntimeSec = d.debug.MaxRuntimeSec
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(maxRuntimeSec)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(constants.ContainerMaxRunTime)*time.Second)
 	defer cancel()
 
 	// Build environment variables.
@@ -74,22 +67,12 @@ func (d *executor) ExecuteCommand(
 			cfg.LanguageType, cfg.LanguageVersion, err, cfg.MessageID)
 		return err
 	}
-	if d.debug.DockerImage != "" {
-		dockerImage = d.debug.DockerImage
-		d.logger.Warnf("Executor debug: overriding docker image to %s [MsgID: %s]", dockerImage, cfg.MessageID)
-	}
 
-	// Container configuration.
-	customRunCmd := d.debug.RunCmd
-	if customRunCmd != "" {
-		d.logger.Warnf("Executor debug: using custom run command: %s [MsgID: %s]", customRunCmd, cfg.MessageID)
-	}
 	containerCfg := d.buildContainerConfig(
 		cfg.DirConfig.PackageDirPath,
 		dockerImage,
 		cfg.DirConfig.UserExecFilePath,
 		env,
-		customRunCmd,
 	)
 
 	// Host configuration.
@@ -108,13 +91,7 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	// Wait for the container to exit.
-	waitTimeoutSec := maxRuntimeSec
-	if d.debug.WaitTimeoutSec > 0 {
-		waitTimeoutSec = d.debug.WaitTimeoutSec
-	}
-
-	return d.waitForContainer(ctx, containerID, cfg.MessageID, waitTimeoutSec)
+	return d.waitForContainer(ctx, containerID, cfg.MessageID, constants.ContainerMaxRunTime)
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
@@ -169,15 +146,12 @@ func (d *executor) buildContainerConfig(
 	dockerImage string,
 	absoluteSolutionPath string,
 	env []string,
-	customRunCmd string,
 ) *container.Config {
 	stopTimeout := int(2)
 	d.logger.Infof("Workspace directory in container: %s", userPackageDirPath)
-	runCmd := customRunCmd
-	if runCmd == "" {
-		bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
-		runCmd = constants.DockerTestScript + " ./" + bin
-	}
+	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
+	runCmd := constants.DockerTestScript + " ./" + bin
+
 	return &container.Config{
 		Image:       dockerImage,
 		Cmd:         []string{"bash", "-lc", runCmd},

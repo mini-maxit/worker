@@ -45,7 +45,7 @@ func main() {
 	storage := storage.NewStorage(config.StorageBaseUrl)
 	compiler := compiler.NewCompiler()
 	packager := packager.NewPackager(storage)
-	executor := executor.NewExecutor(dCli, config.ExecutorDebug)
+	executor := executor.NewExecutor(dCli)
 	verifier := verifier.NewVerifier(config.VerifierFlags)
 	responder := responder.NewResponder(workerChannel, config.PublishChanSize)
 	defer func() {

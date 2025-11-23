@@ -14,7 +14,7 @@ import (
 
 type DockerClient interface {
 	DataVolumeName() string
-	CreateDataVolume(volumeName string) error
+	CheckDataVolume(volumeName string) error
 	EnsureImage(ctx context.Context, imageName string) error
 	CreateAndStartContainer(
 		ctx context.Context,
@@ -44,7 +44,7 @@ func NewDockerClient(volumeName string) (DockerClient, error) {
 
 	dc := &dockerClient{cli: cli, volumeName: volumeName}
 	if volumeName != "" {
-		if err := dc.CreateDataVolume(volumeName); err != nil {
+		if err := dc.CheckDataVolume(volumeName); err != nil {
 			return nil, err
 		}
 	}
@@ -54,7 +54,7 @@ func NewDockerClient(volumeName string) (DockerClient, error) {
 
 func (d *dockerClient) DataVolumeName() string { return d.volumeName }
 
-func (d *dockerClient) CreateDataVolume(volumeName string) error {
+func (d *dockerClient) CheckDataVolume(volumeName string) error {
 	ctx := context.Background()
 	containers, err := d.cli.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
