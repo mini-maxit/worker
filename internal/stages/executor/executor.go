@@ -42,19 +42,24 @@ type Executor interface {
 }
 
 type executor struct {
-	logger *zap.SugaredLogger
-	docker docker.DockerClient
+	logger        *zap.SugaredLogger
+	docker        docker.DockerClient
+	maxRunTimeSec int
 }
 
-func NewExecutor(dCli docker.DockerClient) Executor {
+func NewExecutor(dCli docker.DockerClient, timeoutSec ...int) Executor {
 	logger := logger.NewNamedLogger("docker-executor")
-	return &executor{docker: dCli, logger: logger}
+	t := constants.ContainerMaxRunTime
+	if len(timeoutSec) > 0 && timeoutSec[0] > 0 {
+		t = timeoutSec[0]
+	}
+	return &executor{docker: dCli, logger: logger, maxRunTimeSec: t}
 }
 
 func (d *executor) ExecuteCommand(
 	cfg CommandConfig,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(constants.ContainerMaxRunTime)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(d.maxRunTimeSec)*time.Second)
 	defer cancel()
 
 	// Build environment variables.
@@ -91,7 +96,7 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	return d.waitForContainer(ctx, containerID, cfg.MessageID, constants.ContainerMaxRunTime)
+	return d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {

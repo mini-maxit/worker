@@ -18,6 +18,7 @@ INTERFACES=(
 	"internal/stages/verifier Verifier"
 	"internal/storage Storage"
 	"internal/pipeline Worker"
+	"internal/docker DockerClient"
 )
 
 
