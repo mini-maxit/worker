@@ -63,7 +63,7 @@ const (
 
 // Solution package and temporary directory paths.
 const (
-	TmpDirPath             = "/tmp/"
+	TmpDirPath             = "/tmp"
 	InputDirName           = "inputs"
 	OutputDirName          = "outputs"
 	UserOutputDirName      = "userOutputs"

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/docker/docker/client"
 	"github.com/mini-maxit/worker/internal/config"
+	"github.com/mini-maxit/worker/internal/docker"
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/rabbitmq"
 	"github.com/mini-maxit/worker/internal/rabbitmq/consumer"
@@ -27,10 +27,7 @@ func main() {
 	conn := rabbitmq.NewRabbitMqConnection(config)
 
 	// Create docker client
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	dCli, err := docker.NewDockerClient(config.JobsDataVolume)
 	if err != nil {
 		logger.Fatalf("Failed to create Docker client: %s", err.Error())
 	}
@@ -48,7 +45,7 @@ func main() {
 	storage := storage.NewStorage(config.StorageBaseUrl)
 	compiler := compiler.NewCompiler()
 	packager := packager.NewPackager(storage)
-	executor := executor.NewExecutor(config.JobsDataVolume, cli)
+	executor := executor.NewExecutor(dCli)
 	verifier := verifier.NewVerifier(config.VerifierFlags)
 	responder := responder.NewResponder(workerChannel, config.PublishChanSize)
 	defer func() {
