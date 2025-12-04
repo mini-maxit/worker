@@ -55,7 +55,7 @@ const (
 	DefaultWorkerQueueName         = "worker_queue"
 	DefaultRabbitmqPublishChanSize = 100
 	DefaultMaxWorkers              = 10
-	RuntimeImagePrefix             = "seber/runtime"
+	RuntimeImagePrefix             = "ghcr.io/mini-maxit/runtime"
 	ContainerMaxRunTime            = 30
 	DefaultJobsDataVolume          = "maxit_worker_jobs-data"
 	DefaultVerifierFlags           = "-w"

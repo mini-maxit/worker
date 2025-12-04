@@ -1,5 +1,5 @@
 # Worker Service
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mini-maxit/worker) 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mini-maxit/worker)
 [![codecov](https://codecov.io/gh/mini-maxit/worker/graph/badge.svg?token=AS7XEYOXBB)](https://codecov.io/gh/mini-maxit/worker)
 ## Overview
 
