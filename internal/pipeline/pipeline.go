@@ -110,7 +110,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	}
 
 	// Download all files and set up directories
-	dc, err := ws.packager.PrepareSolutionPackage(task, messageID)
+	dc, err := ws.packager.PrepareSolutionPackage(task, langType, messageID)
 	if err != nil {
 		ws.publishError(err)
 		return

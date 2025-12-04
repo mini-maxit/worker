@@ -17,10 +17,6 @@ type CppCompiler struct {
 	logger  *zap.SugaredLogger
 }
 
-func (e *CppCompiler) RequiresCompilation() bool {
-	return true
-}
-
 // For now compile allows only one file.
 func (e *CppCompiler) Compile(sourceFilePath, execFilePath, compErrFilePath, messageID string) error {
 	e.logger.Infof("Compiling %s [MsgID: %s]", sourceFilePath, messageID)

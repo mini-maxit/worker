@@ -73,12 +73,17 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	containerCfg := d.buildContainerConfig(
+	containerCfg, err := d.buildContainerConfig(
 		cfg.DirConfig.PackageDirPath,
 		dockerImage,
 		cfg.DirConfig.UserExecFilePath,
+		cfg.LanguageType,
 		env,
 	)
+	if err != nil {
+		d.logger.Errorf("Failed to build container config: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
 
 	// Host configuration.
 	hostCfg := d.buildHostConfig(cfg)
@@ -150,12 +155,21 @@ func (d *executor) buildContainerConfig(
 	userPackageDirPath string,
 	dockerImage string,
 	absoluteSolutionPath string,
+	langType languages.LanguageType,
 	env []string,
-) *container.Config {
+) (*container.Config, error) {
 	stopTimeout := int(2)
 	d.logger.Infof("Workspace directory in container: %s", userPackageDirPath)
-	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
-	runCmd := constants.DockerTestScript + " ./" + bin
+	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution" or "solution.py"
+
+	// Build the execution command using language-specific method
+	execCmd, err := langType.GetRunCommand(bin)
+	if err != nil {
+		d.logger.Errorf("Failed to get run command for language %s: %s", langType, err)
+		return nil, err
+	}
+
+	runCmd := constants.DockerTestScript + " " + execCmd
 
 	return &container.Config{
 		Image:       dockerImage,
@@ -165,7 +179,7 @@ func (d *executor) buildContainerConfig(
 		User:        "0:0",
 		StopTimeout: &stopTimeout,
 		StopSignal:  "SIGKILL",
-	}
+	}, nil
 }
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/tests/mocks"
 	gomock "go.uber.org/mock/gomock"
@@ -37,7 +38,7 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.LanguageType(0), msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)
 	}
@@ -68,7 +69,8 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 
 func TestPrepareSolutionPackage_NoStorage(t *testing.T) {
 	p := packager.NewPackager(nil)
-	_, err := p.PrepareSolutionPackage(&messages.TaskQueueMessage{}, "id-no-storage")
+
+	_, err := p.PrepareSolutionPackage(&messages.TaskQueueMessage{}, languages.LanguageType(0), "id-no-storage")
 	if err == nil {
 		t.Fatalf("expected error when storage is nil")
 	}

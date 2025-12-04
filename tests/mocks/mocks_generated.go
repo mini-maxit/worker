@@ -405,18 +405,18 @@ func (m *MockPackager) EXPECT() *MockPackagerMockRecorder {
 }
 
 // PrepareSolutionPackage mocks base method.
-func (m *MockPackager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*packager.TaskDirConfig, error) {
+func (m *MockPackager) PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, langType languages.LanguageType, msgID string) (*packager.TaskDirConfig, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PrepareSolutionPackage", taskQueueMessage, msgID)
+	ret := m.ctrl.Call(m, "PrepareSolutionPackage", taskQueueMessage, langType, msgID)
 	ret0, _ := ret[0].(*packager.TaskDirConfig)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PrepareSolutionPackage indicates an expected call of PrepareSolutionPackage.
-func (mr *MockPackagerMockRecorder) PrepareSolutionPackage(taskQueueMessage, msgID any) *gomock.Call {
+func (mr *MockPackagerMockRecorder) PrepareSolutionPackage(taskQueueMessage, langType, msgID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareSolutionPackage", reflect.TypeOf((*MockPackager)(nil).PrepareSolutionPackage), taskQueueMessage, msgID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareSolutionPackage", reflect.TypeOf((*MockPackager)(nil).PrepareSolutionPackage), taskQueueMessage, langType, msgID)
 }
 
 // SendSolutionPackage mocks base method.

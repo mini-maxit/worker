@@ -15,16 +15,6 @@ import (
 	"github.com/mini-maxit/worker/tests"
 )
 
-func TestRequiresCompilation(t *testing.T) {
-	c, err := NewCppCompiler("17", "msg-test")
-	if err != nil {
-		t.Fatalf("NewCppCompiler returned error: %v", err)
-	}
-	if !c.RequiresCompilation() {
-		t.Fatalf("expected RequiresCompilation to be true")
-	}
-}
-
 func TestCompileSuccess(t *testing.T) {
 	dir := t.TempDir()
 	src := tests.WriteFile(t, dir, "main.cpp", `
