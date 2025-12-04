@@ -1,4 +1,5 @@
 # Worker Service
+[![codecov](https://codecov.io/gh/mini-maxit/worker/graph/badge.svg?token=AS7XEYOXBB)](https://codecov.io/gh/mini-maxit/worker)
 
 ## Overview
 
