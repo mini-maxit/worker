@@ -1,5 +1,6 @@
 # Worker Service
-
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mini-maxit/worker) 
+[![codecov](https://codecov.io/gh/mini-maxit/worker/graph/badge.svg?token=AS7XEYOXBB)](https://codecov.io/gh/mini-maxit/worker)
 ## Overview
 
 The Worker Service is a message-driven application that listens to a RabbitMQ queue named `worker_queue`. Its primary function is to process messages that contain details about tasks to execute. Upon receiving a message, the worker gathers required files from a file storage service and processes them accordingly. The results are stored using the file storage service and sent back to the backend service.
