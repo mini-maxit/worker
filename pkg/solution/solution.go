@@ -1,9 +1,5 @@
 package solution
 
-import (
-	"github.com/mini-maxit/worker/pkg/constants"
-)
-
 type ResultStatus int
 
 const (
@@ -43,6 +39,7 @@ type Result struct {
 type TestResult struct {
 	Passed        bool           `json:"passed"` // Whether the test passed or failed
 	ExecutionTime float64        `json:"execution_time"`
+	PeakMem       int64          `json:"peak_memory"`
 	StatusCode    TestCaseStatus `json:"status_code"` // Status of the test case
 	// Error message in case of failure. Does not include information about difference in expected and actual output
 	ErrorMessage string `json:"error_message"`
@@ -52,14 +49,4 @@ type TestResult struct {
 type Limit struct {
 	TimeMs   int64 // Time limit in milliseconds
 	MemoryKb int64 // Memory limit in kilobytes
-}
-
-func MaxMemoryKBWithMinimum(limits []Limit) int64 {
-	maxMem := constants.MinContainerMemoryKB
-	for _, v := range limits {
-		if v.MemoryKb > maxMem {
-			maxMem = v.MemoryKb
-		}
-	}
-	return maxMem
 }
