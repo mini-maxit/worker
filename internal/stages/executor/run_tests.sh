@@ -4,6 +4,11 @@ set -o pipefail
 shopt -s nullglob
 
 # sanity checks for required env vars
+if [[ -z "${RUN_CMD:-}" ]]; then
+  echo "ERROR: RUN_CMD must be set" >&2
+  exit 1
+fi
+
 if [[ -z "${INPUT_FILES:-}" ]]; then
   echo "ERROR: INPUT_FILES must be set" >&2
   exit 1
@@ -90,7 +95,7 @@ for idx in "${!inputs[@]}"; do
     start_ns=$(date +%s%N)
 
     timeout --preserve-status "${tsec}s" bash -c \
-      "ulimit -v ${mlimit_kb} && \"$1\" < \"${infile}\"" \
+      "ulimit -v ${mlimit_kb} && \"$RUN_CMD\"" < "${infile}" \
       > "${out}" 2> "${err}"
     code=$?
     if   (( code == 143 )); then

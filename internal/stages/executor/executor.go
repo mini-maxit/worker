@@ -63,7 +63,11 @@ func (d *executor) ExecuteCommand(
 	defer cancel()
 
 	// Build environment variables.
-	env := d.buildEnvironmentVariables(cfg)
+	env, err := d.buildEnvironmentVariables(cfg)
+	if err != nil {
+		d.logger.Errorf("Failed to build environment variables: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
 
 	// Docker image name.
 	dockerImage, err := cfg.LanguageType.GetDockerImage(cfg.LanguageVersion)
@@ -73,17 +77,11 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	containerCfg, err := d.buildContainerConfig(
+	containerCfg := d.buildContainerConfig(
 		cfg.DirConfig.PackageDirPath,
 		dockerImage,
-		cfg.DirConfig.UserExecFilePath,
-		cfg.LanguageType,
 		env,
 	)
-	if err != nil {
-		d.logger.Errorf("Failed to build container config: %s [MsgID: %s]", err, cfg.MessageID)
-		return err
-	}
 
 	// Host configuration.
 	hostCfg := d.buildHostConfig(cfg)
@@ -104,7 +102,7 @@ func (d *executor) ExecuteCommand(
 	return d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
 }
 
-func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
+func (d *executor) buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 	const minMemKB int64 = 128 * 1024 // 128 MB minimum per-test
 	timeEnv := make([]string, len(cfg.TestCases))
 	memEnv := make([]string, len(cfg.TestCases))
@@ -141,45 +139,42 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 			fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt))
 	}
 
+	// Build run command
+	bin := filepath.Base(cfg.DirConfig.UserExecFilePath) // e.g. "solution" or "solution.py"
+	runCmd, err := cfg.LanguageType.GetRunCommand(bin)
+	if err != nil {
+		d.logger.Errorf("Failed to get run command for language %s: %s", cfg.LanguageType, err)
+		return nil, err
+	}
+
 	return []string{
+		"RUN_CMD=" + runCmd,
 		"TIME_LIMITS=" + strings.Join(timeEnv, " "),
 		"MEM_LIMITS=" + strings.Join(memEnv, " "),
 		"INPUT_FILES=" + strings.Join(inputFilePaths, " "),
 		"USER_OUTPUT_FILES=" + strings.Join(userOutputFilePaths, " "),
 		"USER_ERROR_FILES=" + strings.Join(userErrorFilePaths, " "),
 		"USER_EXEC_RESULT_FILES=" + strings.Join(userExecResultFilePaths, " "),
-	}
+	}, nil
 }
 
 func (d *executor) buildContainerConfig(
 	userPackageDirPath string,
 	dockerImage string,
-	absoluteSolutionPath string,
-	langType languages.LanguageType,
 	env []string,
-) (*container.Config, error) {
+) *container.Config {
 	stopTimeout := int(2)
 	d.logger.Infof("Workspace directory in container: %s", userPackageDirPath)
-	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution" or "solution.py"
-
-	// Build the execution command using language-specific method
-	execCmd, err := langType.GetRunCommand(bin)
-	if err != nil {
-		d.logger.Errorf("Failed to get run command for language %s: %s", langType, err)
-		return nil, err
-	}
-
-	runCmd := constants.DockerTestScript + " " + execCmd
 
 	return &container.Config{
 		Image:       dockerImage,
-		Cmd:         []string{"bash", "-lc", runCmd},
+		Cmd:         []string{"bash", "-lc", constants.DockerTestScript},
 		WorkingDir:  userPackageDirPath,
 		Env:         env,
 		User:        "0:0",
 		StopTimeout: &stopTimeout,
 		StopSignal:  "SIGKILL",
-	}, nil
+	}
 }
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
