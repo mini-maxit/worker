@@ -95,7 +95,7 @@ for idx in "${!inputs[@]}"; do
     start_ns=$(date +%s%N)
 
     timeout --preserve-status "${tsec}s" bash -c \
-      "ulimit -v ${mlimit_kb} && \"$RUN_CMD\"" < "${infile}" \
+      "ulimit -v ${mlimit_kb} && $RUN_CMD" < "${infile}" \
       > "${out}" 2> "${err}"
     code=$?
     if   (( code == 143 )); then
