@@ -15,7 +15,6 @@ services:
     container_name: go_app
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - jobs-data:/tmp
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=guest
@@ -24,7 +23,6 @@ services:
       - FILESTORAGE_HOST=file-storage
       - FILESTORAGE_PORT=8888
       - DOCKER_HOST=unix:///var/run/docker.sock
-      - JOBS_DATA_VOLUME=worker_jobs-data
   file-storage:
     image: maxit/file-storage
     pull_policy: never
@@ -34,4 +32,3 @@ services:
 
 volumes:
   rabbitmq_data:
-  jobs-data:

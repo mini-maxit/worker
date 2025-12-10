@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 
 	"github.com/mini-maxit/worker/internal/docker"
 	"go.uber.org/zap"
@@ -96,7 +95,41 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	return d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
+	// Ensure container cleanup
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		if removeErr := d.docker.ContainerRemove(cleanupCtx, containerID); removeErr != nil {
+			d.logger.Errorf("Failed to remove container %s: %s [MsgID: %s]", containerID, removeErr, cfg.MessageID)
+		}
+	}()
+
+	// Copy the package directory to the container, preserving the full path structure
+	d.logger.Infof("Copying package to container %s [MsgID: %s]", containerID, cfg.MessageID)
+	// Copy /tmp/msgID to /tmp, resulting in /tmp/msgID/... in the container
+	if err := d.docker.CopyToContainer(ctx, containerID, cfg.DirConfig.PackageDirPath, cfg.DirConfig.TmpDirPath); err != nil {
+		d.logger.Errorf("Failed to copy package to container: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
+
+	// Wait for container execution
+	waitErr := d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
+
+	// Copy results back from container (even if execution failed, we want the output)
+	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
+	copyCtx, copyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer copyCancel()
+	// Copy /tmp/msgID from container to /tmp on host
+	if err := d.docker.CopyFromContainer(copyCtx, containerID, cfg.DirConfig.PackageDirPath, "/kurwa"); err != nil {
+		d.logger.Errorf("Failed to copy results from container: %s [MsgID: %s]", err, cfg.MessageID)
+		// If we also had a wait error, return that instead
+		if waitErr != nil {
+			return waitErr
+		}
+		return err
+	}
+
+	return waitErr
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
@@ -178,7 +211,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	}
 
 	return &container.HostConfig{
-		AutoRemove:  true,
+		AutoRemove:  false, // Changed to false to allow file copying after execution
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
@@ -186,11 +219,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},
-		Mounts: []mount.Mount{{
-			Type:   mount.TypeVolume,
-			Source: d.docker.DataVolumeName(),
-			Target: cfg.DirConfig.TmpDirPath,
-		}},
+		// Removed Mounts to eliminate shared volume security vulnerability
 		SecurityOpt:  []string{"no-new-privileges"},
 		CgroupnsMode: container.CgroupnsModePrivate,
 		IpcMode:      container.IpcMode("private"),

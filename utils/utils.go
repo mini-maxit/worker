@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"archive/tar"
 	"errors"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -110,4 +112,175 @@ func RemoveIO(dir string, recursive, ignoreError bool) error {
 		return nil
 	}
 	return err
+}
+
+// CreateTarArchive creates a tar archive from a directory
+func CreateTarArchive(srcPath string) (io.ReadCloser, error) {
+	pipeReader, pipeWriter := io.Pipe()
+
+	go func() {
+		tarWriter := tar.NewWriter(pipeWriter)
+		defer tarWriter.Close()
+		defer pipeWriter.Close()
+
+		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// Get relative path
+			relPath, err := filepath.Rel(srcPath, path)
+			if err != nil {
+				return err
+			}
+
+			// Skip the root directory itself
+			if relPath == "." {
+				return nil
+			}
+
+			// Create tar header
+			header, err := tar.FileInfoHeader(info, "")
+			if err != nil {
+				return err
+			}
+			header.Name = relPath
+
+			if err := tarWriter.WriteHeader(header); err != nil {
+				return err
+			}
+
+			// If it's a file, write its contents
+			if !info.IsDir() {
+				file, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+
+				if _, err := io.Copy(tarWriter, file); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			pipeWriter.CloseWithError(err)
+		}
+	}()
+
+	return pipeReader, nil
+}
+
+// CreateTarArchiveWithBase creates a tar archive from a directory, preserving the base directory name
+// For example, if srcPath is "/tmp/msgID", the archive will contain "msgID/file1", "msgID/dir/file2", etc.
+func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
+	pipeReader, pipeWriter := io.Pipe()
+
+	go func() {
+		tarWriter := tar.NewWriter(pipeWriter)
+		defer tarWriter.Close()
+		defer pipeWriter.Close()
+
+		baseName := filepath.Base(srcPath)
+		parentPath := filepath.Dir(srcPath)
+
+		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// Get relative path from parent directory
+			relPath, err := filepath.Rel(parentPath, path)
+			if err != nil {
+				return err
+			}
+
+			// Skip if it's the exact source path and it's not the base we want to preserve
+			if relPath == baseName && path == srcPath {
+				// Include the directory itself in the archive
+				header, err := tar.FileInfoHeader(info, "")
+				if err != nil {
+					return err
+				}
+				header.Name = baseName
+				return tarWriter.WriteHeader(header)
+			}
+
+			// Create tar header
+			header, err := tar.FileInfoHeader(info, "")
+			if err != nil {
+				return err
+			}
+			header.Name = relPath
+
+			if err := tarWriter.WriteHeader(header); err != nil {
+				return err
+			}
+
+			// If it's a file, write its contents
+			if !info.IsDir() {
+				file, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+
+				if _, err := io.Copy(tarWriter, file); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			pipeWriter.CloseWithError(err)
+		}
+	}()
+
+	return pipeReader, nil
+}
+
+// ExtractTarArchive extracts a tar archive to a directory
+func ExtractTarArchive(reader io.Reader, dstPath string) error {
+	tarReader := tar.NewReader(reader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(dstPath, header.Name)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			// Create parent directories if needed
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+
+			file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			if _, err := io.Copy(file, tarReader); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
