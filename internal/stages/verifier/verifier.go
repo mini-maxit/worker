@@ -192,7 +192,8 @@ func (v *verifier) readExecutionResultFiles(
 
 		var exitCode int
 		var execTime float64
-		_, err = fmt.Fscanf(file, "%d %f\n", &exitCode, &execTime)
+		var peakMem int64
+		_, err = fmt.Fscanf(file, "%d %f %d\n", &exitCode, &execTime, &peakMem)
 		if err != nil {
 			v.logger.Errorf("Failed to read line %d: %s", i, err)
 			file.Close()
@@ -201,6 +202,7 @@ func (v *verifier) readExecutionResultFiles(
 		results[i] = &executor.ExecutionResult{
 			ExitCode: exitCode,
 			ExecTime: execTime,
+			PeakMem:  peakMem,
 		}
 		if err := file.Close(); err != nil {
 			v.logger.Errorf("Failed to close execution result file %s: %s", filePath, err)
@@ -230,6 +232,7 @@ func (v *verifier) evaluateTestCase(
 			return solution.TestResult{
 				Passed:        false,
 				ExecutionTime: execResult.ExecTime,
+				PeakMem:       execResult.PeakMem,
 				StatusCode:    solution.TestCaseStatus(solution.InternalError),
 				ErrorMessage:  err.Error(),
 				Order:         testCaseIdx,
@@ -247,6 +250,7 @@ func (v *verifier) evaluateTestCase(
 		return solution.TestResult{
 			Passed:        passed,
 			ExecutionTime: execResult.ExecTime,
+			PeakMem:       execResult.PeakMem,
 			StatusCode:    statusCode,
 			ErrorMessage:  "",
 			Order:         testCaseIdx,
@@ -260,6 +264,7 @@ func (v *verifier) evaluateTestCase(
 		return solution.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
+			PeakMem:       execResult.PeakMem,
 			StatusCode:    solution.TimeLimitExceeded,
 			ErrorMessage:  message,
 			Order:         testCaseIdx,
@@ -273,6 +278,7 @@ func (v *verifier) evaluateTestCase(
 		return solution.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
+			PeakMem:       execResult.PeakMem,
 			StatusCode:    solution.MemoryLimitExceeded,
 			ErrorMessage:  message,
 			Order:         testCaseIdx,

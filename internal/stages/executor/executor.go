@@ -21,7 +21,6 @@ import (
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
-	"github.com/mini-maxit/worker/pkg/solution"
 )
 
 type CommandConfig struct {
@@ -35,6 +34,7 @@ type CommandConfig struct {
 type ExecutionResult struct {
 	ExitCode int
 	ExecTime float64
+	PeakMem  int64
 }
 
 type Executor interface {
@@ -100,16 +100,11 @@ func (d *executor) ExecuteCommand(
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
-	const minMemKB int64 = 128 * 1024 // 128 MB minimum per-test
 	timeEnv := make([]string, len(cfg.TestCases))
 	memEnv := make([]string, len(cfg.TestCases))
 	for i, tc := range cfg.TestCases {
 		timeEnv[i] = strconv.FormatInt(tc.TimeLimitMs, 10)
-		kb := tc.MemoryLimitKB
-		if kb < minMemKB {
-			kb = minMemKB
-		}
-		memEnv[i] = strconv.FormatInt(kb, 10)
+		memEnv[i] = strconv.FormatInt(tc.MemoryLimitKB, 10)
 	}
 
 	inputFilePaths := make([]string, len(cfg.TestCases))
@@ -137,8 +132,8 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
 	}
 
 	return []string{
-		"TIME_LIMITS=" + strings.Join(timeEnv, " "),
-		"MEM_LIMITS=" + strings.Join(memEnv, " "),
+		"TIME_LIMITS_MS=" + strings.Join(timeEnv, " "),
+		"MEM_LIMITS_KB=" + strings.Join(memEnv, " "),
 		"INPUT_FILES=" + strings.Join(inputFilePaths, " "),
 		"USER_OUTPUT_FILES=" + strings.Join(userOutputFilePaths, " "),
 		"USER_ERROR_FILES=" + strings.Join(userErrorFilePaths, " "),
@@ -169,20 +164,11 @@ func (d *executor) buildContainerConfig(
 }
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
-	memLimitsKb := make([]solution.Limit, len(cfg.TestCases))
-	for i, tc := range cfg.TestCases {
-		memLimitsKb[i] = solution.Limit{
-			TimeMs:   tc.TimeLimitMs,
-			MemoryKb: tc.MemoryLimitKB,
-		}
-	}
-
 	return &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
-			Memory:    solution.MaxMemoryKBWithMinimum(memLimitsKb) * 1024,
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},
