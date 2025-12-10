@@ -198,12 +198,16 @@ func (ws *worker) publishPayload(solutionResult solution.Result) {
 
 func (ws *worker) publishError(err error) {
 	ws.logger.Errorf("Error: %s", err)
-	ws.responder.PublishErrorToResponseQueue(
+	publishErr := ws.responder.PublishTaskErrorToResponseQueue(
 		constants.QueueMessageTypeTask,
 		ws.state.ProcessingMessageID,
 		ws.responseQueue,
 		err,
 	)
+
+	if publishErr != nil {
+		ws.logger.Errorf("Failed to publish error response: %s", publishErr)
+	}
 }
 
 func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {

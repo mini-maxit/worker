@@ -121,7 +121,7 @@ func TestProcessTask_PreparePackageFails(t *testing.T) {
 	mockResponder := mocks.NewMockResponder(ctrl)
 
 	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(nil, errors.New("download failed"))
-	mockResponder.EXPECT().PublishErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(3, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: "cpp"}
@@ -160,7 +160,7 @@ func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
 
 	// Simulate upload failure
 	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false).Return(errors.New("upload failed"))
-	mockResponder.EXPECT().PublishErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(4, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: "cpp"}
@@ -198,7 +198,7 @@ func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
 		},
 	)
 
-	mockResponder.EXPECT().PublishErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(5, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: "cpp"}
