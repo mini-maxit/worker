@@ -262,52 +262,64 @@ func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) 
 func ExtractTarArchive(reader io.Reader, dstPath string) error {
 	tarReader := tar.NewReader(reader)
 
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		target := filepath.Join(dstPath, header.Name)
-
-		// Prevent path traversal attacks: ensure target is within dstPath
-		absDstPath, err := filepath.Abs(dstPath)
-		if err != nil {
-			return err
-		}
-		absTarget, err := filepath.Abs(target)
-		if err != nil {
-			return err
-		}
-		if !strings.HasPrefix(absTarget, absDstPath+string(os.PathSeparator)) && absTarget != absDstPath {
-			return errors.New("tar archive entry would escape destination directory: " + header.Name)
-		}
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			// Create parent directories if needed
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
-			}
-
-			file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
-			if err != nil {
-				return err
-			}
-
-			if _, err := io.Copy(file, tarReader); err != nil {
-				CloseFile(file)
-				return err
-			}
-			CloseFile(file)
-		}
+	absDstPath, err := filepath.Abs(dstPath)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	for {
+		header, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		target, err := safeArchiveTarget(absDstPath, header.Name)
+		if err != nil {
+			return err
+		}
+
+		if err := materializeTarEntry(tarReader, header, target); err != nil {
+			return err
+		}
+	}
+}
+
+func safeArchiveTarget(absDstPath, entryName string) (string, error) {
+	target := filepath.Join(absDstPath, entryName)
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(absTarget, absDstPath+string(os.PathSeparator)) && absTarget != absDstPath {
+		return "", errors.New("tar archive entry would escape destination directory: " + entryName)
+	}
+	return target, nil
+}
+
+func materializeTarEntry(tarReader *tar.Reader, header *tar.Header, target string) error {
+	switch header.Typeflag {
+	case tar.TypeDir:
+		return os.MkdirAll(target, os.FileMode(header.Mode))
+	case tar.TypeReg:
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+
+		file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+		if err != nil {
+			return err
+		}
+
+		if _, err := io.Copy(file, tarReader); err != nil {
+			CloseFile(file)
+			return err
+		}
+		CloseFile(file)
+		return nil
+	default:
+		return nil
+	}
 }
