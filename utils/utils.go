@@ -273,6 +273,18 @@ func ExtractTarArchive(reader io.Reader, dstPath string) error {
 
 		target := filepath.Join(dstPath, header.Name)
 
+		// Prevent path traversal attacks: ensure target is within dstPath
+		absDstPath, err := filepath.Abs(dstPath)
+		if err != nil {
+			return err
+		}
+		absTarget, err := filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(absTarget, absDstPath+string(os.PathSeparator)) && absTarget != absDstPath {
+			return errors.New("tar archive entry would escape destination directory: " + header.Name)
+		}
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
