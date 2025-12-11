@@ -27,6 +27,7 @@ type DockerClient interface {
 	) (<-chan container.WaitResponse, <-chan error)
 	ContainerKill(ctx context.Context, containerID, signal string) error
 	CopyToContainer(ctx context.Context, containerID, srcPath, dstPath string) error
+	CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error
 	CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error
 	ContainerRemove(ctx context.Context, containerID string) error
 }
@@ -103,8 +104,12 @@ func (d *dockerClient) ContainerKill(ctx context.Context, containerID, signal st
 }
 
 func (d *dockerClient) CopyToContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
+	return d.CopyToContainerFiltered(ctx, containerID, srcPath, dstPath, nil)
+}
+
+func (d *dockerClient) CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error {
 	// Create a tar archive from the source directory, preserving the base directory name
-	tar, err := utils.CreateTarArchiveWithBase(srcPath)
+	tar, err := utils.CreateTarArchiveWithBaseFiltered(srcPath, excludeTop)
 	if err != nil {
 		return err
 	}

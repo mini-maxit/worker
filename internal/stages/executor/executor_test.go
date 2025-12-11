@@ -50,20 +50,14 @@ func TestExecuteCommand_Success(t *testing.T) {
 	var errCh <-chan error = nil
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateAndStartContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid123", nil).Times(1),
-		mockDocker.EXPECT().CopyToContainer(
-			gomock.Any(), "cid123", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid123", container.WaitConditionNotRunning,
 		).Return(statusCh, errCh).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid123", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid123").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker)
@@ -92,20 +86,14 @@ func TestExecuteCommand_ContainerNonZeroExit(t *testing.T) {
 	var errCh <-chan error = nil
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateAndStartContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid-nonzero", nil).Times(1),
-		mockDocker.EXPECT().CopyToContainer(
-			gomock.Any(), "cid-nonzero", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid-nonzero", container.WaitConditionNotRunning,
 		).Return(statusCh, errCh).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid-nonzero", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-nonzero").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker)
@@ -134,6 +122,7 @@ func TestExecuteCommand_EnsureImageFails(t *testing.T) {
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(errors.New("ensure-failed")).Times(1),
 	)
 
@@ -159,6 +148,7 @@ func TestExecuteCommand_CreateContainerFails(t *testing.T) {
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateAndStartContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -216,20 +206,14 @@ func TestWaitForContainer_ErrFromErrCh(t *testing.T) {
 	errCh <- errors.New("wait-err")
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateAndStartContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid", nil).Times(1),
-		mockDocker.EXPECT().CopyToContainer(
-			gomock.Any(), "cid", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid", container.WaitConditionNotRunning,
 		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 5)
@@ -261,21 +245,15 @@ func TestWaitForContainer_TimeoutCallsKill(t *testing.T) {
 	errCh := make(chan error)
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateAndStartContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid-timeout", nil).Times(1),
-		mockDocker.EXPECT().CopyToContainer(
-			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid-timeout", container.WaitConditionNotRunning,
 		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
 		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Return(nil).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 1)
@@ -312,21 +290,15 @@ func TestWaitForContainer_TimeoutKillFails(t *testing.T) {
 	errCh := make(chan error)
 
 	gomock.InOrder(
+		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateAndStartContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid-timeout", nil).Times(1),
-		mockDocker.EXPECT().CopyToContainer(
-			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid-timeout", container.WaitConditionNotRunning,
 		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
 		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Return(errors.New("kill-failed")).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 1)

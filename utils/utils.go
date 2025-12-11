@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -174,9 +175,15 @@ func CreateTarArchive(srcPath string) (io.ReadCloser, error) {
 	return pipeReader, nil
 }
 
-// CreateTarArchiveWithBase creates a tar archive from a directory, preserving the base directory name
+// CreateTarArchiveWithBase creates a tar archive from a directory, preserving the base directory name.
 // For example, if srcPath is "/tmp/msgID", the archive will contain "msgID/file1", "msgID/dir/file2", etc.
 func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
+	return CreateTarArchiveWithBaseFiltered(srcPath, nil)
+}
+
+// CreateTarArchiveWithBaseFiltered works like CreateTarArchiveWithBase but skips any top-level entries
+// whose names are present in excludeTopLevel (e.g. []string{"output"}).
+func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) (io.ReadCloser, error) {
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
@@ -184,7 +191,11 @@ func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
 		defer tarWriter.Close()
 		defer pipeWriter.Close()
 
-		baseName := filepath.Base(srcPath)
+		excludeSet := make(map[string]struct{}, len(excludeTopLevel))
+		for _, e := range excludeTopLevel {
+			excludeSet[e] = struct{}{}
+		}
+
 		parentPath := filepath.Dir(srcPath)
 
 		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
@@ -192,21 +203,28 @@ func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
 				return err
 			}
 
-			// Get relative path from parent directory
-			relPath, err := filepath.Rel(parentPath, path)
+			// Path relative to the parent keeps the base directory in the archive.
+			relPathWithBase, err := filepath.Rel(parentPath, path)
 			if err != nil {
 				return err
 			}
 
-			// Skip if it's the exact source path and it's not the base we want to preserve
-			if relPath == baseName && path == srcPath {
-				// Include the directory itself in the archive
-				header, err := tar.FileInfoHeader(info, "")
-				if err != nil {
-					return err
+			// Path relative to srcPath is used for top-level filtering (children of srcPath).
+			relPath, err := filepath.Rel(srcPath, path)
+			if err != nil {
+				return err
+			}
+
+			if relPath != "." { // skip the srcPath root itself when checking excludes
+				parts := strings.Split(relPath, string(os.PathSeparator))
+				if len(parts) > 0 {
+					if _, found := excludeSet[parts[0]]; found {
+						if info.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+					}
 				}
-				header.Name = baseName
-				return tarWriter.WriteHeader(header)
 			}
 
 			// Create tar header
@@ -214,7 +232,7 @@ func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
 			if err != nil {
 				return err
 			}
-			header.Name = relPath
+			header.Name = relPathWithBase
 
 			if err := tarWriter.WriteHeader(header); err != nil {
 				return err

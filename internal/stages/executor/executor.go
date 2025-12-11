@@ -106,8 +106,8 @@ func (d *executor) ExecuteCommand(
 
 	// Copy the package directory to the container, preserving the full path structure
 	d.logger.Infof("Copying package to container %s [MsgID: %s]", containerID, cfg.MessageID)
-	// Copy /tmp/msgID to /tmp, resulting in /tmp/msgID/... in the container
-	if err := d.docker.CopyToContainer(ctx, containerID, cfg.DirConfig.PackageDirPath, cfg.DirConfig.TmpDirPath); err != nil {
+	excludes := []string{constants.OutputDirName}
+	if err := d.docker.CopyToContainerFiltered(ctx, containerID, cfg.DirConfig.PackageDirPath, cfg.DirConfig.TmpDirPath, excludes); err != nil {
 		d.logger.Errorf("Failed to copy package to container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
@@ -119,8 +119,7 @@ func (d *executor) ExecuteCommand(
 	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
 	copyCtx, copyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer copyCancel()
-	// Copy /tmp/msgID from container to /tmp on host
-	if err := d.docker.CopyFromContainer(copyCtx, containerID, cfg.DirConfig.PackageDirPath, "/kurwa"); err != nil {
+	if err := d.docker.CopyFromContainer(copyCtx, containerID, cfg.DirConfig.PackageDirPath, "/AAAKURWA"); err != nil {
 		d.logger.Errorf("Failed to copy results from container: %s [MsgID: %s]", err, cfg.MessageID)
 		// If we also had a wait error, return that instead
 		if waitErr != nil {

@@ -1,12 +1,14 @@
 package packager_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/tests/mocks"
 	gomock "go.uber.org/mock/gomock"
@@ -60,6 +62,27 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 		t.Fatalf("expected compile.err to exist: %v", err)
 	} else if fi.Size() != 0 {
 		t.Fatalf("expected compile.err to be empty, size=%d", fi.Size())
+	}
+
+	// user result files should be created using task-provided names
+	userOutPath := filepath.Join(cfg.UserOutputDirPath, filepath.Base(tc.StdOutResult.Path))
+	if _, err := os.Stat(userOutPath); err != nil {
+		t.Fatalf("expected user stdout file to exist: %v", err)
+	}
+
+	userErrPath := filepath.Join(cfg.UserErrorDirPath, filepath.Base(tc.StdErrResult.Path))
+	if _, err := os.Stat(userErrPath); err != nil {
+		t.Fatalf("expected user stderr file to exist: %v", err)
+	}
+
+	userDiffPath := filepath.Join(cfg.UserDiffDirPath, filepath.Base(tc.DiffResult.Path))
+	if _, err := os.Stat(userDiffPath); err != nil {
+		t.Fatalf("expected user diff file to exist: %v", err)
+	}
+
+	userResPath := filepath.Join(cfg.UserExecResultDirPath, fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt))
+	if _, err := os.Stat(userResPath); err != nil {
+		t.Fatalf("expected user exec result file to exist: %v", err)
 	}
 
 	// cleanup created temp directory under /tmp
