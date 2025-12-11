@@ -6,7 +6,7 @@
         "language_version": "17",
         "submission_file": {
             "bucket": "task1",
-            "path": "Task/jumps.cpp"
+            "path": "Task/prog.cpp"
         },
         "test_cases": [
             {
