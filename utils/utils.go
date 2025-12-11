@@ -288,11 +288,12 @@ func ExtractTarArchive(reader io.Reader, dstPath string) error {
 			if err != nil {
 				return err
 			}
-			defer file.Close()
 
 			if _, err := io.Copy(file, tarReader); err != nil {
+				CloseFile(file)
 				return err
 			}
+			CloseFile(file)
 		}
 	}
 
