@@ -10,6 +10,17 @@ jobs:
   test:
     name: Run tests and collect coverage
     runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:dind
+        options: >-
+          --privileged
+          --health-cmd="docker ps"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,10 +35,22 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Run tests
-        run: go test -coverprofile=coverage.txt ./...
+      - name: Run unit tests with coverage
+        run: go test -coverprofile=coverage-unit.txt -covermode=atomic ./...
+
+      - name: Run integration tests with coverage
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: go test -tags=integration -coverprofile=coverage-integration.txt -covermode=atomic ./...
+
+      - name: Merge coverage reports
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+          gocovmerge coverage-unit.txt coverage-integration.txt > coverage.txt
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.txt
+          fail_ci_if_error: true
