@@ -19,6 +19,10 @@ type Responder interface {
 		messageType, messageID, responseQueue string,
 		err error,
 	)
+	PublishTaskErrorToResponseQueue(
+		messageType, messageID, responseQueue string,
+		err error,
+	) error
 	PublishSuccessHandshakeRespond(
 		messageType, messageID, responseQueue string,
 		languageSpecs []languages.LanguageSpec,
@@ -104,6 +108,21 @@ func (r *responder) Close() error {
 	r.closed = true
 	close(r.publishChan)
 	return nil
+}
+
+func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, responseQueue string, err error) error {
+	internalErrorTaskResult := solution.Result{
+		StatusCode:  solution.InternalError,
+		Message:     err.Error(),
+		TestResults: []solution.TestResult{},
+	}
+
+	payload, err := json.Marshal(internalErrorTaskResult)
+	if err != nil {
+		return err
+	}
+
+	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
 }
 
 func (r *responder) PublishErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
