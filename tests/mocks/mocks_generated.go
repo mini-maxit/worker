@@ -692,20 +692,6 @@ func (m *MockDockerClient) EXPECT() *MockDockerClientMockRecorder {
 	return m.recorder
 }
 
-// CheckDataVolume mocks base method.
-func (m *MockDockerClient) CheckDataVolume(volumeName string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckDataVolume", volumeName)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CheckDataVolume indicates an expected call of CheckDataVolume.
-func (mr *MockDockerClientMockRecorder) CheckDataVolume(volumeName any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckDataVolume", reflect.TypeOf((*MockDockerClient)(nil).CheckDataVolume), volumeName)
-}
-
 // ContainerKill mocks base method.
 func (m *MockDockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
 	m.ctrl.T.Helper()
@@ -718,6 +704,20 @@ func (m *MockDockerClient) ContainerKill(ctx context.Context, containerID, signa
 func (mr *MockDockerClientMockRecorder) ContainerKill(ctx, containerID, signal any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerKill", reflect.TypeOf((*MockDockerClient)(nil).ContainerKill), ctx, containerID, signal)
+}
+
+// ContainerRemove mocks base method.
+func (m *MockDockerClient) ContainerRemove(ctx context.Context, containerID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ContainerRemove", ctx, containerID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ContainerRemove indicates an expected call of ContainerRemove.
+func (mr *MockDockerClientMockRecorder) ContainerRemove(ctx, containerID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerRemove", reflect.TypeOf((*MockDockerClient)(nil).ContainerRemove), ctx, containerID)
 }
 
 // ContainerWait mocks base method.
@@ -735,33 +735,75 @@ func (mr *MockDockerClientMockRecorder) ContainerWait(ctx, containerID, conditio
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerWait", reflect.TypeOf((*MockDockerClient)(nil).ContainerWait), ctx, containerID, condition)
 }
 
-// CreateAndStartContainer mocks base method.
-func (m *MockDockerClient) CreateAndStartContainer(ctx context.Context, containerCfg *container.Config, hostCfg *container.HostConfig, name string) (string, error) {
+// CopyFromContainer mocks base method.
+func (m *MockDockerClient) CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateAndStartContainer", ctx, containerCfg, hostCfg, name)
+	ret := m.ctrl.Call(m, "CopyFromContainer", ctx, containerID, srcPath, dstPath)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CopyFromContainer indicates an expected call of CopyFromContainer.
+func (mr *MockDockerClientMockRecorder) CopyFromContainer(ctx, containerID, srcPath, dstPath any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyFromContainer", reflect.TypeOf((*MockDockerClient)(nil).CopyFromContainer), ctx, containerID, srcPath, dstPath)
+}
+
+// CopyToContainer mocks base method.
+func (m *MockDockerClient) CopyToContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CopyToContainer", ctx, containerID, srcPath, dstPath)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CopyToContainer indicates an expected call of CopyToContainer.
+func (mr *MockDockerClientMockRecorder) CopyToContainer(ctx, containerID, srcPath, dstPath any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToContainer", reflect.TypeOf((*MockDockerClient)(nil).CopyToContainer), ctx, containerID, srcPath, dstPath)
+}
+
+// CopyToContainerFiltered mocks base method.
+func (m *MockDockerClient) CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CopyToContainerFiltered", ctx, containerID, srcPath, dstPath, excludeTop)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CopyToContainerFiltered indicates an expected call of CopyToContainerFiltered.
+func (mr *MockDockerClientMockRecorder) CopyToContainerFiltered(ctx, containerID, srcPath, dstPath, excludeTop any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToContainerFiltered", reflect.TypeOf((*MockDockerClient)(nil).CopyToContainerFiltered), ctx, containerID, srcPath, dstPath, excludeTop)
+}
+
+// CreateContainer mocks base method.
+func (m *MockDockerClient) CreateContainer(ctx context.Context, containerCfg *container.Config, hostCfg *container.HostConfig, name string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateContainer", ctx, containerCfg, hostCfg, name)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateAndStartContainer indicates an expected call of CreateAndStartContainer.
-func (mr *MockDockerClientMockRecorder) CreateAndStartContainer(ctx, containerCfg, hostCfg, name any) *gomock.Call {
+// CreateContainer indicates an expected call of CreateContainer.
+func (mr *MockDockerClientMockRecorder) CreateContainer(ctx, containerCfg, hostCfg, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAndStartContainer", reflect.TypeOf((*MockDockerClient)(nil).CreateAndStartContainer), ctx, containerCfg, hostCfg, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateContainer", reflect.TypeOf((*MockDockerClient)(nil).CreateContainer), ctx, containerCfg, hostCfg, name)
 }
 
-// DataVolumeName mocks base method.
-func (m *MockDockerClient) DataVolumeName() string {
+// StartContainer mocks base method.
+func (m *MockDockerClient) StartContainer(ctx context.Context, containerID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DataVolumeName")
-	ret0, _ := ret[0].(string)
+	ret := m.ctrl.Call(m, "StartContainer", ctx, containerID)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DataVolumeName indicates an expected call of DataVolumeName.
-func (mr *MockDockerClientMockRecorder) DataVolumeName() *gomock.Call {
+// StartContainer indicates an expected call of StartContainer.
+func (mr *MockDockerClientMockRecorder) StartContainer(ctx, containerID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DataVolumeName", reflect.TypeOf((*MockDockerClient)(nil).DataVolumeName))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartContainer", reflect.TypeOf((*MockDockerClient)(nil).StartContainer), ctx, containerID)
 }
 
 // EnsureImage mocks base method.

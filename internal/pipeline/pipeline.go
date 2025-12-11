@@ -158,6 +158,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		LanguageVersion: task.LanguageVersion,
 		TestCases:       task.TestCases,
 	}
+
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
 		ws.publishError(err)

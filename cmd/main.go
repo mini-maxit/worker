@@ -27,7 +27,7 @@ func main() {
 	conn := rabbitmq.NewRabbitMqConnection(config)
 
 	// Create docker client
-	dCli, err := docker.NewDockerClient(config.JobsDataVolume)
+	dCli, err := docker.NewDockerClient()
 	if err != nil {
 		logger.Fatalf("Failed to create Docker client: %s", err.Error())
 	}

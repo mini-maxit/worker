@@ -8,20 +8,18 @@ import (
 	image "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 
-	"github.com/mini-maxit/worker/pkg/constants"
-	"github.com/mini-maxit/worker/pkg/errors"
+	"github.com/mini-maxit/worker/utils"
 )
 
 type DockerClient interface {
-	DataVolumeName() string
-	CheckDataVolume(volumeName string) error
 	EnsureImage(ctx context.Context, imageName string) error
-	CreateAndStartContainer(
+	CreateContainer(
 		ctx context.Context,
 		containerCfg *container.Config,
 		hostCfg *container.HostConfig,
 		name string,
 	) (string, error)
+	StartContainer(ctx context.Context, containerID string) error
 	WaitContainer(ctx context.Context, containerID string) (int64, error)
 	ContainerWait(
 		ctx context.Context,
@@ -29,47 +27,23 @@ type DockerClient interface {
 		condition container.WaitCondition,
 	) (<-chan container.WaitResponse, <-chan error)
 	ContainerKill(ctx context.Context, containerID, signal string) error
+	CopyToContainer(ctx context.Context, containerID, srcPath, dstPath string) error
+	CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error
+	CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error
+	ContainerRemove(ctx context.Context, containerID string) error
 }
 
 type dockerClient struct {
-	cli        *client.Client
-	volumeName string
+	cli *client.Client
 }
 
-func NewDockerClient(volumeName string) (DockerClient, error) {
+func NewDockerClient() (DockerClient, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
 
-	dc := &dockerClient{cli: cli, volumeName: volumeName}
-	if volumeName != "" {
-		if err := dc.CheckDataVolume(volumeName); err != nil {
-			return nil, err
-		}
-	}
-
-	return dc, nil
-}
-
-func (d *dockerClient) DataVolumeName() string { return d.volumeName }
-
-func (d *dockerClient) CheckDataVolume(volumeName string) error {
-	ctx := context.Background()
-	containers, err := d.cli.ContainerList(ctx, container.ListOptions{All: true})
-	if err != nil {
-		return err
-	}
-
-	for _, c := range containers {
-		for _, m := range c.Mounts {
-			if m.Name == volumeName && m.Destination == constants.TmpDirPath {
-				return nil
-			}
-		}
-	}
-
-	return errors.ErrVolumeNotMounted
+	return &dockerClient{cli: cli}, nil
 }
 
 func (d *dockerClient) EnsureImage(ctx context.Context, imageName string) error {
@@ -90,7 +64,7 @@ func (d *dockerClient) EnsureImage(ctx context.Context, imageName string) error 
 	return err
 }
 
-func (d *dockerClient) CreateAndStartContainer(
+func (d *dockerClient) CreateContainer(
 	ctx context.Context,
 	containerCfg *container.Config,
 	hostCfg *container.HostConfig,
@@ -100,10 +74,11 @@ func (d *dockerClient) CreateAndStartContainer(
 	if err != nil {
 		return "", err
 	}
-	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return "", err
-	}
 	return resp.ID, nil
+}
+
+func (d *dockerClient) StartContainer(ctx context.Context, containerID string) error {
+	return d.cli.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
 func (d *dockerClient) WaitContainer(ctx context.Context, containerID string) (int64, error) {
@@ -128,4 +103,40 @@ func (d *dockerClient) ContainerWait(
 
 func (d *dockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
 	return d.cli.ContainerKill(ctx, containerID, signal)
+}
+
+func (d *dockerClient) CopyToContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
+	return d.CopyToContainerFiltered(ctx, containerID, srcPath, dstPath, nil)
+}
+
+func (d *dockerClient) CopyToContainerFiltered(
+	ctx context.Context,
+	containerID, srcPath, dstPath string,
+	excludeTop []string,
+) error {
+	// Create a tar archive from the source directory, preserving the base directory name.
+	tar, err := utils.CreateTarArchiveWithBaseFiltered(srcPath, excludeTop)
+	if err != nil {
+		return err
+	}
+	defer tar.Close()
+
+	// Copy to container
+	return d.cli.CopyToContainer(ctx, containerID, dstPath, tar, container.CopyToContainerOptions{})
+}
+
+func (d *dockerClient) CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
+	// Get tar archive from container
+	reader, _, err := d.cli.CopyFromContainer(ctx, containerID, srcPath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// Extract tar archive to destination
+	return utils.ExtractTarArchive(reader, dstPath)
+}
+
+func (d *dockerClient) ContainerRemove(ctx context.Context, containerID string) error {
+	return d.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }

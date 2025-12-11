@@ -18,7 +18,6 @@ type Config struct {
 	StorageBaseUrl   string
 	ConsumeQueueName string
 	MaxWorkers       int
-	JobsDataVolume   string
 	VerifierFlags    []string
 }
 
@@ -43,7 +42,6 @@ func NewConfig() *Config {
 	rabbitmqURL, publishChanSize := rabbitmqConfig()
 	storageBaseUrl := storageConfig()
 	workerQueueName, maxWorkers := workerConfig()
-	jobsDataVolume := dockerConfig()
 	verifierFlagsStr := verifierConfig()
 
 	return &Config{
@@ -52,7 +50,6 @@ func NewConfig() *Config {
 		StorageBaseUrl:   storageBaseUrl,
 		ConsumeQueueName: workerQueueName,
 		MaxWorkers:       maxWorkers,
-		JobsDataVolume:   jobsDataVolume,
 		VerifierFlags:    verifierFlagsStr,
 	}
 }
@@ -147,18 +144,6 @@ func workerConfig() (string, int) {
 	}
 
 	return workerQueueName, maxWorkers
-}
-
-func dockerConfig() string {
-	logger := logger.NewNamedLogger("config")
-
-	jobsDataVolume := os.Getenv("JOBS_DATA_VOLUME")
-	if jobsDataVolume == "" {
-		jobsDataVolume = constants.DefaultJobsDataVolume
-		logger.Warnf("JOBS_DATA_VOLUME is not set, using default value %s", constants.DefaultJobsDataVolume)
-	}
-
-	return jobsDataVolume
 }
 
 func verifierConfig() []string {

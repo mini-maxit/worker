@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 
 	"github.com/mini-maxit/worker/internal/docker"
 	"go.uber.org/zap"
@@ -62,10 +61,8 @@ func (d *executor) ExecuteCommand(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(d.maxRunTimeSec)*time.Second)
 	defer cancel()
 
-	// Build environment variables.
 	env := d.buildEnvironmentVariables(cfg)
 
-	// Docker image name.
 	dockerImage, err := cfg.LanguageType.GetDockerImage(cfg.LanguageVersion)
 	if err != nil {
 		d.logger.Errorf("Failed to get Docker image for language %s version %s: %s [MsgID: %s]",
@@ -80,23 +77,68 @@ func (d *executor) ExecuteCommand(
 		env,
 	)
 
-	// Host configuration.
 	hostCfg := d.buildHostConfig(cfg)
 
-	// Prepare the Docker image.
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
 		d.logger.Errorf("Failed to prepare image %s: %s [MsgID: %s]", dockerImage, err, cfg.MessageID)
 		return err
 	}
 
-	// Create and start the container.
-	containerID, err := d.docker.CreateAndStartContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
+	containerID, err := d.docker.CreateContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
 	if err != nil {
-		d.logger.Errorf("Failed to create/start container: %s [MsgID: %s]", err, cfg.MessageID)
+		d.logger.Errorf("Failed to create container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
-	return d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
+	// Ensure container cleanup
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cleanupCancel()
+		if removeErr := d.docker.ContainerRemove(cleanupCtx, containerID); removeErr != nil {
+			d.logger.Errorf("Failed to remove container %s: %s [MsgID: %s]", containerID, removeErr, cfg.MessageID)
+		}
+	}()
+
+	d.logger.Infof("Copying package to container %s [MsgID: %s]", containerID, cfg.MessageID)
+	excludes := []string{constants.OutputDirName}
+	err = d.docker.CopyToContainerFiltered(
+		ctx,
+		containerID,
+		cfg.DirConfig.PackageDirPath,
+		cfg.DirConfig.TmpDirPath,
+		excludes,
+	)
+	if err != nil {
+		d.logger.Errorf("Failed to copy package to container: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
+
+	if err := d.docker.StartContainer(ctx, containerID); err != nil {
+		d.logger.Errorf("Failed to start container: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
+
+	waitErr := d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
+	if waitErr != nil {
+		d.logger.Errorf("Error while waiting for container: %s [MsgID: %s]", waitErr, cfg.MessageID)
+		return waitErr
+	}
+
+	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
+	copyCtx, copyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer copyCancel()
+	err = d.docker.CopyFromContainer(
+		copyCtx,
+		containerID,
+		cfg.DirConfig.PackageDirPath,
+		cfg.DirConfig.TmpDirPath,
+	)
+	if err != nil {
+		d.logger.Errorf("Failed to copy results from container: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
+
+	return nil
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
@@ -165,18 +207,13 @@ func (d *executor) buildContainerConfig(
 
 func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	return &container.HostConfig{
-		AutoRemove:  true,
+		AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),
 			CPUPeriod: 100_000,
 			CPUQuota:  100_000,
 		},
-		Mounts: []mount.Mount{{
-			Type:   mount.TypeVolume,
-			Source: d.docker.DataVolumeName(),
-			Target: cfg.DirConfig.TmpDirPath,
-		}},
 		SecurityOpt:  []string{"no-new-privileges"},
 		CgroupnsMode: container.CgroupnsModePrivate,
 		IpcMode:      container.IpcMode("private"),

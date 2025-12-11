@@ -2,6 +2,7 @@ package packager
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -173,14 +174,29 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		}
 	}
 
-	prefix := strings.TrimSuffix(filepath.Base(tc.InputFile.Path), filepath.Ext(tc.InputFile.Path))
+	userOutName := filepath.Base(tc.StdOutResult.Path)
+	if userOutName == "" || userOutName == "." {
+		return fmt.Errorf("stdout_result path is empty for test case %d", idx)
+	}
 
-	userOut := filepath.Join(basePath, constants.UserOutputDirName, prefix+".out")
-	userErr := filepath.Join(basePath, constants.UserErrorDirName, prefix+".err")
-	userDiff := filepath.Join(basePath, constants.UserDiffDirName, prefix+".diff")
-	userRes := filepath.Join(basePath, constants.UserExecResultDirName, prefix+".res")
+	userErrName := filepath.Base(tc.StdErrResult.Path)
+	if userErrName == "" || userErrName == "." {
+		return fmt.Errorf("stderr_result path is empty for test case %d", idx)
+	}
 
-	for _, f := range []string{userOut, userErr, userDiff, userRes} {
+	userDiffName := filepath.Base(tc.DiffResult.Path)
+	if userDiffName == "" || userDiffName == "." {
+		return fmt.Errorf("diff_result path is empty for test case %d", idx)
+	}
+
+	userResName := fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt)
+
+	for _, f := range []string{
+		filepath.Join(basePath, constants.UserOutputDirName, userOutName),
+		filepath.Join(basePath, constants.UserErrorDirName, userErrName),
+		filepath.Join(basePath, constants.UserDiffDirName, userDiffName),
+		filepath.Join(basePath, constants.UserExecResultDirName, userResName),
+	} {
 		fi, err := os.OpenFile(f, os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
 			p.logger.Errorf("Failed to create user file %s: %s", f, err)

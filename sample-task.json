@@ -14,17 +14,17 @@
                 "input_file": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/inputs/1.in"
+                    "path": "Task/inputs/1.txt"
                 },
                 "expected_output": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/outputs/1.out"
+                    "path": "Task/outputs/1.txt"
                 },
                 "stdout_result": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/stdout/1.out"
+                    "path": "Task/stdout/1.txt"
                 },
                 "stderr_result": {
                     "server_type": "file_storage",
@@ -44,17 +44,17 @@
                 "input_file": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/inputs/2.in"
+                    "path": "Task/inputs/2.txt"
                 },
                 "expected_output": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/outputs/2.out"
+                    "path": "Task/outputs/2.txt"
                 },
                 "stdout_result": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/stdout/2.out"
+                    "path": "Task/stdout/2.txt"
                 },
                 "stderr_result": {
                     "server_type": "file_storage",
@@ -74,17 +74,17 @@
                 "input_file": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/inputs/3.in"
+                    "path": "Task/inputs/3.txt"
                 },
                 "expected_output": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/outputs/3.out"
+                    "path": "Task/outputs/3.txt"
                 },
                 "stdout_result": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/stdout/3.out"
+                    "path": "Task/stdout/3.txt"
                 },
                 "stderr_result": {
                     "server_type": "file_storage",
@@ -104,17 +104,17 @@
                 "input_file": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/inputs/4.in"
+                    "path": "Task/inputs/4.txt"
                 },
                 "expected_output": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/outputs/4.out"
+                    "path": "Task/outputs/4.txt"
                 },
                 "stdout_result": {
                     "server_type": "file_storage",
                     "bucket": "task1",
-                    "path": "Task/stdout/4.out"
+                    "path": "Task/stdout/4.txt"
                 },
                 "stderr_result": {
                     "server_type": "file_storage",

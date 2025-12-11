@@ -78,19 +78,6 @@ func TestWorkerConfig_DefaultsAndCustom(t *testing.T) {
 	}
 }
 
-func TestDockerConfig_DefaultsAndCustom(t *testing.T) {
-	v := NewConfig().JobsDataVolume
-	if v != constants.DefaultJobsDataVolume {
-		t.Fatalf("expected default jobs data volume %q, got %q", constants.DefaultJobsDataVolume, v)
-	}
-
-	t.Setenv("JOBS_DATA_VOLUME", "my-vol")
-	v2 := NewConfig().JobsDataVolume
-	if v2 != "my-vol" {
-		t.Fatalf("expected jobs data volume %q, got %q", "my-vol", v2)
-	}
-}
-
 func TestVerifierConfig_DefaultsAndCustom(t *testing.T) {
 	flags := NewConfig().VerifierFlags
 	if len(flags) != 1 || flags[0] != constants.DefaultVerifierFlags {
