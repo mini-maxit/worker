@@ -16,7 +16,7 @@ import (
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 
-	// "github.com/mini-maxit/worker/utils"
+	// "github.com/mini-maxit/worker/utils".
 	"go.uber.org/zap"
 )
 
@@ -158,6 +158,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		LanguageVersion: task.LanguageVersion,
 		TestCases:       task.TestCases,
 	}
+
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
 		ws.publishError(err)

@@ -13,12 +13,13 @@ import (
 
 type DockerClient interface {
 	EnsureImage(ctx context.Context, imageName string) error
-	CreateAndStartContainer(
+	CreateContainer(
 		ctx context.Context,
 		containerCfg *container.Config,
 		hostCfg *container.HostConfig,
 		name string,
 	) (string, error)
+	StartContainer(ctx context.Context, containerID string) error
 	WaitContainer(ctx context.Context, containerID string) (int64, error)
 	ContainerWait(
 		ctx context.Context,
@@ -63,7 +64,7 @@ func (d *dockerClient) EnsureImage(ctx context.Context, imageName string) error 
 	return err
 }
 
-func (d *dockerClient) CreateAndStartContainer(
+func (d *dockerClient) CreateContainer(
 	ctx context.Context,
 	containerCfg *container.Config,
 	hostCfg *container.HostConfig,
@@ -73,10 +74,11 @@ func (d *dockerClient) CreateAndStartContainer(
 	if err != nil {
 		return "", err
 	}
-	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return "", err
-	}
 	return resp.ID, nil
+}
+
+func (d *dockerClient) StartContainer(ctx context.Context, containerID string) error {
+	return d.cli.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
 func (d *dockerClient) WaitContainer(ctx context.Context, containerID string) (int64, error) {
@@ -107,8 +109,12 @@ func (d *dockerClient) CopyToContainer(ctx context.Context, containerID, srcPath
 	return d.CopyToContainerFiltered(ctx, containerID, srcPath, dstPath, nil)
 }
 
-func (d *dockerClient) CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error {
-	// Create a tar archive from the source directory, preserving the base directory name
+func (d *dockerClient) CopyToContainerFiltered(
+	ctx context.Context,
+	containerID, srcPath, dstPath string,
+	excludeTop []string,
+) error {
+	// Create a tar archive from the source directory, preserving the base directory name.
 	tar, err := utils.CreateTarArchiveWithBaseFiltered(srcPath, excludeTop)
 	if err != nil {
 		return err

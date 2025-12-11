@@ -89,9 +89,9 @@ func (d *executor) ExecuteCommand(
 	}
 
 	// Create and start the container.
-	containerID, err := d.docker.CreateAndStartContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
+	containerID, err := d.docker.CreateContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
 	if err != nil {
-		d.logger.Errorf("Failed to create/start container: %s [MsgID: %s]", err, cfg.MessageID)
+		d.logger.Errorf("Failed to create container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
@@ -107,28 +107,47 @@ func (d *executor) ExecuteCommand(
 	// Copy the package directory to the container, preserving the full path structure
 	d.logger.Infof("Copying package to container %s [MsgID: %s]", containerID, cfg.MessageID)
 	excludes := []string{constants.OutputDirName}
-	if err := d.docker.CopyToContainerFiltered(ctx, containerID, cfg.DirConfig.PackageDirPath, cfg.DirConfig.TmpDirPath, excludes); err != nil {
+	err = d.docker.CopyToContainerFiltered(
+		ctx,
+		containerID,
+		cfg.DirConfig.PackageDirPath,
+		cfg.DirConfig.TmpDirPath,
+		excludes,
+	)
+	if err != nil {
 		d.logger.Errorf("Failed to copy package to container: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
+
+	// Start the container after files are in place
+	if err := d.docker.StartContainer(ctx, containerID); err != nil {
+		d.logger.Errorf("Failed to start container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
 	// Wait for container execution
 	waitErr := d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
+	if waitErr != nil {
+		d.logger.Errorf("Error while waiting for container: %s [MsgID: %s]", waitErr, cfg.MessageID)
+		return waitErr
+	}
 
-	// Copy results back from container (even if execution failed, we want the output)
+	// Copy results back from container even if execution failed.
 	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
 	copyCtx, copyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer copyCancel()
-	if err := d.docker.CopyFromContainer(copyCtx, containerID, cfg.DirConfig.PackageDirPath, "/AAAKURWA"); err != nil {
+	err = d.docker.CopyFromContainer(
+		copyCtx,
+		containerID,
+		cfg.DirConfig.PackageDirPath,
+		cfg.DirConfig.TmpDirPath,
+	)
+	if err != nil {
 		d.logger.Errorf("Failed to copy results from container: %s [MsgID: %s]", err, cfg.MessageID)
-		// If we also had a wait error, return that instead
-		if waitErr != nil {
-			return waitErr
-		}
 		return err
 	}
 
-	return waitErr
+	return nil
 }
 
 func (d *executor) buildEnvironmentVariables(cfg CommandConfig) []string {
@@ -210,7 +229,7 @@ func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
 	}
 
 	return &container.HostConfig{
-		AutoRemove:  false, // Changed to false to allow file copying after execution
+		AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
 			PidsLimit: func(v int64) *int64 { return &v }(64),

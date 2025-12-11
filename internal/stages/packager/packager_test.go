@@ -80,7 +80,10 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 		t.Fatalf("expected user diff file to exist: %v", err)
 	}
 
-	userResPath := filepath.Join(cfg.UserExecResultDirPath, fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt))
+	userResPath := filepath.Join(
+		cfg.UserExecResultDirPath,
+		fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt),
+	)
 	if _, err := os.Stat(userResPath); err != nil {
 		t.Fatalf("expected user exec result file to exist: %v", err)
 	}

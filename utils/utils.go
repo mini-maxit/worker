@@ -115,56 +115,32 @@ func RemoveIO(dir string, recursive, ignoreError bool) error {
 	return err
 }
 
-// CreateTarArchive creates a tar archive from a directory
+// CreateTarArchive creates a tar archive from a directory.
 func CreateTarArchive(srcPath string) (io.ReadCloser, error) {
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
 		tarWriter := tar.NewWriter(pipeWriter)
-		defer tarWriter.Close()
-		defer pipeWriter.Close()
+		defer func() { _ = tarWriter.Close() }()
+		defer func() { _ = pipeWriter.Close() }()
 
 		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 
-			// Get relative path
+			// Get relative path.
 			relPath, err := filepath.Rel(srcPath, path)
 			if err != nil {
 				return err
 			}
 
-			// Skip the root directory itself
+			// Skip the root directory itself.
 			if relPath == "." {
 				return nil
 			}
 
-			// Create tar header
-			header, err := tar.FileInfoHeader(info, "")
-			if err != nil {
-				return err
-			}
-			header.Name = relPath
-
-			if err := tarWriter.WriteHeader(header); err != nil {
-				return err
-			}
-
-			// If it's a file, write its contents
-			if !info.IsDir() {
-				file, err := os.Open(path)
-				if err != nil {
-					return err
-				}
-				defer file.Close()
-
-				if _, err := io.Copy(tarWriter, file); err != nil {
-					return err
-				}
-			}
-
-			return nil
+			return writeToTarArchive(tarWriter, path, relPath, info)
 		})
 
 		if err != nil {
@@ -175,6 +151,35 @@ func CreateTarArchive(srcPath string) (io.ReadCloser, error) {
 	return pipeReader, nil
 }
 
+// writeToTarArchive writes a file or directory to a tar archive.
+func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInfo) error {
+	// Create tar header.
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return err
+	}
+	header.Name = name
+
+	if err := tarWriter.WriteHeader(header); err != nil {
+		return err
+	}
+
+	// If it's a file, write its contents.
+	if !info.IsDir() {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		if _, err := io.Copy(tarWriter, file); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // CreateTarArchiveWithBase creates a tar archive from a directory, preserving the base directory name.
 // For example, if srcPath is "/tmp/msgID", the archive will contain "msgID/file1", "msgID/dir/file2", etc.
 func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
@@ -183,13 +188,34 @@ func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
 
 // CreateTarArchiveWithBaseFiltered works like CreateTarArchiveWithBase but skips any top-level entries
 // whose names are present in excludeTopLevel (e.g. []string{"output"}).
+// shouldExcludeFromTar checks if a path should be excluded from the tar archive.
+func shouldExcludeFromTar(relPath string, excludeSet map[string]struct{}, isDir bool) (bool, error) {
+	if relPath == "." {
+		return false, nil
+	}
+
+	parts := strings.Split(relPath, string(os.PathSeparator))
+	if len(parts) == 0 {
+		return false, nil
+	}
+
+	if _, found := excludeSet[parts[0]]; found {
+		if isDir {
+			return true, filepath.SkipDir
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) (io.ReadCloser, error) {
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
 		tarWriter := tar.NewWriter(pipeWriter)
-		defer tarWriter.Close()
-		defer pipeWriter.Close()
+		defer func() { _ = tarWriter.Close() }()
+		defer func() { _ = pipeWriter.Close() }()
 
 		excludeSet := make(map[string]struct{}, len(excludeTopLevel))
 		for _, e := range excludeTopLevel {
@@ -215,43 +241,13 @@ func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) 
 				return err
 			}
 
-			if relPath != "." { // skip the srcPath root itself when checking excludes
-				parts := strings.Split(relPath, string(os.PathSeparator))
-				if len(parts) > 0 {
-					if _, found := excludeSet[parts[0]]; found {
-						if info.IsDir() {
-							return filepath.SkipDir
-						}
-						return nil
-					}
-				}
+			// Check if this path should be excluded.
+			should, skipErr := shouldExcludeFromTar(relPath, excludeSet, info.IsDir())
+			if should {
+				return skipErr
 			}
 
-			// Create tar header
-			header, err := tar.FileInfoHeader(info, "")
-			if err != nil {
-				return err
-			}
-			header.Name = relPathWithBase
-
-			if err := tarWriter.WriteHeader(header); err != nil {
-				return err
-			}
-
-			// If it's a file, write its contents
-			if !info.IsDir() {
-				file, err := os.Open(path)
-				if err != nil {
-					return err
-				}
-				defer file.Close()
-
-				if _, err := io.Copy(tarWriter, file); err != nil {
-					return err
-				}
-			}
-
-			return nil
+			return writeToTarArchive(tarWriter, path, relPathWithBase, info)
 		})
 
 		if err != nil {
@@ -262,7 +258,7 @@ func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) 
 	return pipeReader, nil
 }
 
-// ExtractTarArchive extracts a tar archive to a directory
+// ExtractTarArchive extracts a tar archive to a directory.
 func ExtractTarArchive(reader io.Reader, dstPath string) error {
 	tarReader := tar.NewReader(reader)
 

@@ -8,6 +8,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	exec "github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
+	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
@@ -25,6 +26,40 @@ func makeDirConfig() *packager.TaskDirConfig {
 		UserExecFilePath:      "/tmp/pkg/solution",
 		UserExecResultDirPath: "/tmp/pkg/res",
 	}
+}
+
+// setupMockExpectations sets up common mock expectations for testing exclude functionality.
+func setupMockExpectations(
+	mockDocker *mocks.MockDockerClient,
+	containerID string,
+	capturedExcludes *[]string,
+	statusCh <-chan container.WaitResponse,
+	errCh <-chan error,
+) {
+	gomock.InOrder(
+		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
+		mockDocker.EXPECT().CreateContainer(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(containerID, nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), containerID, gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			ctx interface{},
+			cID, srcPath, dstPath string,
+			excludes []string,
+		) error {
+			*capturedExcludes = excludes
+			return nil
+		}).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), containerID).Return(nil).Times(1),
+		mockDocker.EXPECT().ContainerWait(
+			gomock.Any(), containerID, container.WaitConditionNotRunning,
+		).Return(statusCh, errCh).Times(1),
+		mockDocker.EXPECT().CopyFromContainer(
+			gomock.Any(), containerID, gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), containerID).Return(nil).Times(1),
+	)
 }
 
 func makeTestCases() []messages.TestCase {
@@ -50,14 +85,21 @@ func TestExecuteCommand_Success(t *testing.T) {
 	var errCh <-chan error = nil
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateAndStartContainer(
+		mockDocker.EXPECT().CreateContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid123", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid123", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid123").Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid123", container.WaitConditionNotRunning,
 		).Return(statusCh, errCh).Times(1),
+		mockDocker.EXPECT().CopyFromContainer(
+			gomock.Any(), "cid123", gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid123").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker)
@@ -86,14 +128,18 @@ func TestExecuteCommand_ContainerNonZeroExit(t *testing.T) {
 	var errCh <-chan error = nil
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateAndStartContainer(
+		mockDocker.EXPECT().CreateContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid-nonzero", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid-nonzero", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-nonzero").Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid-nonzero", container.WaitConditionNotRunning,
 		).Return(statusCh, errCh).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-nonzero").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker)
@@ -122,7 +168,6 @@ func TestExecuteCommand_EnsureImageFails(t *testing.T) {
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(errors.New("ensure-failed")).Times(1),
 	)
 
@@ -148,9 +193,8 @@ func TestExecuteCommand_CreateContainerFails(t *testing.T) {
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateAndStartContainer(
+		mockDocker.EXPECT().CreateContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("", errors.New("create-failed")).Times(1),
 	)
@@ -206,14 +250,18 @@ func TestWaitForContainer_ErrFromErrCh(t *testing.T) {
 	errCh <- errors.New("wait-err")
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateAndStartContainer(
+		mockDocker.EXPECT().CreateContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid").Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid", container.WaitConditionNotRunning,
 		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 5)
@@ -245,15 +293,19 @@ func TestWaitForContainer_TimeoutCallsKill(t *testing.T) {
 	errCh := make(chan error)
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateAndStartContainer(
+		mockDocker.EXPECT().CreateContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid-timeout", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-timeout").Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid-timeout", container.WaitConditionNotRunning,
 		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
 		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Return(nil).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 1)
@@ -290,15 +342,19 @@ func TestWaitForContainer_TimeoutKillFails(t *testing.T) {
 	errCh := make(chan error)
 
 	gomock.InOrder(
-		mockDocker.EXPECT().DataVolumeName().Return("vol").Times(1),
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateAndStartContainer(
+		mockDocker.EXPECT().CreateContainer(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return("cid-timeout", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-timeout").Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerWait(
 			gomock.Any(), "cid-timeout", container.WaitConditionNotRunning,
 		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
 		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Return(errors.New("kill-failed")).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Return(nil).Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 1)
@@ -322,5 +378,87 @@ func TestWaitForContainer_TimeoutKillFails(t *testing.T) {
 	}
 	if elapsed < time.Second {
 		t.Fatalf("expected to wait at least 1s, waited %v", elapsed)
+	}
+}
+
+func TestExecuteCommand_ExcludesExpectedOutputs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDocker := mocks.NewMockDockerClient(ctrl)
+
+	statusCh := make(chan container.WaitResponse, 1)
+	statusCh <- container.WaitResponse{StatusCode: 0}
+	var errCh <-chan error = nil
+
+	// Capture the excludes parameter to verify it contains OutputDirName.
+	var capturedExcludes []string
+
+	setupMockExpectations(mockDocker, "cid-excludes", &capturedExcludes, statusCh, errCh)
+
+	ex := exec.NewExecutor(mockDocker)
+
+	cfg := exec.CommandConfig{
+		MessageID:       "msg-excludes",
+		DirConfig:       makeDirConfig(),
+		LanguageType:    languages.CPP,
+		LanguageVersion: "17",
+		TestCases:       makeTestCases(),
+	}
+
+	err := ex.ExecuteCommand(cfg)
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+
+	// Verify that OutputDirName is in the excludes list
+	found := false
+	for _, exclude := range capturedExcludes {
+		if exclude == constants.OutputDirName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected OutputDirName (%s) to be in excludes list, got: %v", constants.OutputDirName, capturedExcludes)
+	}
+}
+
+func TestExecuteCommand_OnlyExpectedOutputsExcluded(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDocker := mocks.NewMockDockerClient(ctrl)
+
+	statusCh := make(chan container.WaitResponse, 1)
+	statusCh <- container.WaitResponse{StatusCode: 0}
+	var errCh <-chan error = nil
+
+	// Capture the excludes parameter to verify it only contains OutputDirName.
+	var capturedExcludes []string
+
+	setupMockExpectations(mockDocker, "cid-only-outputs", &capturedExcludes, statusCh, errCh)
+
+	ex := exec.NewExecutor(mockDocker)
+
+	cfg := exec.CommandConfig{
+		MessageID:       "msg-only-outputs",
+		DirConfig:       makeDirConfig(),
+		LanguageType:    languages.CPP,
+		LanguageVersion: "17",
+		TestCases:       makeTestCases(),
+	}
+
+	err := ex.ExecuteCommand(cfg)
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+
+	// Verify that only OutputDirName is in the excludes list
+	if len(capturedExcludes) != 1 {
+		t.Fatalf("expected exactly 1 exclude, got %d: %v", len(capturedExcludes), capturedExcludes)
+	}
+	if capturedExcludes[0] != constants.OutputDirName {
+		t.Fatalf("expected exclude to be OutputDirName (%s), got: %s", constants.OutputDirName, capturedExcludes[0])
 	}
 }
