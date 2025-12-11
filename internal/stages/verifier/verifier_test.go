@@ -24,7 +24,7 @@ func TestEvaluateAllTestCases_AllPass(t *testing.T) {
 	// prepare files: expected and user output identical
 	tests.WriteFile(t, expectedOutDir, "out.txt", "hello\n")
 	tests.WriteFile(t, userOutDir, "out.txt", "hello\n")
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.100\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.100 0\n")
 
 	cfg := &packager.TaskDirConfig{
 		UserOutputDirPath:     userOutDir,
@@ -62,7 +62,7 @@ func TestEvaluateAllTestCases_OutputDifference(t *testing.T) {
 
 	tests.WriteFile(t, expectedOutDir, "out.txt", "hello\n")
 	tests.WriteFile(t, userOutDir, "out.txt", "hi\n")
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.050\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.050 0\n")
 
 	cfg := &packager.TaskDirConfig{
 		UserOutputDirPath:     userOutDir,
@@ -100,7 +100,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	tests.WriteFile(t, expectedOutDir, "out.txt", "whatever\n")
 	tests.WriteFile(t, userOutDir, "out.txt", "whatever\n")
 	// time limit exceeded (exit code 143)
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "143 0.0\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "143 0.0 0\n")
 
 	cfg := &packager.TaskDirConfig{
 		UserOutputDirPath:     userOutDir,
@@ -125,7 +125,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	}
 
 	// memory limit exceeded (exit code 134)
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "134 0.0\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "134 0.0 0\n")
 	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg4")
 	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
 		t.Fatalf("expected memory limit status, got: %v", res.TestResults[0].StatusCode)
@@ -136,7 +136,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	}
 
 	// runtime error (exit code 2)
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "2 0.0\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "2 0.0 0\n")
 	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg5")
 	if res.TestResults[0].StatusCode != solution.RuntimeError {
 		t.Fatalf("expected runtime error status, got: %v", res.TestResults[0].StatusCode)
@@ -190,7 +190,7 @@ func TestEvaluateAllTestCases_WithFlags_IgnoreWhitespace(t *testing.T) {
 	// expected and user differ only by whitespace
 	tests.WriteFile(t, expectedOutDir, "out.txt", "hello\n")
 	tests.WriteFile(t, userOutDir, "out.txt", "hello \n")
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.010\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.010 0\n")
 
 	cfg := &packager.TaskDirConfig{
 		UserOutputDirPath:     userOutDir,
@@ -254,11 +254,11 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 	tests.WriteFile(t, userOutDir, "t5.txt", "x\n")
 
 	// exec results: 1 -> 0 (pass), 2 -> 0 (diff), 3 -> 2 (runtime), 4 -> 134 (mem), 5 -> 143 (time)
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.001\n")
-	tests.WriteFile(t, execResDir, "2."+constants.ExecutionResultFileExt, "0 0.002\n")
-	tests.WriteFile(t, execResDir, "3."+constants.ExecutionResultFileExt, "2 0.003\n")
-	tests.WriteFile(t, execResDir, "4."+constants.ExecutionResultFileExt, "134 0.004\n")
-	tests.WriteFile(t, execResDir, "5."+constants.ExecutionResultFileExt, "143 0.005\n")
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.001 0\n")
+	tests.WriteFile(t, execResDir, "2."+constants.ExecutionResultFileExt, "0 0.002 0\n")
+	tests.WriteFile(t, execResDir, "3."+constants.ExecutionResultFileExt, "2 0.003 0\n")
+	tests.WriteFile(t, execResDir, "4."+constants.ExecutionResultFileExt, "134 0.004 0\n")
+	tests.WriteFile(t, execResDir, "5."+constants.ExecutionResultFileExt, "143 0.005 0\n")
 
 	cfg := &packager.TaskDirConfig{
 		UserOutputDirPath:     userOutDir,
