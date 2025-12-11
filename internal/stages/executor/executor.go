@@ -97,7 +97,7 @@ func (d *executor) ExecuteCommand(
 
 	// Ensure container cleanup
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cleanupCancel()
 		if removeErr := d.docker.ContainerRemove(cleanupCtx, containerID); removeErr != nil {
 			d.logger.Errorf("Failed to remove container %s: %s [MsgID: %s]", containerID, removeErr, cfg.MessageID)
