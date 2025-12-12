@@ -138,10 +138,10 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	// runtime error (exit code 2)
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "2 0.0 0\n")
 	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg5")
-	if res.TestResults[0].StatusCode != solution.RuntimeError {
+	if res.TestResults[0].StatusCode != solution.NonZeroExitCode {
 		t.Fatalf("expected runtime error status, got: %v", res.TestResults[0].StatusCode)
 	}
-	expectedMsg = "1. " + constants.SolutionMessageRuntimeError + "."
+	expectedMsg = "1. " + constants.SolutionNonZeroExitCode + "."
 	if res.Message != expectedMsg {
 		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
 	}
@@ -292,7 +292,7 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 	wantStatuses := []solution.TestCaseStatus{
 		solution.TestCasePassed,
 		solution.OutputDifference,
-		solution.RuntimeError,
+		solution.NonZeroExitCode,
 		solution.MemoryLimitExceeded,
 		solution.TimeLimitExceeded,
 	}
@@ -310,7 +310,7 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 	msgs := []string{
 		constants.SolutionMessageSuccess,
 		constants.SolutionMessageOutputDifference,
-		constants.SolutionMessageRuntimeError,
+		constants.SolutionNonZeroExitCode,
 		constants.SolutionMessageMemoryLimitExceeded,
 		constants.SolutionMessageTimeout,
 	}

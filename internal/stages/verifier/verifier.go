@@ -138,8 +138,6 @@ func (v *verifier) EvaluateAllTestCases(
 		)
 	}
 
-	// Construct final message summarizing the results
-
 	finalMessage, finalStatus := v.constructFinalMessage(solutionStatuses, solutionMessages)
 
 	v.logger.Infof("Evaluation completed [MsgID: %s]: %s", messageID, finalMessage)
@@ -292,9 +290,10 @@ func (v *verifier) evaluateTestCase(
 		return solution.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
-			StatusCode:    solution.RuntimeError,
-			ErrorMessage:  constants.TestCaseMessageRuntimeError,
+			PeakMem:       execResult.PeakMem,
+			StatusCode:    solution.NonZeroExitCode,
+			ErrorMessage:  fmt.Sprintf(constants.TestCaseNonZeroExitCode, execResult.ExitCode),
 			Order:         testCaseIdx,
-		}, solution.TestFailed, constants.SolutionMessageRuntimeError
+		}, solution.TestFailed, constants.SolutionNonZeroExitCode
 	}
 }
