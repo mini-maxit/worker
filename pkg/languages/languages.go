@@ -88,8 +88,6 @@ var LanguageVersionMap = map[LanguageType]map[string]string{
 		"20": "c++20",
 	},
 	Python: {
-		"3.8":  "3.8",
-		"3.9":  "3.9",
 		"3.10": "3.10",
 		"3.11": "3.11",
 		"3.12": "3.12",

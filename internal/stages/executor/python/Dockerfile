@@ -1,8 +1,6 @@
 # Default to 3.12
 ARG PYTHON_VERSION=3.12
 
-FROM python:3.8-slim AS python38
-FROM python:3.9-slim AS python39
 FROM python:3.10-slim AS python310
 FROM python:3.11-slim AS python311
 FROM python:3.12-slim AS python312

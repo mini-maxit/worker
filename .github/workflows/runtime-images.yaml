@@ -58,7 +58,7 @@ jobs:
 
             # Special handling for Python - build multiple versions
             if [ "$folder_name" = "python" ]; then
-              for version in 3.8 3.9 3.10 3.11 3.12; do
+              for version in 3.10 3.11 3.12; do
                 tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}"
                 if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
                   tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:${RUNTIME_TAG}"
