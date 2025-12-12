@@ -124,7 +124,7 @@ func TestSendSolutionPackage_WithCompilationError_Uploads(t *testing.T) {
 	p := packager.NewPackager(mockStorage)
 
 	cfg := &packager.TaskDirConfig{CompileErrFilePath: compErrPath}
-	if err := p.SendSolutionPackage(cfg, []messages.TestCase{tc}, true); err != nil {
+	if err := p.SendSolutionPackage(cfg, []messages.TestCase{tc}, true, "msg-id"); err != nil {
 		t.Fatalf("SendSolutionPackage returned error: %v", err)
 	}
 }
@@ -183,7 +183,7 @@ func TestSendSolutionPackage_NoCompilation_UploadsNonEmptyFiles(t *testing.T) {
 		UserDiffDirPath:   userDiffDir,
 	}
 
-	if err := p.SendSolutionPackage(cfg, []messages.TestCase{tc}, false); err != nil {
+	if err := p.SendSolutionPackage(cfg, []messages.TestCase{tc}, false, "msg-id"); err != nil {
 		t.Fatalf("SendSolutionPackage returned error: %v", err)
 	}
 }

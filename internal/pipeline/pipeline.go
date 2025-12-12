@@ -87,7 +87,12 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	defer func() {
 		if r := recover(); r != nil {
 			if err, ok := r.(error); ok {
-				ws.publishError(err)
+				ws.responder.PublishTaskErrorToResponseQueue(
+					constants.QueueMessageTypeTask,
+					ws.state.ProcessingMessageID,
+					ws.responseQueue,
+					err,
+				)
 			} else {
 				ws.logger.Errorf("Recovered value is not an error: %v", r)
 			}
@@ -102,28 +107,35 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		ws.responseQueue = ""
 	}()
 
-	// Parse language type
 	langType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
-		ws.publishError(err)
+		ws.logger.Errorf("Invalid language type %s: %s", task.LanguageType, err)
+		ws.responder.PublishTaskErrorToResponseQueue(
+			constants.QueueMessageTypeTask,
+			ws.state.ProcessingMessageID,
+			ws.responseQueue,
+			err,
+		)
 		return
 	}
 
-	// Download all files and set up directories
 	dc, err := ws.packager.PrepareSolutionPackage(task, messageID)
 	if err != nil {
-		ws.publishError(err)
+		ws.responder.PublishTaskErrorToResponseQueue(
+			constants.QueueMessageTypeTask,
+			ws.state.ProcessingMessageID,
+			ws.responseQueue,
+			err,
+		)
 		return
 	}
 
 	defer func() {
-		// Clean up temporary directories
 		if err := utils.RemoveIO(dc.PackageDirPath, true, true); err != nil {
 			ws.logger.Errorf("[MsgID %s] Failed to remove temp directory: %s", messageID, err)
 		}
 	}()
 
-	// Compile solution if needed
 	err = ws.compiler.CompileSolutionIfNeeded(
 		langType,
 		task.LanguageVersion,
@@ -134,11 +146,16 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	if err != nil {
 		if errors.Is(err, customErr.ErrCompilationFailed) {
-			ws.publishCompilationError(err, dc, task.TestCases)
+			ws.publishCompilationError(dc, task.TestCases)
 			return
 		}
 
-		ws.publishError(err)
+		ws.responder.PublishTaskErrorToResponseQueue(
+			constants.QueueMessageTypeTask,
+			ws.state.ProcessingMessageID,
+			ws.responseQueue,
+			err,
+		)
 		return
 	}
 
@@ -150,7 +167,6 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		}
 	}
 
-	// Run solution
 	cfg := executor.CommandConfig{
 		MessageID:       messageID,
 		DirConfig:       dc,
@@ -161,74 +177,57 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
-		ws.publishError(err)
-		return
-	}
-
-	// Evaluate solution
-	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID)
-
-	// Store solution results
-	err = ws.packager.SendSolutionPackage(dc, task.TestCases /*hasCompilationErr*/, false)
-	if err != nil {
-		ws.publishError(err)
-		return
-	}
-
-	// Send response message
-	ws.publishPayload(solutionResult)
-}
-
-func (ws *worker) publishPayload(solutionResult solution.Result) {
-	ws.logger.Infof("Publishing payload response [MsgID: %s]", ws.state.ProcessingMessageID)
-	publishErr := ws.responder.PublishPayloadTaskRespond(
-		constants.QueueMessageTypeTask,
-		ws.state.ProcessingMessageID,
-		ws.responseQueue,
-		solutionResult)
-
-	if publishErr != nil {
-		ws.logger.Errorf("Failed to publish success response: %s", publishErr)
-		ws.responder.PublishErrorToResponseQueue(
+		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			ws.state.ProcessingMessageID,
 			ws.responseQueue,
-			publishErr)
-	}
-}
-
-func (ws *worker) publishError(err error) {
-	ws.logger.Errorf("Error: %s", err)
-	publishErr := ws.responder.PublishTaskErrorToResponseQueue(
-		constants.QueueMessageTypeTask,
-		ws.state.ProcessingMessageID,
-		ws.responseQueue,
-		err,
-	)
-
-	if publishErr != nil {
-		ws.logger.Errorf("Failed to publish error response: %s", publishErr)
-	}
-}
-
-func (ws *worker) publishCompilationError(err error, dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
-	ws.logger.Errorf("Compilation error: %s", err)
-	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true)
-	if sendErr != nil {
-		ws.logger.Errorf("Failed to send solution package: %s", sendErr)
+			err,
+		)
+		return
 	}
 
-	solutionResult := solution.Result{
-		StatusCode: solution.CompilationError,
-		Message:    "Compilation failed",
+	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID)
+
+	err = ws.packager.SendSolutionPackage(dc, task.TestCases /*hasCompilationErr*/, false, messageID)
+	if err != nil {
+		ws.responder.PublishTaskErrorToResponseQueue(
+			constants.QueueMessageTypeTask,
+			ws.state.ProcessingMessageID,
+			ws.responseQueue,
+			err,
+		)
+		return
 	}
-	respErr := ws.responder.PublishPayloadTaskRespond(
+
+	ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
 		ws.state.ProcessingMessageID,
 		ws.responseQueue,
 		solutionResult,
 	)
-	if respErr != nil {
-		ws.logger.Errorf("Failed to publish response: %s", respErr)
+	ws.logger.Infof("Finished processing task [MsgID: %s]", messageID)
+}
+
+func (ws *worker) publishCompilationError(dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
+	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, ws.state.ProcessingMessageID)
+	if sendErr != nil {
+		ws.responder.PublishTaskErrorToResponseQueue(
+			constants.QueueMessageTypeTask,
+			ws.state.ProcessingMessageID,
+			ws.responseQueue,
+			sendErr,
+		)
+		return
 	}
+
+	solutionResult := solution.Result{
+		StatusCode: solution.CompilationError,
+		Message:    constants.SolutionMessageCompilationError,
+	}
+	ws.responder.PublishPayloadTaskRespond(
+		constants.QueueMessageTypeTask,
+		ws.state.ProcessingMessageID,
+		ws.responseQueue,
+		solutionResult,
+	)
 }

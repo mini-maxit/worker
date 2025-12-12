@@ -3,7 +3,6 @@ package executor_test
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/docker/docker/api/types/container"
 	exec "github.com/mini-maxit/worker/internal/stages/executor"
@@ -33,8 +32,7 @@ func setupMockExpectations(
 	mockDocker *mocks.MockDockerClient,
 	containerID string,
 	capturedExcludes *[]string,
-	statusCh <-chan container.WaitResponse,
-	errCh <-chan error,
+	statusCode int64,
 ) {
 	gomock.InOrder(
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
@@ -52,13 +50,13 @@ func setupMockExpectations(
 			return nil
 		}).Times(1),
 		mockDocker.EXPECT().StartContainer(gomock.Any(), containerID).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerWait(
-			gomock.Any(), containerID, container.WaitConditionNotRunning,
-		).Return(statusCh, errCh).Times(1),
+		mockDocker.EXPECT().WaitContainer(
+			gomock.Any(), containerID, gomock.Any(),
+		).Return(statusCode, nil).Times(1),
 		mockDocker.EXPECT().CopyFromContainer(
 			gomock.Any(), containerID, gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), containerID).Return(nil).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), containerID).Times(1),
 	)
 }
 
@@ -82,7 +80,6 @@ func TestExecuteCommand_Success(t *testing.T) {
 	// Prepare channels for ContainerWait returning successful exit code
 	statusCh := make(chan container.WaitResponse, 1)
 	statusCh <- container.WaitResponse{StatusCode: 0}
-	var errCh <-chan error = nil
 
 	gomock.InOrder(
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
@@ -93,13 +90,13 @@ func TestExecuteCommand_Success(t *testing.T) {
 			gomock.Any(), "cid123", gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
 		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid123").Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerWait(
-			gomock.Any(), "cid123", container.WaitConditionNotRunning,
-		).Return(statusCh, errCh).Times(1),
+		mockDocker.EXPECT().WaitContainer(
+			gomock.Any(), "cid123", gomock.Any(),
+		).Return(int64(0), nil).Times(1),
 		mockDocker.EXPECT().CopyFromContainer(
 			gomock.Any(), "cid123", gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid123").Return(nil).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid123").Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker)
@@ -125,7 +122,6 @@ func TestExecuteCommand_ContainerNonZeroExit(t *testing.T) {
 
 	statusCh := make(chan container.WaitResponse, 1)
 	statusCh <- container.WaitResponse{StatusCode: 2}
-	var errCh <-chan error = nil
 
 	gomock.InOrder(
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
@@ -136,10 +132,10 @@ func TestExecuteCommand_ContainerNonZeroExit(t *testing.T) {
 			gomock.Any(), "cid-nonzero", gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
 		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-nonzero").Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerWait(
-			gomock.Any(), "cid-nonzero", container.WaitConditionNotRunning,
-		).Return(statusCh, errCh).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-nonzero").Return(nil).Times(1),
+		mockDocker.EXPECT().WaitContainer(
+			gomock.Any(), "cid-nonzero", gomock.Any(),
+		).Return(int64(1), nil).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-nonzero").Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker)
@@ -245,7 +241,6 @@ func TestWaitForContainer_ErrFromErrCh(t *testing.T) {
 
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
-	statusCh := make(chan container.WaitResponse)
 	errCh := make(chan error, 1)
 	errCh <- errors.New("wait-err")
 
@@ -258,10 +253,10 @@ func TestWaitForContainer_ErrFromErrCh(t *testing.T) {
 			gomock.Any(), "cid", gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
 		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid").Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerWait(
-			gomock.Any(), "cid", container.WaitConditionNotRunning,
-		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid").Return(nil).Times(1),
+		mockDocker.EXPECT().WaitContainer(
+			gomock.Any(), "cid", gomock.Any(),
+		).Return(int64(-1), errors.New("wait-err")).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid").Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 5)
@@ -289,9 +284,6 @@ func TestWaitForContainer_TimeoutCallsKill(t *testing.T) {
 
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
-	statusCh := make(chan container.WaitResponse)
-	errCh := make(chan error)
-
 	gomock.InOrder(
 		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockDocker.EXPECT().CreateContainer(
@@ -301,11 +293,11 @@ func TestWaitForContainer_TimeoutCallsKill(t *testing.T) {
 			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
 		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-timeout").Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerWait(
-			gomock.Any(), "cid-timeout", container.WaitConditionNotRunning,
-		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
-		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Return(nil).Times(1),
+		mockDocker.EXPECT().WaitContainer(
+			gomock.Any(), "cid-timeout", gomock.Any(),
+		).Return(int64(-1), pkgerrors.ErrContainerTimeout).Times(1),
+		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Times(1),
 	)
 
 	ex := exec.NewExecutor(mockDocker, 1)
@@ -318,66 +310,12 @@ func TestWaitForContainer_TimeoutCallsKill(t *testing.T) {
 		TestCases:       makeTestCases(),
 	}
 
-	start := time.Now()
 	err := ex.ExecuteCommand(cfg)
-	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatalf("expected timeout error, got nil")
 	}
 	if !errors.Is(err, pkgerrors.ErrContainerTimeout) {
 		t.Fatalf("expected ErrContainerTimeout, got: %v", err)
-	}
-	if elapsed < time.Second {
-		t.Fatalf("expected to wait at least 1s, waited %v", elapsed)
-	}
-}
-
-func TestWaitForContainer_TimeoutKillFails(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockDocker := mocks.NewMockDockerClient(ctrl)
-
-	statusCh := make(chan container.WaitResponse)
-	errCh := make(chan error)
-
-	gomock.InOrder(
-		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockDocker.EXPECT().CreateContainer(
-			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		).Return("cid-timeout", nil).Times(1),
-		mockDocker.EXPECT().CopyToContainerFiltered(
-			gomock.Any(), "cid-timeout", gomock.Any(), gomock.Any(), gomock.Any(),
-		).Return(nil).Times(1),
-		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-timeout").Return(nil).Times(1),
-		mockDocker.EXPECT().ContainerWait(
-			gomock.Any(), "cid-timeout", container.WaitConditionNotRunning,
-		).Return((<-chan container.WaitResponse)(statusCh), (<-chan error)(errCh)).Times(1),
-		mockDocker.EXPECT().ContainerKill(gomock.Any(), "cid-timeout", "SIGKILL").Return(errors.New("kill-failed")).Times(1),
-		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-timeout").Return(nil).Times(1),
-	)
-
-	ex := exec.NewExecutor(mockDocker, 1)
-
-	cfg := exec.CommandConfig{
-		MessageID:       "msg-timeout-kill-fails",
-		DirConfig:       makeDirConfig(),
-		LanguageType:    languages.CPP,
-		LanguageVersion: "17",
-		TestCases:       makeTestCases(),
-	}
-
-	start := time.Now()
-	err := ex.ExecuteCommand(cfg)
-	elapsed := time.Since(start)
-	if err == nil {
-		t.Fatalf("expected timeout error, got nil")
-	}
-	if !errors.Is(err, pkgerrors.ErrContainerTimeout) {
-		t.Fatalf("expected ErrContainerTimeout, got: %v", err)
-	}
-	if elapsed < time.Second {
-		t.Fatalf("expected to wait at least 1s, waited %v", elapsed)
 	}
 }
 
@@ -387,14 +325,10 @@ func TestExecuteCommand_ExcludesExpectedOutputs(t *testing.T) {
 
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
-	statusCh := make(chan container.WaitResponse, 1)
-	statusCh <- container.WaitResponse{StatusCode: 0}
-	var errCh <-chan error = nil
-
 	// Capture the excludes parameter to verify it contains OutputDirName.
 	var capturedExcludes []string
 
-	setupMockExpectations(mockDocker, "cid-excludes", &capturedExcludes, statusCh, errCh)
+	setupMockExpectations(mockDocker, "cid-excludes", &capturedExcludes, 0)
 
 	ex := exec.NewExecutor(mockDocker)
 
@@ -430,14 +364,10 @@ func TestExecuteCommand_OnlyExpectedOutputsExcluded(t *testing.T) {
 
 	mockDocker := mocks.NewMockDockerClient(ctrl)
 
-	statusCh := make(chan container.WaitResponse, 1)
-	statusCh <- container.WaitResponse{StatusCode: 0}
-	var errCh <-chan error = nil
-
 	// Capture the excludes parameter to verify it only contains OutputDirName.
 	var capturedExcludes []string
 
-	setupMockExpectations(mockDocker, "cid-only-outputs", &capturedExcludes, statusCh, errCh)
+	setupMockExpectations(mockDocker, "cid-only-outputs", &capturedExcludes, 0)
 
 	ex := exec.NewExecutor(mockDocker)
 

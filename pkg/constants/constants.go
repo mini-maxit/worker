@@ -15,6 +15,7 @@ const (
 	SolutionMessageMemoryLimitExceeded = "memory limit exceeded"
 	SolutionMessageOutputDifference    = "output difference"
 	SolutionMessageInternalError       = "internal error occurred"
+	SolutionMessageCompilationError    = "compilation error occurred"
 )
 
 // TestCaseResult messages.

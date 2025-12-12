@@ -37,8 +37,6 @@ func NewStorage(fileServiceURL string) Storage {
 }
 
 func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error) {
-	fs.logger.Infof("Downloading file from bucket %s path %s", fileLocation.Bucket, fileLocation.Path)
-
 	// Build request URL: {baseUrl}/buckets/:bucketName/:objectKey?metadataOnly=false
 	requestURL := fmt.Sprintf("%s/buckets/%s/%s?metadataOnly=false",
 		fs.fileStorageURL,
@@ -93,13 +91,11 @@ func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath str
 		fs.logger.Warnf("Failed to chmod file: %s", err)
 	}
 
-	fs.logger.Infof("File downloaded to %s", destPath)
 	return destPath, nil
 }
 
 func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
 	fileName := filepath.Base(filePath)
-	fs.logger.Infof("Uploading file %s to bucket %s path %s", fileName, bucket, objectKey)
 	// Build request URL: {baseUrl}/buckets/{bucket}/upload-multiple?prefix=<prefix>
 	u, err := url.Parse(fmt.Sprintf("%s/buckets/%s/upload-multiple", fs.fileStorageURL, bucket))
 	if err != nil {
@@ -166,6 +162,5 @@ func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
 		return errors.New(string(bodyBytes))
 	}
 
-	fs.logger.Infof("File uploaded successfully to %s", requestUrl)
 	return nil
 }

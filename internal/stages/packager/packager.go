@@ -19,7 +19,12 @@ import (
 
 type Packager interface {
 	PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error)
-	SendSolutionPackage(dirConfig *TaskDirConfig, testCases []messages.TestCase, hasCompilationErr bool) error
+	SendSolutionPackage(
+		dirConfig *TaskDirConfig,
+		testCases []messages.TestCase,
+		hasCompilationErr bool,
+		msgID string,
+	) error
 }
 
 type packager struct {
@@ -57,10 +62,11 @@ func (p *packager) PrepareSolutionPackage(
 		return nil, errors.New("storage service is not initialized")
 	}
 
+	p.logger.Infof("Preparing solution package [MsgID: %s]", msgID)
+
 	basePath := filepath.Join(constants.TmpDirPath, msgID)
 
 	// create directories.
-	p.logger.Infof("Creating base directory at %s", basePath)
 	if err := p.createBaseDirs(basePath); err != nil {
 		p.logger.Errorf("Failed to create base directory: %s", err)
 		_ = utils.RemoveIO(basePath, true, true)
@@ -68,7 +74,6 @@ func (p *packager) PrepareSolutionPackage(
 	}
 
 	// Download submission.
-	p.logger.Infof("Downloading submission file to %s", basePath)
 	if err := p.downloadSubmission(basePath, taskQueueMessage.SubmissionFile); err != nil {
 		p.logger.Errorf("Failed to download submission file: %s", err)
 		_ = utils.RemoveIO(basePath, true, true)
@@ -76,7 +81,6 @@ func (p *packager) PrepareSolutionPackage(
 	}
 
 	// Download test cases and create user files.
-	p.logger.Infof("Preparing test case files in %s", basePath)
 	for idx, tc := range taskQueueMessage.TestCases {
 		if err := p.prepareTestCaseFiles(basePath, idx, tc); err != nil {
 			p.logger.Errorf("Failed to prepare test case files: %s", err)
@@ -86,7 +90,6 @@ func (p *packager) PrepareSolutionPackage(
 	}
 
 	// Create compile.err file.
-	p.logger.Infof("Creating compile.err file in %s", basePath)
 	err := p.createCompileErrFile(basePath)
 	if err != nil {
 		p.logger.Errorf("Failed to create compile.err file: %s", err)
@@ -112,7 +115,7 @@ func (p *packager) PrepareSolutionPackage(
 		UserExecResultDirPath: filepath.Join(basePath, constants.UserExecResultDirName),
 	}
 
-	p.logger.Infof("Prepared solution package at %s", basePath)
+	p.logger.Infof("Prepared solution [MsgID: %s]", msgID)
 	return cfg, nil
 }
 
@@ -130,7 +133,6 @@ func (p *packager) createBaseDirs(basePath string) error {
 
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
-			p.logger.Errorf("Failed to create directory %s: %s", d, err)
 			return err
 		}
 	}
@@ -144,7 +146,6 @@ func (p *packager) downloadSubmission(basePath string, submission messages.FileL
 	}
 	path := filepath.Join(basePath, filepath.Base(submission.Path))
 	if _, err := p.storage.DownloadFile(submission, path); err != nil {
-		p.logger.Errorf("Failed to download submission file: %s", err)
 		return err
 	}
 	return nil
@@ -158,7 +159,6 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 	} else {
 		inputDest := filepath.Join(basePath, constants.InputDirName, filepath.Base(tc.InputFile.Path))
 		if _, err := p.storage.DownloadFile(tc.InputFile, inputDest); err != nil {
-			p.logger.Errorf("Failed to download input for test case %d: %s", idx, err)
 			return err
 		}
 	}
@@ -169,7 +169,6 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 	} else {
 		outputDest := filepath.Join(basePath, constants.OutputDirName, filepath.Base(tc.ExpectedOutput.Path))
 		if _, err := p.storage.DownloadFile(tc.ExpectedOutput, outputDest); err != nil {
-			p.logger.Errorf("Failed to download expected output for test case %d: %s", idx, err)
 			return err
 		}
 	}
@@ -199,7 +198,6 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 	} {
 		fi, err := os.OpenFile(f, os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
-			p.logger.Errorf("Failed to create user file %s: %s", f, err)
 			return err
 		}
 		fi.Close()
@@ -211,7 +209,6 @@ func (p *packager) createCompileErrFile(basePath string) error {
 	compErrFilePath := filepath.Join(basePath, constants.CompileErrFileName)
 	compErrFile, err := os.OpenFile(compErrFilePath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		p.logger.Errorf("Failed to create compile.err file: %s", err)
 		return err
 	}
 	compErrFile.Close()
@@ -222,10 +219,13 @@ func (p *packager) SendSolutionPackage(
 	dirConfig *TaskDirConfig,
 	testCases []messages.TestCase,
 	hasCompilationErr bool,
+	msgID string,
 ) error {
+	p.logger.Infof("Sending solution package for message ID: %s", msgID)
 	if hasCompilationErr {
 		err := p.uploadNonEmptyFile(dirConfig.CompileErrFilePath, testCases[0].StdErrResult)
 		if err != nil {
+			p.logger.Errorf("Failed to upload compilation error file: %s", err)
 			return err
 		}
 		return nil
@@ -238,6 +238,7 @@ func (p *packager) SendSolutionPackage(
 
 		err := p.uploadNonEmptyFile(userOutputPath, test.StdOutResult)
 		if err != nil {
+			p.logger.Errorf("Failed to upload user output file: %s", err)
 			return err
 		}
 
@@ -247,6 +248,7 @@ func (p *packager) SendSolutionPackage(
 
 		err = p.uploadNonEmptyFile(userErrorPath, test.StdErrResult)
 		if err != nil {
+			p.logger.Errorf("Failed to upload user error file: %s", err)
 			return err
 		}
 
@@ -256,10 +258,12 @@ func (p *packager) SendSolutionPackage(
 
 		err = p.uploadNonEmptyFile(userDiffPath, test.DiffResult)
 		if err != nil {
+			p.logger.Errorf("Failed to upload user diff file: %s", err)
 			return err
 		}
 	}
 
+	p.logger.Infof("Successfully sent solution package for message ID: %s", msgID)
 	return nil
 }
 
@@ -270,7 +274,6 @@ func (p *packager) uploadNonEmptyFile(filePath string, outputFileLocation messag
 		}
 	}
 
-	p.logger.Infof("Uploading file: %s", filePath)
 	objPath := outputFileLocation.Path
 	if idx := strings.LastIndex(objPath, "/"); idx != -1 {
 		objPath = objPath[:idx]
@@ -279,7 +282,6 @@ func (p *packager) uploadNonEmptyFile(filePath string, outputFileLocation messag
 	}
 
 	if err := p.storage.UploadFile(filePath, outputFileLocation.Bucket, objPath); err != nil {
-		p.logger.Errorf("Failed to upload file %s: %s", filePath, err)
 		return err
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
+	"github.com/mini-maxit/worker/pkg/messages"
 )
 
 type LanguageType int
@@ -13,12 +14,6 @@ type LanguageType int
 const (
 	CPP LanguageType = iota + 1
 )
-
-type LanguageSpec struct {
-	LanguageName string   `json:"name"`
-	Versions     []string `json:"versions"`
-	Extension    string   `json:"extension"`
-}
 
 func (lt LanguageType) String() string {
 	for key, value := range LanguageTypeMap {
@@ -33,7 +28,7 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 	switch lt {
 	case CPP:
 		// C++ compiler does not require versioning, so a single runtime Docker image is used for all versions.
-		image := constants.RuntimeImagePrefix + "-cpp"
+		image := constants.RuntimeImagePrefix + "-cpp:latest"
 		return image, nil
 	default:
 		return "", errors.ErrInvalidLanguageType
@@ -89,8 +84,8 @@ func ParseLanguageType(s string) (LanguageType, error) {
 	return 0, errors.ErrInvalidLanguageType
 }
 
-func GetSupportedLanguagesWithVersions() []LanguageSpec {
-	supportedLanguages := make([]LanguageSpec, 0, len(LanguageTypeMap))
+func GetSupportedLanguagesWithVersions() messages.ResponseHandshakePayload {
+	supportedLanguages := make([]messages.LanguageSpec, 0, len(LanguageTypeMap))
 	for langType, versions := range LanguageVersionMap {
 		langName := langType.String()
 		langExtension, ok := LanguageExtensionMap[langType]
@@ -103,11 +98,13 @@ func GetSupportedLanguagesWithVersions() []LanguageSpec {
 			versionList = append(versionList, version)
 		}
 
-		supportedLanguages = append(supportedLanguages, LanguageSpec{
+		supportedLanguages = append(supportedLanguages, messages.LanguageSpec{
 			LanguageName: langName,
 			Versions:     versionList,
 			Extension:    langExtension,
 		})
 	}
-	return supportedLanguages
+	return messages.ResponseHandshakePayload{
+		Languages: supportedLanguages,
+	}
 }

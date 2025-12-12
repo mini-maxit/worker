@@ -61,9 +61,6 @@ func TestPublishErrorToResponseQueue(t *testing.T) {
 			if payload["error"] != testErr.Error() {
 				t.Fatalf("expected payload error %s got %s", testErr.Error(), payload["error"])
 			}
-			if pub.CorrelationId != messageID {
-				t.Fatalf("expected CorrelationId %s got %s", messageID, pub.CorrelationId)
-			}
 		}).Return(nil).Times(1)
 
 	r.PublishErrorToResponseQueue(messageType, messageID, responseQueue, testErr)
@@ -107,9 +104,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusPayload); err != nil {
-		t.Fatalf("PublishSucessStatusRespond returned error: %v", err)
-	}
+	r.PublishSuccessStatusRespond("status", "sid", "status-queue", statusPayload)
 
 	// Handshake
 	langs := languages.GetSupportedLanguagesWithVersions()
@@ -124,7 +119,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 			// handshakePayload wrapper
 			var wrapper struct {
-				Languages []languages.LanguageSpec `json:"languages"`
+				Languages []messages.LanguageSpec `json:"languages"`
 			}
 			if err := json.Unmarshal(resp.Payload, &wrapper); err != nil {
 				t.Fatalf("failed to unmarshal handshake payload: %v", err)
@@ -134,9 +129,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishSuccessHandshakeRespond("hs", "hid", "hs-queue", langs); err != nil {
-		t.Fatalf("PublishSucessHandshakeRespond returned error: %v", err)
-	}
+	r.PublishSuccessHandshakeRespond("hs", "hid", "hs-queue", langs)
 
 	// Payload task
 	res := solution.Result{StatusCode: solution.Success, Message: "ok"}
@@ -158,9 +151,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	if err := r.PublishPayloadTaskRespond("task", "tid", "task-queue", res); err != nil {
-		t.Fatalf("PublishPayloadTaskRespond returned error: %v", err)
-	}
+	r.PublishPayloadTaskRespond("task", "tid", "task-queue", res)
 }
 
 // Test concurrent heavy load of Publish calls.

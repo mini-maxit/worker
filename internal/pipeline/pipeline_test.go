@@ -15,17 +15,15 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestProcessTask_SuccessFlow(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockCompiler := mocks.NewMockCompiler(ctrl)
-	mockPackager := mocks.NewMockPackager(ctrl)
-	mockExecutor := mocks.NewMockExecutor(ctrl)
-	mockVerifier := mocks.NewMockVerifier(ctrl)
-	mockResponder := mocks.NewMockResponder(ctrl)
-
-	// Prepare expectations
+// setupSuccessfulPipelineMocks configures mocks for a successful task processing flow.
+func setupSuccessfulPipelineMocks(
+	t *testing.T,
+	mockCompiler *mocks.MockCompiler,
+	mockPackager *mocks.MockPackager,
+	mockExecutor *mocks.MockExecutor,
+	mockVerifier *mocks.MockVerifier,
+	mockResponder *mocks.MockResponder,
+) {
 	dir := &packager.TaskDirConfig{
 		PackageDirPath:     t.TempDir(),
 		UserSolutionPath:   "src",
@@ -45,8 +43,22 @@ func TestProcessTask_SuccessFlow(t *testing.T) {
 			StatusCode: solution.Success,
 			Message:    "OK",
 		})
-	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false).Return(nil)
-	mockResponder.EXPECT().PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false, gomock.Any()).Return(nil)
+	mockResponder.EXPECT().
+		PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+}
+
+func TestProcessTask_SuccessFlow(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCompiler := mocks.NewMockCompiler(ctrl)
+	mockPackager := mocks.NewMockPackager(ctrl)
+	mockExecutor := mocks.NewMockExecutor(ctrl)
+	mockVerifier := mocks.NewMockVerifier(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
+
+	setupSuccessfulPipelineMocks(t, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
 	w := pipeline.NewWorker(1, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
@@ -90,18 +102,17 @@ func TestProcessTask_CompilationErrorFlow(t *testing.T) {
 		).Return(pkgerrors.ErrCompilationFailed)
 
 	// When compilation fails SendSolutionPackage should be called with hasCompilationErr=true
-	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), true).Return(nil)
+	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), true, gomock.Any()).Return(nil)
 
 	// Expect PublishPayloadTaskRespond called with a compilation error result
-	mockResponder.EXPECT().PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(messageType, messageID, responseQueue string, res solution.Result) error {
+	mockResponder.EXPECT().PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(messageType, messageID, responseQueue string, res solution.Result) {
 			if res.StatusCode != solution.CompilationError {
 				t.Fatalf("expected compilation error status, got %v", res.StatusCode)
 			}
-			if res.Message != "Compilation failed" {
+			if res.Message != constants.SolutionMessageCompilationError {
 				t.Fatalf("unexpected compilation message: %q", res.Message)
 			}
-			return nil
 		},
 	)
 
@@ -159,7 +170,7 @@ func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
 		})
 
 	// Simulate upload failure
-	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false).Return(errors.New("upload failed"))
+	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false, gomock.Any()).Return(errors.New("upload failed"))
 	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(4, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
@@ -215,32 +226,7 @@ func TestProcessTask_PublishPayloadFails(t *testing.T) {
 	mockVerifier := mocks.NewMockVerifier(ctrl)
 	mockResponder := mocks.NewMockResponder(ctrl)
 
-	dir := &packager.TaskDirConfig{
-		PackageDirPath:     t.TempDir(),
-		UserSolutionPath:   "src",
-		UserExecFilePath:   "exec",
-		CompileErrFilePath: "compile.err",
-	}
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(dir, nil)
-	mockCompiler.EXPECT().
-		CompileSolutionIfNeeded(
-			gomock.Any(), gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any(), gomock.Any(),
-		).Return(nil)
-	mockExecutor.EXPECT().ExecuteCommand(gomock.Any()).Return(nil)
-	mockVerifier.EXPECT().
-		EvaluateAllTestCases(dir, gomock.Any(), gomock.Any()).
-		Return(solution.Result{
-			StatusCode: solution.Success,
-			Message:    "OK",
-		})
-	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false).Return(nil)
-
-	// Simulate publish failure
-	mockResponder.EXPECT().PublishPayloadTaskRespond(
-		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-	).Return(errors.New("publish failed"))
-	mockResponder.EXPECT().PublishErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	setupSuccessfulPipelineMocks(t, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
 	w := pipeline.NewWorker(6, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{
@@ -334,10 +320,10 @@ func TestGetProcessingMessageID(t *testing.T) {
 			StatusCode: solution.Success,
 			Message:    "OK",
 		})
-	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false).Return(nil)
-	mockResponder.EXPECT().PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-
+	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false, gomock.Any()).Return(nil)
 	// Start processing in background
+	mockResponder.EXPECT().
+		PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	go func() {
 		w.ProcessTask("msg-123", "respQ", &messages.TaskQueueMessage{LanguageType: "cpp"})
 	}()

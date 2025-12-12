@@ -109,8 +109,6 @@ func (s *scheduler) getFreeWorker() (pipeline.Worker, error) {
 }
 
 func (s *scheduler) ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error {
-	s.logger.Infof("Processing task [MsgID: %s]", messageID)
-
 	worker, err := s.getFreeWorker()
 	if err != nil {
 		s.logger.Errorf("No available workers: %s", err)
@@ -137,6 +135,4 @@ func (s *scheduler) markWorkerAsIdle(worker pipeline.Worker) {
 	defer s.mu.Unlock()
 
 	worker.UpdateStatus(constants.WorkerStatusIdle)
-
-	s.logger.Infof("Worker marked as idle [WorkerID: %d]", worker.GetId())
 }
