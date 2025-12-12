@@ -1,7 +1,6 @@
 package languages
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/mini-maxit/worker/pkg/constants"
@@ -13,7 +12,14 @@ type LanguageType int
 
 const (
 	CPP LanguageType = iota + 1
+	Python
 )
+
+type LanguageSpec struct {
+	LanguageName string   `json:"name"`
+	Versions     []string `json:"versions"`
+	Extension    string   `json:"extension"`
+}
 
 func (lt LanguageType) String() string {
 	for key, value := range LanguageTypeMap {
@@ -30,17 +36,49 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 		// C++ compiler does not require versioning, so a single runtime Docker image is used for all versions.
 		image := constants.RuntimeImagePrefix + "-cpp:latest"
 		return image, nil
+	case Python:
+		// Python uses version-specific runtime images
+		_, ok := LanguageVersionMap[Python][version]
+		if !ok {
+			return "", errors.ErrInvalidVersion
+		}
+		image := constants.RuntimeImagePrefix + "-python-" + version + ":latest"
+		return image, nil
+	default:
+		return "", errors.ErrInvalidLanguageType
+	}
+}
+
+func (lt LanguageType) IsScriptingLanguage() bool {
+	switch lt {
+	case Python:
+		return true
+	case CPP:
+		return false
+	default:
+		return false
+	}
+}
+
+func (lt LanguageType) GetRunCommand(solutionFileName string) (string, error) {
+	switch lt {
+	case Python:
+		return "python3 ./" + solutionFileName, nil
+	case CPP:
+		return "./" + solutionFileName, nil
 	default:
 		return "", errors.ErrInvalidLanguageType
 	}
 }
 
 var LanguageTypeMap = map[string]LanguageType{
-	"CPP": CPP,
+	"CPP":    CPP,
+	"PYTHON": Python,
 }
 
 var LanguageExtensionMap = map[LanguageType]string{
-	CPP: "cpp",
+	CPP:    "cpp",
+	Python: "py",
 }
 
 var LanguageVersionMap = map[LanguageType]map[string]string{
@@ -49,6 +87,13 @@ var LanguageVersionMap = map[LanguageType]map[string]string{
 		"14": "c++14",
 		"17": "c++17",
 		"20": "c++20",
+	},
+	Python: {
+		"3.8":  "3.8",
+		"3.9":  "3.9",
+		"3.10": "3.10",
+		"3.11": "3.11",
+		"3.12": "3.12",
 	},
 }
 
@@ -68,13 +113,6 @@ func GetSupportedLanguages() []string {
 		languages = append(languages, lang)
 	}
 	return languages
-}
-
-func GetSolutionFileNameWithExtension(solutionName string, language LanguageType) (string, error) {
-	if extension, ok := LanguageExtensionMap[language]; ok {
-		return fmt.Sprintf("%s%s", solutionName, extension), nil
-	}
-	return "", errors.ErrInvalidLanguageType
 }
 
 func ParseLanguageType(s string) (LanguageType, error) {

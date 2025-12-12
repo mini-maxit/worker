@@ -4,6 +4,11 @@ set -o pipefail
 shopt -s nullglob
 
 # sanity checks for required env vars
+if [[ -z "${RUN_CMD:-}" ]]; then
+  echo "ERROR: RUN_CMD must be set" >&2
+  exit 1
+fi
+
 if [[ -z "${INPUT_FILES:-}" ]]; then
   echo "ERROR: INPUT_FILES must be set" >&2
   exit 1
@@ -98,7 +103,7 @@ for idx in "${!inputs[@]}"; do
     hard_kb=$(( mlimit_kb + mlimit_kb / 10 ))
     timeout --preserve-status "${tlimit_s}s" \
       /usr/bin/time -f "%M" -o "${peak_mem_file}" \
-      bash -c "ulimit -S -v ${mlimit_kb} && ulimit -H -v ${hard_kb} && \"$1\" < \"$infile\"" \
+      bash -c "ulimit -S -v ${mlimit_kb} && ulimit -H -v ${hard_kb} && ${RUN_CMD}" < "$infile" \
       > "${out}" 2> "${err}"
     code=$?
 

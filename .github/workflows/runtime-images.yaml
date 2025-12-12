@@ -55,13 +55,31 @@ jobs:
         run: |
           for folder in $(find internal/stages/executor -type d -mindepth 1 -maxdepth 1); do
             folder_name=$(basename "$folder")
-            tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:${RUNTIME_TAG}"
-            if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
-              tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:latest"
+
+            # Special handling for Python - build multiple versions
+            if [ "$folder_name" = "python" ]; then
+              for version in 3.8 3.9 3.10 3.11 3.12; do
+                tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}"
+                if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+                  tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:latest"
+                fi
+                docker buildx build \
+                  --push \
+                  --platform linux/amd64,linux/arm64 \
+                  --build-arg PYTHON_VERSION=${version} \
+                  $tags \
+                  "$folder"
+              done
+            else
+              # For non-Python languages, build single image
+              tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:${RUNTIME_TAG}"
+              if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+                tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:latest"
+              fi
+              docker buildx build \
+                --push \
+                --platform linux/amd64,linux/arm64 \
+                $tags \
+                "$folder"
             fi
-            docker buildx build \
-              --push \
-              --platform linux/amd64,linux/arm64 \
-              $tags \
-              "$folder"
           done
