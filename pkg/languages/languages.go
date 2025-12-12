@@ -16,12 +16,6 @@ const (
 	Python
 )
 
-type LanguageSpec struct {
-	LanguageName string   `json:"name"`
-	Versions     []string `json:"versions"`
-	Extension    string   `json:"extension"`
-}
-
 func (lt LanguageType) String() string {
 	for key, value := range LanguageTypeMap {
 		if value == lt {
