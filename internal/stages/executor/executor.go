@@ -77,7 +77,7 @@ func (d *executor) ExecuteCommand(
 		env,
 	)
 
-	hostCfg := d.buildHostConfig(cfg)
+	hostCfg := d.buildHostConfig()
 
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
 		d.logger.Errorf("Failed to prepare image %s: %s [MsgID: %s]", dockerImage, err, cfg.MessageID)
@@ -205,7 +205,7 @@ func (d *executor) buildContainerConfig(
 	}
 }
 
-func (d *executor) buildHostConfig(cfg CommandConfig) *container.HostConfig {
+func (d *executor) buildHostConfig() *container.HostConfig {
 	return &container.HostConfig{
 		AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
