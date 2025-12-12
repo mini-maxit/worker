@@ -7,7 +7,6 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/rabbitmq/channel"
 	"github.com/mini-maxit/worker/pkg/errors"
-	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -22,19 +21,19 @@ type Responder interface {
 	PublishTaskErrorToResponseQueue(
 		messageType, messageID, responseQueue string,
 		err error,
-	) error
+	)
 	PublishSuccessHandshakeRespond(
 		messageType, messageID, responseQueue string,
-		languageSpecs []languages.LanguageSpec,
-	) error
+		languageSpecs messages.ResponseHandshakePayload,
+	)
 	PublishSuccessStatusRespond(
 		messageType, messageID, responseQueue string,
 		status messages.ResponseWorkerStatusPayload,
-	) error
+	)
 	PublishPayloadTaskRespond(
 		messageType, messageID, responseQueue string,
 		taskResult solution.Result,
-	) error
+	)
 	Publish(queueName string, publishing amqp.Publishing) error
 	Close() error
 }
@@ -110,7 +109,7 @@ func (r *responder) Close() error {
 	return nil
 }
 
-func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, responseQueue string, err error) error {
+func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
 	internalErrorTaskResult := solution.Result{
 		StatusCode:  solution.InternalError,
 		Message:     err.Error(),
@@ -119,24 +118,80 @@ func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, resp
 
 	payload, err := json.Marshal(internalErrorTaskResult)
 	if err != nil {
-		return err
+		r.logger.Errorf("Failed to marshal error payload: %s", err)
+		return
 	}
 
-	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
+	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
 }
 
 func (r *responder) PublishErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
-	errorPayload := map[string]string{"error": err.Error()}
-	payload, jsonErr := json.Marshal(errorPayload)
+	payload, jsonErr := json.Marshal(messages.ResponseErrorPayload{
+		Error: err.Error(),
+	})
 	if jsonErr != nil {
 		r.logger.Errorf("Failed to marshal error payload: %s", jsonErr)
 		return
 	}
 
+	r.publishRespondMessage(messageType, messageID, false, responseQueue, payload)
+}
+
+func (r *responder) PublishPayloadTaskRespond(
+	messageType string,
+	messageID string,
+	responseQueue string,
+	taskResult solution.Result,
+) {
+	payload, err := json.Marshal(taskResult)
+	if err != nil {
+		r.logger.Errorf("Failed to marshal task result payload: %s", err)
+		return
+	}
+
+	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+}
+
+func (r *responder) PublishSuccessHandshakeRespond(
+	messageType string,
+	messageID string,
+	responseQueue string,
+	languageSpecs messages.ResponseHandshakePayload,
+) {
+	payload, err := json.Marshal(languageSpecs)
+	if err != nil {
+		r.logger.Errorf("Failed to marshal handshake payload: %s", err)
+		return
+	}
+
+	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+}
+
+func (r *responder) PublishSuccessStatusRespond(
+	messageType string,
+	messageID string,
+	responseQueue string,
+	status messages.ResponseWorkerStatusPayload,
+) {
+	payload, err := json.Marshal(status)
+	if err != nil {
+		r.logger.Errorf("Failed to marshal status payload: %s", err)
+		return
+	}
+
+	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+}
+
+func (r *responder) publishRespondMessage(
+	messageType, messageID string,
+	ok bool,
+	responseQueue string,
+	payload []byte,
+) {
 	queueMessage := messages.ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
-		Ok:        false,
+		Ok:        ok,
 		Payload:   payload,
 	}
 
@@ -146,84 +201,15 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID, response
 		return
 	}
 
-	if pubErr := r.Publish(responseQueue, amqp.Publishing{
-		ContentType:   "application/json",
-		CorrelationId: messageID,
-		Body:          responseJSON,
-	}); pubErr != nil {
-		r.logger.Errorf("Failed to publish error message: %s", pubErr)
-		return
-	}
-
-	r.logger.Infof("Published error message to response queue: %s", messageID)
-}
-
-func (r *responder) PublishPayloadTaskRespond(
-	messageType string,
-	messageID string,
-	responseQueue string,
-	taskResult solution.Result,
-) error {
-	payload, err := json.Marshal(taskResult)
-	if err != nil {
-		return err
-	}
-
-	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
-}
-
-func (r *responder) PublishSuccessHandshakeRespond(
-	messageType string,
-	messageID string,
-	responseQueue string,
-	languageSpecs []languages.LanguageSpec,
-) error {
-	// Wrap languages array in the expected HandShakeResponsePayload format
-	handshakePayload := struct {
-		Languages []languages.LanguageSpec `json:"languages"`
-	}{
-		Languages: languageSpecs,
-	}
-
-	payload, err := json.Marshal(handshakePayload)
-	if err != nil {
-		return err
-	}
-
-	r.logger.Info("payload: ", string(payload))
-
-	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
-}
-
-func (r *responder) PublishSuccessStatusRespond(
-	messageType string,
-	messageID string,
-	responseQueue string,
-	status messages.ResponseWorkerStatusPayload,
-) error {
-	payload, err := json.Marshal(status)
-	if err != nil {
-		return err
-	}
-
-	return r.publishRespondMessage(messageType, messageID, responseQueue, payload)
-}
-
-func (r *responder) publishRespondMessage(messageType, messageID, responseQueue string, payload []byte) error {
-	queueMessage := messages.ResponseQueueMessage{
-		Type:      messageType,
-		MessageID: messageID,
-		Ok:        true,
-		Payload:   payload,
-	}
-
-	responseJSON, jsonErr := json.Marshal(queueMessage)
-	if jsonErr != nil {
-		return jsonErr
-	}
-
-	return r.Publish(responseQueue, amqp.Publishing{
+	err := r.Publish(responseQueue, amqp.Publishing{
 		ContentType: "application/json",
 		Body:        responseJSON,
 	})
+
+	if err != nil {
+		r.logger.Errorf("Failed to publish response message: %s", err)
+		return
+	}
+
+	r.logger.Infof("Published response message to response queue: %s", messageID)
 }

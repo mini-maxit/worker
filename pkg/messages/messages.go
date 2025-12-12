@@ -31,6 +31,20 @@ type ResponseWorkerStatusPayload struct {
 	WorkerStatus []WorkerStatus `json:"worker_status"`
 }
 
+type LanguageSpec struct {
+	LanguageName string   `json:"name"`
+	Versions     []string `json:"versions"`
+	Extension    string   `json:"extension"`
+}
+
+type ResponseHandshakePayload struct {
+	Languages []LanguageSpec `json:"languages"`
+}
+
+type ResponseErrorPayload struct {
+	Error string `json:"error"`
+}
+
 type FileLocation struct {
 	ServerType string `json:"server_type"` // e.g., "s3", "local". FOR NOW INGORE
 	Bucket     string `json:"bucket"`      // e.g., "submissions", "tasks", "results"

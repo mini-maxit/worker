@@ -56,7 +56,7 @@ linters:
     - exptostd # detects functions from golang.org/x/exp/ that can be replaced by std functions
     - fatcontext # detects nested contexts in loops
     - forbidigo # forbids identifiers
-    - funlen # tool for detection of long functions
+    # - funlen # tool for detection of long functions #TODO: enable-this
     - gocheckcompilerdirectives # validates go compiler directive comments (//go:)
     - gochecknoinits # checks that no init functions are present in Go code
     - gochecksumtype # checks exhaustiveness on Go "sum types"

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/pkg/constants"
-	"github.com/mini-maxit/worker/pkg/errors"
+	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 )
@@ -58,6 +59,7 @@ func NewExecutor(dCli docker.DockerClient, timeoutSec ...int) Executor {
 func (d *executor) ExecuteCommand(
 	cfg CommandConfig,
 ) error {
+	d.logger.Infof("Starting execution for message ID %s", cfg.MessageID)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(d.maxRunTimeSec)*time.Second)
 	defer cancel()
 
@@ -80,13 +82,11 @@ func (d *executor) ExecuteCommand(
 	hostCfg := d.buildHostConfig()
 
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
-		d.logger.Errorf("Failed to prepare image %s: %s [MsgID: %s]", dockerImage, err, cfg.MessageID)
 		return err
 	}
 
 	containerID, err := d.docker.CreateContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
 	if err != nil {
-		d.logger.Errorf("Failed to create container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
@@ -94,9 +94,7 @@ func (d *executor) ExecuteCommand(
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cleanupCancel()
-		if removeErr := d.docker.ContainerRemove(cleanupCtx, containerID); removeErr != nil {
-			d.logger.Errorf("Failed to remove container %s: %s [MsgID: %s]", containerID, removeErr, cfg.MessageID)
-		}
+		d.docker.ContainerRemove(cleanupCtx, containerID)
 	}()
 
 	d.logger.Infof("Copying package to container %s [MsgID: %s]", containerID, cfg.MessageID)
@@ -109,18 +107,15 @@ func (d *executor) ExecuteCommand(
 		excludes,
 	)
 	if err != nil {
-		d.logger.Errorf("Failed to copy package to container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
 	if err := d.docker.StartContainer(ctx, containerID); err != nil {
-		d.logger.Errorf("Failed to start container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
-	waitErr := d.waitForContainer(ctx, containerID, cfg.MessageID, d.maxRunTimeSec)
+	waitErr := d.waitForContainer(ctx, containerID)
 	if waitErr != nil {
-		d.logger.Errorf("Error while waiting for container: %s [MsgID: %s]", waitErr, cfg.MessageID)
 		return waitErr
 	}
 
@@ -134,10 +129,10 @@ func (d *executor) ExecuteCommand(
 		cfg.DirConfig.TmpDirPath,
 	)
 	if err != nil {
-		d.logger.Errorf("Failed to copy results from container: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
 	}
 
+	d.logger.Infof("Execution completed successfully for message ID %s", cfg.MessageID)
 	return nil
 }
 
@@ -190,7 +185,6 @@ func (d *executor) buildContainerConfig(
 	env []string,
 ) *container.Config {
 	stopTimeout := int(2)
-	d.logger.Infof("Workspace directory in container: %s", userPackageDirPath)
 	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
 	runCmd := constants.DockerTestScript + " ./" + bin
 
@@ -221,35 +215,21 @@ func (d *executor) buildHostConfig() *container.HostConfig {
 }
 
 func (d *executor) waitForContainer(
-	ctx context.Context, containerID, messageID string,
-	waitTimeoutSec int,
+	ctx context.Context, containerID string,
 ) error {
-	timeout := time.Duration(waitTimeoutSec) * time.Second
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	statusCh, errCh := d.docker.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
-	var exitCode int
-	select {
-	case err := <-errCh:
-		d.logger.Errorf("Wait error: %s [MsgID: %s]", err, messageID)
-		return err
-	case status := <-statusCh:
-		exitCode = int(status.StatusCode)
-	case <-timer.C:
-		d.logger.Errorf("Container runtime exceeded %d seconds, killing... [MsgID: %s]",
-			constants.ContainerMaxRunTime, messageID)
-		err := d.docker.ContainerKill(ctx, containerID, "SIGKILL")
-		if err != nil {
-			d.logger.Errorf("Failed to kill container: %s [MsgID: %s]", err, messageID)
+	timeout := time.Duration(d.maxRunTimeSec) * time.Second
+	exitCode, err := d.docker.WaitContainer(ctx, containerID, timeout)
+	if err != nil {
+		if errors.Is(err, customErr.ErrContainerTimeout) {
+			d.docker.ContainerKill(ctx, containerID, "SIGKILL")
+			return customErr.ErrContainerTimeout
 		}
-		return errors.ErrContainerTimeout
+		return err
 	}
 
 	if exitCode != 0 {
-		d.logger.Errorf("Container exited with non-zero code %d [MsgID: %s]", exitCode, messageID)
-		return errors.ErrContainerFailed
+		return customErr.ErrContainerFailed
 	}
 
-	d.logger.Infof("Finished container %s [MsgID: %s]", containerID, messageID)
 	return nil
 }

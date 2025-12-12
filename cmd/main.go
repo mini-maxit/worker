@@ -56,7 +56,6 @@ func main() {
 	scheduler := scheduler.NewScheduler(config.MaxWorkers, compiler, packager, executor, verifier, responder)
 	consumer := consumer.NewConsumer(workerChannel, config.ConsumeQueueName, scheduler, responder)
 
-	logger.Info("Listening for messages")
 	// Start listening for messages
 	consumer.Listen()
 }

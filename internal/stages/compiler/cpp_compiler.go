@@ -32,25 +32,21 @@ func (e *CppCompiler) Compile(sourceFilePath, execFilePath, compErrFilePath, mes
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	e.logger.Infof("Running command [MsgID: %s]", messageID)
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
 		// Save stderr to a file
 		e.logger.Errorf("Error during compilation. %s [MsgID: %s]", cmdErr.Error(), messageID)
-		e.logger.Infof("Creating stderr file [MsgID: %s]", messageID)
 		file, err := os.Create(compErrFilePath)
 		if err != nil {
 			e.logger.Errorf("Could not create stderr file. %s [MsgID: %s]", err.Error(), messageID)
 			return err
 		}
 
-		e.logger.Infof("Writing error to stderr file [MsgID: %s]", messageID)
 		_, err = file.Write(stderr.Bytes())
 		if err != nil {
 			e.logger.Errorf("Error writing to file. %s [MsgID: %s]", err.Error(), messageID)
 			return err
 		}
-		e.logger.Infof("Closing stderr file [MsgID: %s]", messageID)
 		err = file.Close()
 		if err != nil {
 			e.logger.Errorf("Error closing file. %s [MsgID: %s]", err.Error(), messageID)

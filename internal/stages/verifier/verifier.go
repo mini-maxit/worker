@@ -94,6 +94,7 @@ func (v *verifier) EvaluateAllTestCases(
 	testCases []messages.TestCase,
 	messageID string,
 ) solution.Result {
+	v.logger.Infof("Starting evaluation of test cases [MsgID: %s]", messageID)
 	numberOfTest := len(testCases)
 	testResults := make([]solution.TestResult, numberOfTest)
 	solutionStatuses := make([]solution.ResultStatus, numberOfTest)
@@ -140,6 +141,8 @@ func (v *verifier) EvaluateAllTestCases(
 	// Construct final message summarizing the results
 
 	finalMessage, finalStatus := v.constructFinalMessage(solutionStatuses, solutionMessages)
+
+	v.logger.Infof("Evaluation completed [MsgID: %s]: %s", messageID, finalMessage)
 
 	return solution.Result{
 		StatusCode:  finalStatus,
@@ -229,6 +232,7 @@ func (v *verifier) evaluateTestCase(
 	case constants.ExitCodeSuccess:
 		passed, err := v.compareOutput(outputPath, expectedOutputPath, diffPath, errorPath)
 		if err != nil {
+			v.logger.Errorf("Error comparing output for test case %d: %s", testCaseIdx, err.Error())
 			return solution.TestResult{
 				Passed:        false,
 				ExecutionTime: execResult.ExecTime,

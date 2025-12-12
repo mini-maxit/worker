@@ -130,8 +130,6 @@ func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) 
 }
 
 func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo string) {
-	c.logger.Infof("Processing task message")
-
 	var task *messages.TaskQueueMessage
 	if err := json.Unmarshal(queueMessage.Payload, &task); err != nil {
 		c.logger.Errorf("Failed to unmarshal task message: %s", err)
@@ -148,9 +146,8 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 		return
 	}
 
-	c.logger.Errorf("Failed to process task message: %s", err)
-
 	if e.Is(err, errors.ErrFailedToGetFreeWorker) {
+		c.logger.Warnf("Requeuing task %s due to no available workers", queueMessage.MessageID)
 		requeueErr := c.requeueTaskWithPriority2(queueMessage)
 		if requeueErr != nil {
 			c.logger.Errorf("Failed to requeue task with higher priority: %s", requeueErr)
@@ -166,23 +163,13 @@ func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo
 }
 
 func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, replyTo string) {
-	c.logger.Infof("Processing status message")
 	status := c.scheduler.GetWorkersStatus()
 
-	err := c.responder.PublishSuccessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
-	if err != nil {
-		c.logger.Errorf("Failed to publish status message: %s", err)
-		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)
-	}
+	c.responder.PublishSuccessStatusRespond(queueMessage.Type, queueMessage.MessageID, replyTo, status)
 }
 
 func (c *consumer) handleHandshakeMessage(queueMessage messages.QueueMessage, replyTo string) {
-	c.logger.Infof("Processing handshake message")
 	languages := languages.GetSupportedLanguagesWithVersions()
 
-	err := c.responder.PublishSuccessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
-	if err != nil {
-		c.logger.Errorf("Failed to publish supported languages: %s", err)
-		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, replyTo, err)
-	}
+	c.responder.PublishSuccessHandshakeRespond(queueMessage.Type, queueMessage.MessageID, replyTo, languages)
 }

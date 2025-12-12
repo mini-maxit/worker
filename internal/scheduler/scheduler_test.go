@@ -91,7 +91,7 @@ func TestProcessTask_SuccessAndMarkIdle(t *testing.T) {
 	// When a free worker is found, scheduler should call UpdateStatus(Busy)
 	w.EXPECT().UpdateStatus(constants.WorkerStatusBusy).Times(1)
 
-	w.EXPECT().GetId().Return(0).Times(2)
+	w.EXPECT().GetId().Return(0).Times(1)
 
 	// Expect ProcessTask to be invoked; signal when called
 	done := make(chan struct{}, 1)

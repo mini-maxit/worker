@@ -16,7 +16,6 @@ import (
 	"github.com/mini-maxit/worker/internal/rabbitmq/consumer"
 	"github.com/mini-maxit/worker/pkg/constants"
 	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
-	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 )
 
@@ -99,7 +98,7 @@ func TestProcessMessage(t *testing.T) {
 		mockScheduler.EXPECT().GetWorkersStatus().Return(status).Times(1)
 		mockResponder.EXPECT().PublishSuccessStatusRespond(
 			constants.QueueMessageTypeStatus, "status-id", "reply", status,
-		).Return(nil).Times(1)
+		).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
 		c.ProcessMessage(msg)
@@ -109,14 +108,17 @@ func TestProcessMessage(t *testing.T) {
 		qm := messages.QueueMessage{Type: constants.QueueMessageTypeHandshake, MessageID: "hs-id", Payload: nil}
 		b, _ := json.Marshal(qm)
 
-		// Expect responder to be called with a slice of LanguageSpec. We can't directly Eq the slice, so inspect in Do.
+		// Expect responder to be called with ResponseHandshakePayload. Inspect in Do.
 		mockResponder.EXPECT().PublishSuccessHandshakeRespond(
-			constants.QueueMessageTypeHandshake, "hs-id", "reply", gomock.AssignableToTypeOf([]languages.LanguageSpec{}),
-		).Do(func(_ string, _ string, _ string, langs []languages.LanguageSpec) {
-			if len(langs) == 0 {
+			constants.QueueMessageTypeHandshake,
+			"hs-id",
+			"reply",
+			gomock.AssignableToTypeOf(messages.ResponseHandshakePayload{}),
+		).Do(func(_ string, _ string, _ string, langs messages.ResponseHandshakePayload) {
+			if len(langs.Languages) == 0 {
 				t.Fatalf("expected at least one language in handshake payload")
 			}
-		}).Return(nil).Times(1)
+		}).Times(1)
 
 		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
 		c.ProcessMessage(msg)
