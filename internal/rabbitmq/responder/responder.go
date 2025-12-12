@@ -211,5 +211,5 @@ func (r *responder) publishRespondMessage(
 		return
 	}
 
-	r.logger.Infof("Published response message to response queue: %s", messageID)
+	r.logger.Infof("Published response message [MsgID: %s]", messageID)
 }

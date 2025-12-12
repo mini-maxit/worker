@@ -88,13 +88,13 @@ func (c *consumer) ProcessMessage(msg amqp.Delivery) {
 
 	switch queueMessage.Type {
 	case constants.QueueMessageTypeTask:
-		c.logger.Infof("Received task message: %s", queueMessage.MessageID)
+		c.logger.Infof("Received task message [MsgID: %s]", queueMessage.MessageID)
 		c.handleTaskMessage(queueMessage, msg.ReplyTo)
 	case constants.QueueMessageTypeStatus:
-		c.logger.Infof("Received status message: %s", queueMessage.MessageID)
+		c.logger.Infof("Received status message [MsgID: %s]", queueMessage.MessageID)
 		c.handleStatusMessage(queueMessage, msg.ReplyTo)
 	case constants.QueueMessageTypeHandshake:
-		c.logger.Infof("Received handshake message: %s", queueMessage.MessageID)
+		c.logger.Infof("Received handshake message [MsgID: %s]", queueMessage.MessageID)
 		c.handleHandshakeMessage(queueMessage, msg.ReplyTo)
 	default:
 		c.logger.Errorf("Unknown message type: %s", queueMessage.Type)

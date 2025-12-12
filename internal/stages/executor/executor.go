@@ -59,7 +59,7 @@ func NewExecutor(dCli docker.DockerClient, timeoutSec ...int) Executor {
 func (d *executor) ExecuteCommand(
 	cfg CommandConfig,
 ) error {
-	d.logger.Infof("Starting execution for message ID %s", cfg.MessageID)
+	d.logger.Infof("Starting execution  [MsgID: %s]", cfg.MessageID)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(d.maxRunTimeSec)*time.Second)
 	defer cancel()
 

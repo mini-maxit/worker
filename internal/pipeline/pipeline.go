@@ -205,7 +205,6 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		ws.responseQueue,
 		solutionResult,
 	)
-
 	ws.logger.Infof("Finished processing task [MsgID: %s]", messageID)
 }
 

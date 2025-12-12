@@ -62,7 +62,7 @@ func (p *packager) PrepareSolutionPackage(
 		return nil, errors.New("storage service is not initialized")
 	}
 
-	p.logger.Infof("Preparing solution package for message ID: %s", msgID)
+	p.logger.Infof("Preparing solution package [MsgID: %s]", msgID)
 
 	basePath := filepath.Join(constants.TmpDirPath, msgID)
 
@@ -115,7 +115,7 @@ func (p *packager) PrepareSolutionPackage(
 		UserExecResultDirPath: filepath.Join(basePath, constants.UserExecResultDirName),
 	}
 
-	p.logger.Infof("Prepared solution package at %s", basePath)
+	p.logger.Infof("Prepared solution [MsgID: %s]", msgID)
 	return cfg, nil
 }
 
