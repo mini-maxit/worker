@@ -30,7 +30,7 @@ func setupSuccessfulPipelineMocks(
 		UserExecFilePath:   "exec",
 		CompileErrFilePath: "compile.err",
 	}
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(dir, nil)
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
 	mockCompiler.EXPECT().
 		CompileSolutionIfNeeded(
 			gomock.Any(), gomock.Any(), gomock.Any(),
@@ -92,7 +92,7 @@ func TestProcessTask_CompilationErrorFlow(t *testing.T) {
 		UserExecFilePath:   "exec",
 		CompileErrFilePath: "compile.err",
 	}
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(dir, nil)
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
 
 	// Simulate compilation failure
 	mockCompiler.EXPECT().
@@ -131,7 +131,11 @@ func TestProcessTask_PreparePackageFails(t *testing.T) {
 	mockVerifier := mocks.NewMockVerifier(ctrl)
 	mockResponder := mocks.NewMockResponder(ctrl)
 
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(nil, errors.New("download failed"))
+	mockPackager.EXPECT().PrepareSolutionPackage(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil, errors.New("download failed"))
 	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(3, mockCompiler, mockPackager, mockExecutor, mockVerifier, mockResponder)
@@ -155,7 +159,7 @@ func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
 		UserExecFilePath:   "exec",
 		CompileErrFilePath: "compile.err",
 	}
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(dir, nil)
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
 	mockCompiler.EXPECT().
 		CompileSolutionIfNeeded(
 			gomock.Any(), gomock.Any(), gomock.Any(),
@@ -194,7 +198,7 @@ func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
 		UserExecFilePath:   "exec",
 		CompileErrFilePath: "compile.err",
 	}
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).Return(dir, nil)
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
 	mockCompiler.EXPECT().
 		CompileSolutionIfNeeded(
 			gomock.Any(), gomock.Any(), gomock.Any(),
@@ -297,8 +301,8 @@ func TestGetProcessingMessageID(t *testing.T) {
 		CompileErrFilePath: "compile.err",
 	}
 
-	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ interface{}, _ interface{}) (*packager.TaskDirConfig, error) {
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ interface{}, _ interface{}, _ interface{}) (*packager.TaskDirConfig, error) {
 			// signal that PrepareSolutionPackage was invoked (worker should have set processingMessageID)
 			close(started)
 			// wait until test allows continuation

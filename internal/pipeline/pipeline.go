@@ -119,7 +119,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		return
 	}
 
-	dc, err := ws.packager.PrepareSolutionPackage(task, messageID)
+	dc, err := ws.packager.PrepareSolutionPackage(task, langType, messageID)
 	if err != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
