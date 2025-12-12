@@ -219,9 +219,9 @@ func (p *packager) SendSolutionPackage(
 	dirConfig *TaskDirConfig,
 	testCases []messages.TestCase,
 	hasCompilationErr bool,
-	msgId string,
+	msgID string,
 ) error {
-	p.logger.Infof("Sending solution package for message ID: %s", msgId)
+	p.logger.Infof("Sending solution package for message ID: %s", msgID)
 	if hasCompilationErr {
 		err := p.uploadNonEmptyFile(dirConfig.CompileErrFilePath, testCases[0].StdErrResult)
 		if err != nil {
@@ -263,7 +263,7 @@ func (p *packager) SendSolutionPackage(
 		}
 	}
 
-	p.logger.Infof("Successfully sent solution package for message ID: %s", msgId)
+	p.logger.Infof("Successfully sent solution package for message ID: %s", msgID)
 	return nil
 }
 

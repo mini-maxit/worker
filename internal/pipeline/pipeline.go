@@ -211,7 +211,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 func (ws *worker) publishCompilationError(dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
 	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, ws.state.ProcessingMessageID)
 	if sendErr != nil {
-		ws.responder.PublishErrorToResponseQueue(
+		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			ws.state.ProcessingMessageID,
 			ws.responseQueue,
