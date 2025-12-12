@@ -70,6 +70,13 @@ func (p *packager) PrepareSolutionPackage(
 
 	p.logger.Infof("Preparing solution package [MsgID: %s]", msgID)
 
+	// Validate the submission filename to prevent shell injection attacks
+	submissionBaseName := filepath.Base(taskQueueMessage.SubmissionFile.Path)
+	if err := utils.ValidateFilename(submissionBaseName); err != nil {
+		p.logger.Errorf("Invalid submission filename: %s [MsgID: %s]", err, msgID)
+		return nil, fmt.Errorf("invalid submission filename: %w", err)
+	}
+
 	basePath := filepath.Join(constants.TmpDirPath, msgID)
 
 	// create directories.

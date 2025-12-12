@@ -6,6 +6,7 @@ import (
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/utils"
 )
 
 type LanguageType int
@@ -61,6 +62,10 @@ func (lt LanguageType) IsScriptingLanguage() bool {
 }
 
 func (lt LanguageType) GetRunCommand(solutionFileName string) (string, error) {
+	if err := utils.ValidateFilename(solutionFileName); err != nil {
+		return "", err
+	}
+
 	switch lt {
 	case Python:
 		return "python3 ./" + solutionFileName, nil

@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 )
@@ -98,6 +99,35 @@ func Contains[V string](array []V, value V) bool {
 	}
 
 	return false
+}
+
+// ValidateFilename checks if a filename contains only safe characters.
+// Returns an error if the filename contains shell metacharacters or path separators
+// that could be used for command injection or directory traversal attacks.
+// Allowed characters: alphanumeric (a-z, A-Z, 0-9), dots (.), underscores (_), and hyphens (-).
+func ValidateFilename(filename string) error {
+	if filename == "" {
+		return errors.New("filename cannot be empty")
+	}
+
+	// Check for path separators
+	if strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return errors.New("filename cannot contain path separators")
+	}
+
+	// Check for dangerous patterns
+	if filename == "." || filename == ".." {
+		return errors.New("filename cannot be a dot or double-dot")
+	}
+
+	// Only allow alphanumeric characters, dots, underscores, and hyphens
+	// This prevents shell metacharacters like: ; & | $ ` ( ) < > [ ] { } ' " \ * ? # ~ ! space
+	validPattern := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	if !validPattern.MatchString(filename) {
+		return errors.New("filename contains invalid characters")
+	}
+
+	return nil
 }
 
 // attempts to remove dir and optionaly its content. Can ignore error, for example if folder does not exist.
