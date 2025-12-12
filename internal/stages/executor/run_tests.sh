@@ -92,12 +92,12 @@ for idx in "${!inputs[@]}"; do
 
   # run in subshell to isolate failure
   (
-    start_ns=$(date +%s%N)
-
     # temp file to store peak memory from /usr/bin/time
     peak_mem_file=$(mktemp)
 
     tlimit_s=$(awk "BEGIN {print ${tlimit_ms}/1000}")
+
+    start_ns=$(date +%s%N)
 
     # Run the command with timeout and track peak memory usage
     hard_kb=$(( mlimit_kb + mlimit_kb / 10 ))
@@ -105,6 +105,8 @@ for idx in "${!inputs[@]}"; do
       /usr/bin/time -f "%M" -o "${peak_mem_file}" \
       bash -c "ulimit -S -v ${mlimit_kb} && ulimit -H -v ${hard_kb} && ${RUN_CMD}" < "$infile" \
       > "${out}" 2> "${err}"
+
+    end_ns=$(date +%s%N)
     code=$?
 
     if [[ ! -s "${peak_mem_file}" ]]; then
@@ -136,7 +138,6 @@ for idx in "${!inputs[@]}"; do
       code=134
     fi
 
-    end_ns=$(date +%s%N)
     duration_ns=$((end_ns - start_ns))
     duration_sec=$(awk "BEGIN {printf \"%.6f\", ${duration_ns}/1000000000}")
 
