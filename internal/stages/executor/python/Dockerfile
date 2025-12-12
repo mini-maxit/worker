@@ -12,7 +12,7 @@ FROM python${PYTHON_VERSION//./} AS runtime
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates time\
+    ca-certificates time \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY run_tests.sh /usr/local/bin/run_tests.sh
