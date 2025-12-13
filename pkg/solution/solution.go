@@ -26,8 +26,9 @@ const (
 	TimeLimitExceeded
 	// Means that the solution exceeded the memory limit.
 	MemoryLimitExceeded
-	// Means that some runtime error occurred.
-	RuntimeError
+	// Means that the solution exited with a non-zero exit code
+	// that is different than memory limit exceeded or time limit exceeded.
+	NonZeroExitCode
 )
 
 type Result struct {
