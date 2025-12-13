@@ -10,7 +10,7 @@ const (
 // SolutionResult messages.
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
-	SolutionNonZeroExitCode            = "solution returned non-zero exit code"
+	SolutionMessageNonZeroExitCode     = "solution returned non-zero exit code"
 	SolutionMessageTimeout             = "time limit exceeded"
 	SolutionMessageMemoryLimitExceeded = "memory limit exceeded"
 	SolutionMessageOutputDifference    = "output difference"
