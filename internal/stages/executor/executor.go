@@ -24,6 +24,8 @@ import (
 	"github.com/mini-maxit/worker/pkg/messages"
 )
 
+var containerNameRegex = regexp.MustCompile("[^a-zA-Z0-9_.-]")
+
 type CommandConfig struct {
 	MessageID       string
 	DirConfig       *packager.TaskDirConfig
@@ -159,8 +161,7 @@ func (d *executor) waitForContainer(
 }
 
 func SanitizeContainerName(raw string) string {
-	re := regexp.MustCompile("[^a-zA-Z0-9_.-]")
-	cleaned := re.ReplaceAllString(raw, "-")
+	cleaned := containerNameRegex.ReplaceAllString(raw, "-")
 	if cleaned == "" {
 		cleaned = "untitled"
 	}
