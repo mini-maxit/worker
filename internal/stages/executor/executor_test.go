@@ -27,6 +27,30 @@ func makeDirConfig() *packager.TaskDirConfig {
 	}
 }
 
+func TestSanitizeContainerName(t *testing.T) {
+	cases := []struct {
+		in  string
+		out string
+	}{
+		{"abc123", "submission-abc123"},
+		{"A.B-C_D", "submission-A.B-C_D"},
+		{"123", "submission-123"},
+		{"000123", "submission-000123"},
+		{"42", "submission-42"},
+		{"9", "submission-9"},
+		{"", "submission-untitled"},
+		{"bad name!", "submission-bad-name-"},
+		{"..weird..name..", "submission-..weird..name.."},
+	}
+
+	for _, c := range cases {
+		got := exec.SanitizeContainerName(c.in)
+		if got != c.out {
+			t.Fatalf("sanitizeContainerName(%q) = %q, want %q", c.in, got, c.out)
+		}
+	}
+}
+
 // setupMockExpectations sets up common mock expectations for testing exclude functionality.
 func setupMockExpectations(
 	mockDocker *mocks.MockDockerClient,
@@ -207,6 +231,113 @@ func TestExecuteCommand_CreateContainerFails(t *testing.T) {
 
 	if err := ex.ExecuteCommand(cfg); err == nil {
 		t.Fatalf("expected create container error, got nil")
+	}
+}
+
+func TestExecuteCommand_CopyToContainerFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDocker := mocks.NewMockDockerClient(ctrl)
+
+	gomock.InOrder(
+		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
+		mockDocker.EXPECT().CreateContainer(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return("cid-copyto-fail", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid-copyto-fail", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(errors.New("copy-to-failed")).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-copyto-fail").Times(1),
+	)
+
+	ex := exec.NewExecutor(mockDocker)
+
+	cfg := exec.CommandConfig{
+		MessageID:       "msg-copyto-fail",
+		DirConfig:       makeDirConfig(),
+		LanguageType:    languages.CPP,
+		LanguageVersion: "17",
+		TestCases:       makeTestCases(),
+	}
+
+	err := ex.ExecuteCommand(cfg)
+	if err == nil {
+		t.Fatalf("expected error from CopyToContainerFiltered, got nil")
+	}
+}
+
+func TestExecuteCommand_StartContainerFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDocker := mocks.NewMockDockerClient(ctrl)
+
+	gomock.InOrder(
+		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
+		mockDocker.EXPECT().CreateContainer(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return("cid-start-fail", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid-start-fail", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-start-fail").Return(errors.New("start-failed")).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-start-fail").Times(1),
+	)
+
+	ex := exec.NewExecutor(mockDocker)
+
+	cfg := exec.CommandConfig{
+		MessageID:       "msg-start-fail",
+		DirConfig:       makeDirConfig(),
+		LanguageType:    languages.CPP,
+		LanguageVersion: "17",
+		TestCases:       makeTestCases(),
+	}
+
+	err := ex.ExecuteCommand(cfg)
+	if err == nil {
+		t.Fatalf("expected error from StartContainer, got nil")
+	}
+}
+
+func TestExecuteCommand_CopyFromContainerFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDocker := mocks.NewMockDockerClient(ctrl)
+
+	gomock.InOrder(
+		mockDocker.EXPECT().EnsureImage(gomock.Any(), gomock.Any()).Return(nil).Times(1),
+		mockDocker.EXPECT().CreateContainer(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return("cid-copyfrom-fail", nil).Times(1),
+		mockDocker.EXPECT().CopyToContainerFiltered(
+			gomock.Any(), "cid-copyfrom-fail", gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(nil).Times(1),
+		mockDocker.EXPECT().StartContainer(gomock.Any(), "cid-copyfrom-fail").Return(nil).Times(1),
+		mockDocker.EXPECT().WaitContainer(
+			gomock.Any(), "cid-copyfrom-fail", gomock.Any(),
+		).Return(int64(0), nil).Times(1),
+		mockDocker.EXPECT().CopyFromContainer(
+			gomock.Any(), "cid-copyfrom-fail", gomock.Any(), gomock.Any(),
+		).Return(errors.New("copy-from-failed")).Times(1),
+		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-copyfrom-fail").Times(1),
+	)
+
+	ex := exec.NewExecutor(mockDocker)
+
+	cfg := exec.CommandConfig{
+		MessageID:       "msg-copyfrom-fail",
+		DirConfig:       makeDirConfig(),
+		LanguageType:    languages.CPP,
+		LanguageVersion: "17",
+		TestCases:       makeTestCases(),
+	}
+
+	err := ex.ExecuteCommand(cfg)
+	if err == nil {
+		t.Fatalf("expected error from CopyFromContainer, got nil")
 	}
 }
 
