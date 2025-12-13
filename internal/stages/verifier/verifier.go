@@ -292,8 +292,8 @@ func (v *verifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			PeakMem:       execResult.PeakMem,
 			StatusCode:    solution.NonZeroExitCode,
-			ErrorMessage:  fmt.Sprintf(constants.TestCaseNonZeroExitCode, execResult.ExitCode),
+			ErrorMessage:  fmt.Sprintf(constants.TestCaseMessageNonZeroExitCode, execResult.ExitCode),
 			Order:         testCaseIdx,
-		}, solution.TestFailed, constants.SolutionNonZeroExitCode
+		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode
 	}
 }

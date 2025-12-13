@@ -141,7 +141,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	if res.TestResults[0].StatusCode != solution.NonZeroExitCode {
 		t.Fatalf("expected runtime error status, got: %v", res.TestResults[0].StatusCode)
 	}
-	expectedMsg = "1. " + constants.SolutionNonZeroExitCode + "."
+	expectedMsg = "1. " + constants.SolutionMessageNonZeroExitCode + "."
 	if res.Message != expectedMsg {
 		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
 	}
@@ -310,7 +310,7 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 	msgs := []string{
 		constants.SolutionMessageSuccess,
 		constants.SolutionMessageOutputDifference,
-		constants.SolutionNonZeroExitCode,
+		constants.SolutionMessageNonZeroExitCode,
 		constants.SolutionMessageMemoryLimitExceeded,
 		constants.SolutionMessageTimeout,
 	}
