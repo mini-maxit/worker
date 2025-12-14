@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 
@@ -22,6 +24,8 @@ import (
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/utils"
 )
+
+var containerNameRegex = regexp.MustCompile("[^a-zA-Z0-9_.-]")
 
 type CommandConfig struct {
 	MessageID       string
@@ -63,7 +67,7 @@ func (d *executor) ExecuteCommand(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(d.maxRunTimeSec)*time.Second)
 	defer cancel()
 
-	env, err := d.buildEnvironmentVariables(cfg)
+	env, err := buildEnvironmentVariables(cfg)
 	if err != nil {
 		d.logger.Errorf("Failed to build environment variables: %s [MsgID: %s]", err, cfg.MessageID)
 		return err
@@ -76,19 +80,20 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	containerCfg := d.buildContainerConfig(
+	containerCfg := buildContainerConfig(
 		cfg.DirConfig.PackageDirPath,
 		dockerImage,
 		env,
 	)
 
-	hostCfg := d.buildHostConfig()
+	hostCfg := buildHostConfig()
 
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
 		return err
 	}
 
-	containerID, err := d.docker.CreateContainer(ctx, containerCfg, hostCfg, cfg.MessageID)
+	containerName := SanitizeContainerName(cfg.MessageID)
+	containerID, err := d.docker.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
 		return err
 	}
@@ -139,7 +144,35 @@ func (d *executor) ExecuteCommand(
 	return nil
 }
 
-func (d *executor) buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
+func (d *executor) waitForContainer(
+	ctx context.Context, containerID string,
+) error {
+	timeout := time.Duration(d.maxRunTimeSec) * time.Second
+	exitCode, err := d.docker.WaitContainer(ctx, containerID, timeout)
+	if err != nil {
+		if errors.Is(err, customErr.ErrContainerTimeout) {
+			d.docker.ContainerKill(ctx, containerID, "SIGKILL")
+			return customErr.ErrContainerTimeout
+		}
+		return err
+	}
+
+	if exitCode != 0 {
+		return customErr.ErrContainerFailed
+	}
+
+	return nil
+}
+
+func SanitizeContainerName(raw string) string {
+	cleaned := containerNameRegex.ReplaceAllString(raw, "-")
+	if cleaned == "" {
+		cleaned = "untitled"
+	}
+	return "submission-" + cleaned
+}
+
+func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 	timeEnv := make([]string, len(cfg.TestCases))
 	memEnv := make([]string, len(cfg.TestCases))
 	for i, tc := range cfg.TestCases {
@@ -151,7 +184,6 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) ([]string, error
 	bin := filepath.Base(cfg.DirConfig.UserExecFilePath) // e.g. "solution" or "solution.py"
 	runCmd, err := cfg.LanguageType.GetRunCommand(bin)
 	if err != nil {
-		d.logger.Errorf("Failed to get run command for language %s: %s", cfg.LanguageType, err)
 		return nil, err
 	}
 
@@ -190,7 +222,7 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) ([]string, error
 	}, nil
 }
 
-func (d *executor) buildContainerConfig(
+func buildContainerConfig(
 	userPackageDirPath string,
 	dockerImage string,
 	env []string,
@@ -208,7 +240,7 @@ func (d *executor) buildContainerConfig(
 	}
 }
 
-func (d *executor) buildHostConfig() *container.HostConfig {
+func buildHostConfig() *container.HostConfig {
 	return &container.HostConfig{
 		AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
@@ -221,24 +253,4 @@ func (d *executor) buildHostConfig() *container.HostConfig {
 		CgroupnsMode: container.CgroupnsModePrivate,
 		IpcMode:      container.IpcMode("private"),
 	}
-}
-
-func (d *executor) waitForContainer(
-	ctx context.Context, containerID string,
-) error {
-	timeout := time.Duration(d.maxRunTimeSec) * time.Second
-	exitCode, err := d.docker.WaitContainer(ctx, containerID, timeout)
-	if err != nil {
-		if errors.Is(err, customErr.ErrContainerTimeout) {
-			d.docker.ContainerKill(ctx, containerID, "SIGKILL")
-			return customErr.ErrContainerTimeout
-		}
-		return err
-	}
-
-	if exitCode != 0 {
-		return customErr.ErrContainerFailed
-	}
-
-	return nil
 }
