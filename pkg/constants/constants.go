@@ -10,7 +10,7 @@ const (
 // SolutionResult messages.
 const (
 	SolutionMessageSuccess             = "solution executed successfully"
-	SolutionMessageRuntimeError        = "solution execution failed"
+	SolutionMessageNonZeroExitCode     = "solution returned non-zero exit code"
 	SolutionMessageTimeout             = "time limit exceeded"
 	SolutionMessageMemoryLimitExceeded = "memory limit exceeded"
 	SolutionMessageOutputDifference    = "output difference"
@@ -22,7 +22,7 @@ const (
 const (
 	TestCaseMessageTimeOut             = "Solution timed out after %d ms"
 	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d kb"
-	TestCaseMessageRuntimeError        = "Solution encountered a runtime error"
+	TestCaseMessageNonZeroExitCode     = "Solution exited with non-zero exit code %d"
 )
 
 const (
