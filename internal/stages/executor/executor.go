@@ -9,7 +9,6 @@ import (
 
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/docker/docker/api/types/container"
 
