@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"path/filepath"
-	"strings"
 
 	"github.com/docker/docker/api/types/container"
 
@@ -21,6 +20,7 @@ import (
 	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/utils"
 )
 
 type CommandConfig struct {
@@ -180,13 +180,13 @@ func (d *executor) buildEnvironmentVariables(cfg CommandConfig) ([]string, error
 	}
 
 	return []string{
-		"RUN_CMD=" + runCmd,
-		"TIME_LIMITS_MS=" + strings.Join(timeEnv, " "),
-		"MEM_LIMITS_KB=" + strings.Join(memEnv, " "),
-		"INPUT_FILES=" + strings.Join(inputFilePaths, " "),
-		"USER_OUTPUT_FILES=" + strings.Join(userOutputFilePaths, " "),
-		"USER_ERROR_FILES=" + strings.Join(userErrorFilePaths, " "),
-		"USER_EXEC_RESULT_FILES=" + strings.Join(userExecResultFilePaths, " "),
+		"RUN_CMD=" + utils.ShellQuote(runCmd),
+		"TIME_LIMITS_MS=" + utils.ShellQuoteSlice(timeEnv),
+		"MEM_LIMITS_KB=" + utils.ShellQuoteSlice(memEnv),
+		"INPUT_FILES=" + utils.ShellQuoteSlice(inputFilePaths),
+		"USER_OUTPUT_FILES=" + utils.ShellQuoteSlice(userOutputFilePaths),
+		"USER_ERROR_FILES=" + utils.ShellQuoteSlice(userErrorFilePaths),
+		"USER_EXEC_RESULT_FILES=" + utils.ShellQuoteSlice(userExecResultFilePaths),
 	}, nil
 }
 
@@ -202,7 +202,7 @@ func (d *executor) buildContainerConfig(
 		Cmd:         []string{"bash", "-lc", constants.DockerTestScript},
 		WorkingDir:  userPackageDirPath,
 		Env:         env,
-		User:        "runner",
+		User:        "0:0",
 		StopTimeout: &stopTimeout,
 		StopSignal:  "SIGKILL",
 	}

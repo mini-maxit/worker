@@ -7,6 +7,7 @@ toolchain go1.23.1
 require (
 	github.com/docker/docker v28.1.1+incompatible
 	github.com/joho/godotenv v1.5.1
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/rabbitmq/amqp091-go v1.10.0
 	go.uber.org/mock v0.6.0
 	go.uber.org/zap v1.27.0

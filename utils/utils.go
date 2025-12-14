@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+
+	"github.com/kballard/go-shellquote"
 )
 
 // Attemts to close the file, and panics if something goes wrong.
@@ -128,6 +130,18 @@ func ValidateFilename(filename string) error {
 	}
 
 	return nil
+}
+
+func ShellQuote(s string) string {
+	return shellquote.Join(s)
+}
+
+func ShellQuoteSlice(strs []string) string {
+	quoted := make([]string, len(strs))
+	for i, s := range strs {
+		quoted[i] = ShellQuote(s)
+	}
+	return strings.Join(quoted, " ")
 }
 
 // attempts to remove dir and optionaly its content. Can ignore error, for example if folder does not exist.
