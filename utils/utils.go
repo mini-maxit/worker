@@ -228,12 +228,6 @@ func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInf
 	return nil
 }
 
-// CreateTarArchiveWithBase creates a tar archive from a directory, preserving the base directory name.
-// For example, if srcPath is "/tmp/msgID", the archive will contain "msgID/file1", "msgID/dir/file2", etc.
-func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
-	return CreateTarArchiveWithBaseFiltered(srcPath, nil)
-}
-
 // CreateTarArchiveWithBaseFiltered works like CreateTarArchiveWithBase but skips any top-level entries
 // whose names are present in excludeTopLevel (e.g. []string{"output"}).
 // shouldExcludeFromTar checks if a path should be excluded from the tar archive.
