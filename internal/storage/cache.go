@@ -1,0 +1,214 @@
+package storage
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/messages"
+	"go.uber.org/zap"
+)
+
+type CacheEntry struct {
+	FilePath       string    `json:"file_path"`
+	TaskVersion    string    `json:"task_version"`
+	CachedAt       time.Time `json:"cached_at"`
+	OriginalPath   string    `json:"original_path"`
+	OriginalBucket string    `json:"original_bucket"`
+}
+
+type CacheMetadata struct {
+	Entries map[string]CacheEntry `json:"entries"` // key is hash of bucket+path
+}
+
+type FileCache interface {
+	GetCachedFile(fileLocation messages.FileLocation, taskVersion string) (string, bool, error)
+	CacheFile(fileLocation messages.FileLocation, taskVersion string, sourcePath string) error
+	CleanExpiredCache() error
+	InitCache() error
+}
+
+type fileCache struct {
+	logger       *zap.SugaredLogger
+	cacheDirPath string
+	ttl          time.Duration
+	metadata     *CacheMetadata
+	metadataPath string
+}
+
+func NewFileCache() FileCache {
+	logger := logger.NewNamedLogger("cache")
+	return &fileCache{
+		logger:       logger,
+		cacheDirPath: constants.CacheDirPath,
+		ttl:          time.Duration(constants.CacheTTLHours) * time.Hour,
+		metadata:     &CacheMetadata{Entries: make(map[string]CacheEntry)},
+		metadataPath: filepath.Join(constants.CacheDirPath, constants.CacheMetadataFile),
+	}
+}
+
+// InitCache initializes the cache directory and loads metadata.
+func (c *fileCache) InitCache() error {
+	if err := os.MkdirAll(c.cacheDirPath, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	if err := c.loadMetadata(); err != nil {
+		c.logger.Warnf("Failed to load cache metadata, starting fresh: %v", err)
+		c.metadata = &CacheMetadata{Entries: make(map[string]CacheEntry)}
+	}
+
+	if err := c.CleanExpiredCache(); err != nil {
+		c.logger.Warnf("Failed to clean expired cache: %v", err)
+	}
+
+	return nil
+}
+
+func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation, taskVersion string) (string, bool, error) {
+	key := c.generateKey(fileLocation)
+	entry, exists := c.metadata.Entries[key]
+
+	if !exists {
+		return "", false, nil
+	}
+
+	// Check if task version matches.
+	if entry.TaskVersion != taskVersion {
+		c.logger.Debugf("Cache miss: version mismatch for %s (cached: %s, requested: %s)",
+			fileLocation.Path, entry.TaskVersion, taskVersion)
+		return "", false, nil
+	}
+
+	// Check if cache is expired.
+	if time.Since(entry.CachedAt) > c.ttl {
+		c.logger.Debugf("Cache expired for %s", fileLocation.Path)
+		delete(c.metadata.Entries, key)
+		_ = c.saveMetadata()
+		return "", false, nil
+	}
+
+	// Check if file still exists.
+	if _, err := os.Stat(entry.FilePath); os.IsNotExist(err) {
+		c.logger.Debugf("Cached file no longer exists: %s", entry.FilePath)
+		delete(c.metadata.Entries, key)
+		_ = c.saveMetadata()
+		return "", false, nil
+	}
+
+	c.logger.Debugf("Cache hit for %s (version: %s)", fileLocation.Path, taskVersion)
+	return entry.FilePath, true, nil
+}
+
+func (c *fileCache) CacheFile(fileLocation messages.FileLocation, taskVersion string, sourcePath string) error {
+	key := c.generateKey(fileLocation)
+
+	// Generate a unique cache file path.
+	cacheFileName := c.generateCacheFileName(fileLocation)
+	cacheFilePath := filepath.Join(c.cacheDirPath, cacheFileName)
+
+	// Copy the file to cache.
+	if err := c.copyFile(sourcePath, cacheFilePath); err != nil {
+		return fmt.Errorf("failed to copy file to cache: %w", err)
+	}
+
+	// Update metadata.
+	c.metadata.Entries[key] = CacheEntry{
+		FilePath:       cacheFilePath,
+		TaskVersion:    taskVersion,
+		CachedAt:       time.Now(),
+		OriginalPath:   fileLocation.Path,
+		OriginalBucket: fileLocation.Bucket,
+	}
+
+	if err := c.saveMetadata(); err != nil {
+		c.logger.Warnf("Failed to save cache metadata: %v", err)
+	}
+
+	c.logger.Debugf("Cached file %s with version %s", fileLocation.Path, taskVersion)
+	return nil
+}
+
+// CleanExpiredCache removes expired cache entries and orphaned files.
+func (c *fileCache) CleanExpiredCache() error {
+	now := time.Now()
+	toDelete := []string{}
+
+	for key, entry := range c.metadata.Entries {
+		if now.Sub(entry.CachedAt) > c.ttl {
+			toDelete = append(toDelete, key)
+			if err := os.Remove(entry.FilePath); err != nil && !os.IsNotExist(err) {
+				c.logger.Warnf("Failed to remove expired cache file %s: %v", entry.FilePath, err)
+			}
+		}
+	}
+
+	for _, key := range toDelete {
+		delete(c.metadata.Entries, key)
+	}
+
+	if len(toDelete) > 0 {
+		c.logger.Infof("Cleaned %d expired cache entries", len(toDelete))
+		return c.saveMetadata()
+	}
+
+	return nil
+}
+
+func (c *fileCache) generateKey(fileLocation messages.FileLocation) string {
+	data := fmt.Sprintf("%s:%s", fileLocation.Bucket, fileLocation.Path)
+	hash := sha256.Sum256([]byte(data))
+	return fmt.Sprintf("%x", hash)
+}
+
+func (c *fileCache) generateCacheFileName(fileLocation messages.FileLocation) string {
+	key := c.generateKey(fileLocation)
+	ext := filepath.Ext(fileLocation.Path)
+	return fmt.Sprintf("%s%s", key, ext)
+}
+
+func (c *fileCache) copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	if _, err := destFile.ReadFrom(sourceFile); err != nil {
+		return err
+	}
+
+	return destFile.Sync()
+}
+
+func (c *fileCache) loadMetadata() error {
+	data, err := os.ReadFile(c.metadataPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	return json.Unmarshal(data, c.metadata)
+}
+
+func (c *fileCache) saveMetadata() error {
+	data, err := json.MarshalIndent(c.metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(c.metadataPath, data, 0644)
+}

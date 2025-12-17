@@ -15,6 +15,7 @@ services:
     container_name: go_app
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - worker_cache:/tmp/worker-cache
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=guest
@@ -32,3 +33,4 @@ services:
 
 volumes:
   rabbitmq_data:
+  worker_cache:

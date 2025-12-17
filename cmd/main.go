@@ -42,9 +42,10 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
-	storage := storage.NewStorage(config.StorageBaseUrl)
+	storageService := storage.NewStorage(config.StorageBaseUrl)
+	fileCache := storage.NewFileCache()
 	compiler := compiler.NewCompiler()
-	packager := packager.NewPackager(storage)
+	packager := packager.NewPackager(storageService, fileCache)
 	executor := executor.NewExecutor(dCli)
 	verifier := verifier.NewVerifier(config.VerifierFlags)
 	responder := responder.NewResponder(workerChannel, config.PublishChanSize)
