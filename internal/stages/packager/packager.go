@@ -324,6 +324,12 @@ func (p *packager) uploadNonEmptyFile(filePath string, outputFileLocation messag
 		if fi.Size() == 0 {
 			return nil
 		}
+	} else {
+		if os.IsNotExist(err) {
+			// Missing file is treated as empty; nothing to upload.
+			return nil
+		}
+		return err
 	}
 
 	objPath := outputFileLocation.Path
