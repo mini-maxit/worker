@@ -17,7 +17,6 @@ import (
 
 type CacheEntry struct {
 	FilePath       string    `json:"file_path"`
-	TaskVersion    string    `json:"task_version"`
 	CachedAt       time.Time `json:"cached_at"`
 	OriginalPath   string    `json:"original_path"`
 	OriginalBucket string    `json:"original_bucket"`
@@ -28,8 +27,8 @@ type CacheMetadata struct {
 }
 
 type FileCache interface {
-	GetCachedFile(fileLocation messages.FileLocation, taskVersion string) (string, bool, error)
-	CacheFile(fileLocation messages.FileLocation, taskVersion string, sourcePath string) error
+	GetCachedFile(fileLocation messages.FileLocation) (string, bool, error)
+	CacheFile(fileLocation messages.FileLocation, sourcePath string) error
 	CleanExpiredCache() error
 	InitCache() error
 }
@@ -71,18 +70,11 @@ func (c *fileCache) InitCache() error {
 	return nil
 }
 
-func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation, taskVersion string) (string, bool, error) {
+func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation) (string, bool, error) {
 	key := c.generateKey(fileLocation)
 	entry, exists := c.metadata.Entries[key]
 
 	if !exists {
-		return "", false, nil
-	}
-
-	// Check if task version matches.
-	if entry.TaskVersion != taskVersion {
-		c.logger.Debugf("Cache miss: version mismatch for %s (cached: %s, requested: %s)",
-			fileLocation.Path, entry.TaskVersion, taskVersion)
 		return "", false, nil
 	}
 
@@ -102,11 +94,11 @@ func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation, taskVersio
 		return "", false, nil
 	}
 
-	c.logger.Debugf("Cache hit for %s (version: %s)", fileLocation.Path, taskVersion)
+	c.logger.Debugf("Cache hit for %s", fileLocation.Path)
 	return entry.FilePath, true, nil
 }
 
-func (c *fileCache) CacheFile(fileLocation messages.FileLocation, taskVersion string, sourcePath string) error {
+func (c *fileCache) CacheFile(fileLocation messages.FileLocation, sourcePath string) error {
 	key := c.generateKey(fileLocation)
 
 	// Ensure cache directory exists.
@@ -133,7 +125,6 @@ func (c *fileCache) CacheFile(fileLocation messages.FileLocation, taskVersion st
 	// Update metadata.
 	c.metadata.Entries[key] = CacheEntry{
 		FilePath:       cacheFilePath,
-		TaskVersion:    taskVersion,
 		CachedAt:       time.Now(),
 		OriginalPath:   fileLocation.Path,
 		OriginalBucket: fileLocation.Bucket,
@@ -143,7 +134,7 @@ func (c *fileCache) CacheFile(fileLocation messages.FileLocation, taskVersion st
 		c.logger.Warnf("Failed to save cache metadata: %v", err)
 	}
 
-	c.logger.Debugf("Cached file %s with version %s", fileLocation.Path, taskVersion)
+	c.logger.Debugf("Cached file %s", fileLocation.Path)
 	return nil
 }
 

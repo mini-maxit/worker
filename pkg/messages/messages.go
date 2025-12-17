@@ -63,9 +63,8 @@ type TestCase struct {
 }
 
 type TaskQueueMessage struct {
-	LanguageType     string       `json:"language_type"`
-	LanguageVersion  string       `json:"language_version"`
-	SubmissionFile   FileLocation `json:"submission_file"`
-	TestCases        []TestCase   `json:"test_cases"`
-	TaskFilesVersion string       `json:"task_files_version"` // Version/timestamp to track task file updates
+	LanguageType    string       `json:"language_type"`
+	LanguageVersion string       `json:"language_version"`
+	SubmissionFile  FileLocation `json:"submission_file"`
+	TestCases       []TestCase   `json:"test_cases"`
 }

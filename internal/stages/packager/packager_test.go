@@ -15,8 +15,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-const defaultTaskVersion = "v1.0.0"
-
 func TestPrepareSolutionPackage_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -38,8 +36,17 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 
 	// expect DownloadFile for submission and test case files; destination path can be any
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
+
+	// Expect cache misses for test case files
+	mockFileCache.EXPECT().GetCachedFile(tc.InputFile).Return("", false, nil)
+	mockFileCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return("", false, nil)
+
 	mockStorage.EXPECT().DownloadFile(tc.InputFile, gomock.Any()).Return("/tmp/dest-in", nil)
 	mockStorage.EXPECT().DownloadFile(tc.ExpectedOutput, gomock.Any()).Return("/tmp/dest-out", nil)
+
+	// Expect files to be cached after download
+	mockFileCache.EXPECT().CacheFile(tc.InputFile, gomock.Any()).Return(nil)
+	mockFileCache.EXPECT().CacheFile(tc.ExpectedOutput, gomock.Any()).Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockFileCache)
 
@@ -211,11 +218,9 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
-	taskVersion := defaultTaskVersion
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: taskVersion,
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "cache-hit-test"
 
@@ -233,8 +238,8 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
 
 	// Expect cache hits for test case files
-	mockCache.EXPECT().GetCachedFile(tc.InputFile, taskVersion).Return(cachedInputPath, true, nil)
-	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput, taskVersion).Return(cachedOutputPath, true, nil)
+	mockCache.EXPECT().GetCachedFile(tc.InputFile).Return(cachedInputPath, true, nil)
+	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return(cachedOutputPath, true, nil)
 
 	// No DownloadFile calls expected for cached files
 	// No CacheFile calls expected since files were found in cache
@@ -286,11 +291,9 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
-	taskVersion := defaultTaskVersion
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: taskVersion,
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "cache-miss-test"
 
@@ -298,16 +301,16 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
 
 	// Expect cache misses for test case files
-	mockCache.EXPECT().GetCachedFile(tc.InputFile, taskVersion).Return("", false, nil)
-	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput, taskVersion).Return("", false, nil)
+	mockCache.EXPECT().GetCachedFile(tc.InputFile).Return("", false, nil)
+	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return("", false, nil)
 
 	// Expect downloads since cache missed
 	mockStorage.EXPECT().DownloadFile(tc.InputFile, gomock.Any()).Return("/tmp/dest-in", nil)
 	mockStorage.EXPECT().DownloadFile(tc.ExpectedOutput, gomock.Any()).Return("/tmp/dest-out", nil)
 
 	// Expect files to be cached after download
-	mockCache.EXPECT().CacheFile(tc.InputFile, taskVersion, gomock.Any()).Return(nil)
-	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, taskVersion, gomock.Any()).Return(nil)
+	mockCache.EXPECT().CacheFile(tc.InputFile, gomock.Any()).Return(nil)
+	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, gomock.Any()).Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
@@ -342,11 +345,9 @@ func TestPrepareSolutionPackage_CacheGetError_FallbackToDownload(t *testing.T) {
 		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
-	taskVersion := defaultTaskVersion
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: taskVersion,
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "cache-error-test"
 
@@ -354,16 +355,16 @@ func TestPrepareSolutionPackage_CacheGetError_FallbackToDownload(t *testing.T) {
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
 
 	// Cache returns error - should fallback to download
-	mockCache.EXPECT().GetCachedFile(tc.InputFile, taskVersion).Return("", false, errors.New("cache error"))
-	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput, taskVersion).Return("", false, errors.New("cache error"))
+	mockCache.EXPECT().GetCachedFile(tc.InputFile).Return("", false, errors.New("cache error"))
+	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return("", false, errors.New("cache error"))
 
 	// Expect downloads as fallback
 	mockStorage.EXPECT().DownloadFile(tc.InputFile, gomock.Any()).Return("/tmp/dest-in", nil)
 	mockStorage.EXPECT().DownloadFile(tc.ExpectedOutput, gomock.Any()).Return("/tmp/dest-out", nil)
 
 	// Expect files to be cached after download
-	mockCache.EXPECT().CacheFile(tc.InputFile, taskVersion, gomock.Any()).Return(nil)
-	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, taskVersion, gomock.Any()).Return(nil)
+	mockCache.EXPECT().CacheFile(tc.InputFile, gomock.Any()).Return(nil)
+	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, gomock.Any()).Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
@@ -393,11 +394,9 @@ func TestPrepareSolutionPackage_CacheFileError_ContinuesWithoutCaching(t *testin
 		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
-	taskVersion := defaultTaskVersion
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: taskVersion,
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "cache-file-error-test"
 
@@ -405,16 +404,16 @@ func TestPrepareSolutionPackage_CacheFileError_ContinuesWithoutCaching(t *testin
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
 
 	// Cache misses
-	mockCache.EXPECT().GetCachedFile(tc.InputFile, taskVersion).Return("", false, nil)
-	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput, taskVersion).Return("", false, nil)
+	mockCache.EXPECT().GetCachedFile(tc.InputFile).Return("", false, nil)
+	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return("", false, nil)
 
 	// Downloads succeed
 	mockStorage.EXPECT().DownloadFile(tc.InputFile, gomock.Any()).Return("/tmp/dest-in", nil)
 	mockStorage.EXPECT().DownloadFile(tc.ExpectedOutput, gomock.Any()).Return("/tmp/dest-out", nil)
 
 	// CacheFile fails but should not stop the process
-	mockCache.EXPECT().CacheFile(tc.InputFile, taskVersion, gomock.Any()).Return(errors.New("cache write error"))
-	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, taskVersion, gomock.Any()).Return(errors.New("cache write error"))
+	mockCache.EXPECT().CacheFile(tc.InputFile, gomock.Any()).Return(errors.New("cache write error"))
+	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, gomock.Any()).Return(errors.New("cache write error"))
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
@@ -445,19 +444,25 @@ func TestPrepareSolutionPackage_NoTaskVersion_SkipsCache(t *testing.T) {
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: "", // Empty version - should skip cache
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "no-version-test"
 
 	// Expect submission download
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
 
-	// No cache calls expected when version is empty
+	// Cache misses expected (version is empty but cache can still be called)
+	mockCache.EXPECT().GetCachedFile(tc.InputFile).Return("", false, nil)
+	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return("", false, nil)
+
 	// Expect direct downloads
 	mockStorage.EXPECT().DownloadFile(tc.InputFile, gomock.Any()).Return("/tmp/dest-in", nil)
 	mockStorage.EXPECT().DownloadFile(tc.ExpectedOutput, gomock.Any()).Return("/tmp/dest-out", nil)
+
+	// Expect files to be cached after download
+	mockCache.EXPECT().CacheFile(tc.InputFile, gomock.Any()).Return(nil)
+	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, gomock.Any()).Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
@@ -486,11 +491,9 @@ func TestPrepareSolutionPackage_NilCache_DownloadsDirectly(t *testing.T) {
 		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
-	taskVersion := defaultTaskVersion
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: taskVersion,
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "nil-cache-test"
 
@@ -528,11 +531,9 @@ func TestPrepareSolutionPackage_MixedCacheResults(t *testing.T) {
 		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
-	taskVersion := defaultTaskVersion
 	msg := &messages.TaskQueueMessage{
-		SubmissionFile:   submission,
-		TestCases:        []messages.TestCase{tc},
-		TaskFilesVersion: taskVersion,
+		SubmissionFile: submission,
+		TestCases:      []messages.TestCase{tc},
 	}
 	msgID := "mixed-cache-test"
 
@@ -546,12 +547,12 @@ func TestPrepareSolutionPackage_MixedCacheResults(t *testing.T) {
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
 
 	// Input file: cache hit
-	mockCache.EXPECT().GetCachedFile(tc.InputFile, taskVersion).Return(cachedInputPath, true, nil)
+	mockCache.EXPECT().GetCachedFile(tc.InputFile).Return(cachedInputPath, true, nil)
 
 	// Output file: cache miss
-	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput, taskVersion).Return("", false, nil)
+	mockCache.EXPECT().GetCachedFile(tc.ExpectedOutput).Return("", false, nil)
 	mockStorage.EXPECT().DownloadFile(tc.ExpectedOutput, gomock.Any()).Return("/tmp/dest-out", nil)
-	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, taskVersion, gomock.Any()).Return(nil)
+	mockCache.EXPECT().CacheFile(tc.ExpectedOutput, gomock.Any()).Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockCache)
 

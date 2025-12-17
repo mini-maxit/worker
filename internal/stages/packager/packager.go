@@ -84,7 +84,7 @@ func (p *packager) PrepareSolutionPackage(
 
 	// Download test cases and create user files.
 	for idx, tc := range taskQueueMessage.TestCases {
-		if err := p.prepareTestCaseFiles(basePath, idx, tc, taskQueueMessage.TaskFilesVersion); err != nil {
+		if err := p.prepareTestCaseFiles(basePath, idx, tc); err != nil {
 			p.logger.Errorf("Failed to prepare test case files: %s", err)
 			_ = utils.RemoveIO(basePath, true, true)
 			return nil, err
@@ -154,13 +154,13 @@ func (p *packager) downloadSubmission(basePath string, submission messages.FileL
 }
 
 // prepareTestCaseFiles downloads input and expected output for a test case and creates user files.
-func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.TestCase, taskVersion string) error {
+func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.TestCase) error {
 	// inputs
 	if tc.InputFile.Bucket == "" || tc.InputFile.Path == "" {
 		p.logger.Warnf("Test case %d input location is empty, skipping", idx)
 	} else {
 		inputDest := filepath.Join(basePath, constants.InputDirName, filepath.Base(tc.InputFile.Path))
-		if err := p.downloadOrCopyFromCache(tc.InputFile, inputDest, taskVersion); err != nil {
+		if err := p.downloadOrCopyFromCache(tc.InputFile, inputDest); err != nil {
 			return err
 		}
 	}
@@ -170,7 +170,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		p.logger.Warnf("Test case %d expected output location is empty, skipping", idx)
 	} else {
 		outputDest := filepath.Join(basePath, constants.OutputDirName, filepath.Base(tc.ExpectedOutput.Path))
-		if err := p.downloadOrCopyFromCache(tc.ExpectedOutput, outputDest, taskVersion); err != nil {
+		if err := p.downloadOrCopyFromCache(tc.ExpectedOutput, outputDest); err != nil {
 			return err
 		}
 	}
@@ -272,27 +272,26 @@ func (p *packager) SendSolutionPackage(
 func (p *packager) downloadOrCopyFromCache(
 	fileLocation messages.FileLocation,
 	destPath string,
-	taskVersion string,
 ) error {
 	// Try to get from cache
-	if p.fileCache == nil || taskVersion == "" {
-		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+	if p.fileCache == nil {
+		return p.downloadAndCache(fileLocation, destPath)
 	}
 
-	cachedPath, isCached, err := p.fileCache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, isCached, err := p.fileCache.GetCachedFile(fileLocation)
 	if err != nil {
 		p.logger.Warnf("Error checking cache for %s: %v", fileLocation.Path, err)
-		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+		return p.downloadAndCache(fileLocation, destPath)
 	}
 
 	if !isCached {
-		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+		return p.downloadAndCache(fileLocation, destPath)
 	}
 
 	// Copy from cache to destination
 	if err := utils.CopyFile(cachedPath, destPath); err != nil {
 		p.logger.Warnf("Failed to copy from cache, will download: %v", err)
-		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+		return p.downloadAndCache(fileLocation, destPath)
 	}
 
 	p.logger.Debugf("Used cached file for %s", fileLocation.Path)
@@ -302,7 +301,6 @@ func (p *packager) downloadOrCopyFromCache(
 func (p *packager) downloadAndCache(
 	fileLocation messages.FileLocation,
 	destPath string,
-	taskVersion string,
 ) error {
 	// Download the file
 	if _, err := p.storage.DownloadFile(fileLocation, destPath); err != nil {
@@ -310,8 +308,8 @@ func (p *packager) downloadAndCache(
 	}
 
 	// Cache the downloaded file
-	if p.fileCache != nil && taskVersion != "" {
-		if err := p.fileCache.CacheFile(fileLocation, taskVersion, destPath); err != nil {
+	if p.fileCache != nil {
+		if err := p.fileCache.CacheFile(fileLocation, destPath); err != nil {
 			p.logger.Warnf("Failed to cache file %s: %v", fileLocation.Path, err)
 		}
 	}

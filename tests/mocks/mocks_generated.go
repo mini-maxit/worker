@@ -830,17 +830,17 @@ func (m *MockFileCache) EXPECT() *MockFileCacheMockRecorder {
 }
 
 // CacheFile mocks base method.
-func (m *MockFileCache) CacheFile(fileLocation messages.FileLocation, taskVersion, sourcePath string) error {
+func (m *MockFileCache) CacheFile(fileLocation messages.FileLocation, sourcePath string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CacheFile", fileLocation, taskVersion, sourcePath)
+	ret := m.ctrl.Call(m, "CacheFile", fileLocation, sourcePath)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CacheFile indicates an expected call of CacheFile.
-func (mr *MockFileCacheMockRecorder) CacheFile(fileLocation, taskVersion, sourcePath any) *gomock.Call {
+func (mr *MockFileCacheMockRecorder) CacheFile(fileLocation, sourcePath any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CacheFile", reflect.TypeOf((*MockFileCache)(nil).CacheFile), fileLocation, taskVersion, sourcePath)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CacheFile", reflect.TypeOf((*MockFileCache)(nil).CacheFile), fileLocation, sourcePath)
 }
 
 // CleanExpiredCache mocks base method.
@@ -858,9 +858,9 @@ func (mr *MockFileCacheMockRecorder) CleanExpiredCache() *gomock.Call {
 }
 
 // GetCachedFile mocks base method.
-func (m *MockFileCache) GetCachedFile(fileLocation messages.FileLocation, taskVersion string) (string, bool, error) {
+func (m *MockFileCache) GetCachedFile(fileLocation messages.FileLocation) (string, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCachedFile", fileLocation, taskVersion)
+	ret := m.ctrl.Call(m, "GetCachedFile", fileLocation)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -868,9 +868,9 @@ func (m *MockFileCache) GetCachedFile(fileLocation messages.FileLocation, taskVe
 }
 
 // GetCachedFile indicates an expected call of GetCachedFile.
-func (mr *MockFileCacheMockRecorder) GetCachedFile(fileLocation, taskVersion any) *gomock.Call {
+func (mr *MockFileCacheMockRecorder) GetCachedFile(fileLocation any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedFile", reflect.TypeOf((*MockFileCache)(nil).GetCachedFile), fileLocation, taskVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedFile", reflect.TypeOf((*MockFileCache)(nil).GetCachedFile), fileLocation)
 }
 
 // InitCache mocks base method.

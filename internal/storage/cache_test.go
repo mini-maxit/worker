@@ -15,8 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testTaskVersion = "v1.0.0"
-
 // createTestFile creates a temporary file with test content.
 func createTestFile(t *testing.T, content string) string {
 	tempFile, err := os.CreateTemp(t.TempDir(), "test-file-*.txt")
@@ -63,14 +61,13 @@ func TestFileCache_CacheFile(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/path/file.txt",
 	}
-	taskVersion := testTaskVersion
 
 	// Cache the file
-	err = cache.CacheFile(fileLocation, taskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Verify the cached file exists and has correct content
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.NotEmpty(t, cachedPath)
@@ -93,34 +90,7 @@ func TestFileCache_GetCachedFile_NotFound(t *testing.T) {
 		Path:   "nonexistent/file.txt",
 	}
 
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, testTaskVersion)
-	require.NoError(t, err)
-	assert.False(t, found)
-	assert.Empty(t, cachedPath)
-}
-
-func TestFileCache_GetCachedFile_VersionMismatch(t *testing.T) {
-	cachedir := t.TempDir()
-	cache := storage.NewFileCache(cachedir)
-
-	err := cache.InitCache()
-	require.NoError(t, err)
-
-	// Create and cache a file
-	testContent := "test content"
-	testFile := createTestFile(t, testContent)
-	defer os.Remove(testFile)
-
-	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
-		Path:   "test/file.txt",
-	}
-
-	err = cache.CacheFile(fileLocation, testTaskVersion, testFile)
-	require.NoError(t, err)
-
-	// Try to get with different version
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, "v2.0.0")
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Empty(t, cachedPath)
@@ -142,13 +112,12 @@ func TestFileCache_GetCachedFile_Success(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/success.txt",
 	}
-	taskVersion := testTaskVersion
 
-	err = cache.CacheFile(fileLocation, taskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Get cached file
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.NotEmpty(t, cachedPath)
@@ -174,9 +143,8 @@ func TestFileCache_CleanExpiredCache(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/expired.txt",
 	}
-	taskVersion := testTaskVersion
 
-	err = cache.CacheFile(fileLocation, taskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Manually update metadata to simulate expired cache
@@ -206,7 +174,7 @@ func TestFileCache_CleanExpiredCache(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to get the file - should not be found as it was cleaned
-	cachedPath, found, err := cache2.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache2.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Empty(t, cachedPath)
@@ -222,22 +190,18 @@ func TestFileCache_MultipleCacheEntries(t *testing.T) {
 	// Create and cache multiple files
 	files := []struct {
 		location messages.FileLocation
-		version  string
 		content  string
 	}{
 		{
 			location: messages.FileLocation{Bucket: "bucket1", Path: "path1/file1.txt"},
-			version:  testTaskVersion,
 			content:  "content 1",
 		},
 		{
 			location: messages.FileLocation{Bucket: "bucket2", Path: "path2/file2.txt"},
-			version:  testTaskVersion,
 			content:  "content 2",
 		},
 		{
 			location: messages.FileLocation{Bucket: "bucket1", Path: "path3/file3.txt"},
-			version:  "v2.0.0",
 			content:  "content 3",
 		},
 	}
@@ -246,13 +210,13 @@ func TestFileCache_MultipleCacheEntries(t *testing.T) {
 		testFile := createTestFile(t, f.content)
 		defer os.Remove(testFile)
 
-		err := cache.CacheFile(f.location, f.version, testFile)
+		err := cache.CacheFile(f.location, testFile)
 		require.NoError(t, err)
 	}
 
 	// Verify all files are cached correctly
 	for _, f := range files {
-		cachedPath, found, err := cache.GetCachedFile(f.location, f.version)
+		cachedPath, found, err := cache.GetCachedFile(f.location)
 		require.NoError(t, err)
 		assert.True(t, found, "File not found: %s/%s", f.location.Bucket, f.location.Path)
 
@@ -273,22 +237,21 @@ func TestFileCache_OverwriteExistingCache(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/overwrite.txt",
 	}
-	taskVersion := testTaskVersion
 
 	// Cache first version
 	testFile1 := createTestFile(t, "first content")
 	defer os.Remove(testFile1)
-	err = cache.CacheFile(fileLocation, taskVersion, testFile1)
+	err = cache.CacheFile(fileLocation, testFile1)
 	require.NoError(t, err)
 
 	// Cache second version (overwrite)
 	testFile2 := createTestFile(t, "second content")
 	defer os.Remove(testFile2)
-	err = cache.CacheFile(fileLocation, taskVersion, testFile2)
+	err = cache.CacheFile(fileLocation, testFile2)
 	require.NoError(t, err)
 
 	// Get cached file and verify it has the second content
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.True(t, found)
 
@@ -305,28 +268,27 @@ func TestFileCache_DifferentBucketsSamePath(t *testing.T) {
 	require.NoError(t, err)
 
 	samePath := "common/file.txt"
-	version := testTaskVersion
 
 	// Cache file in bucket1
 	testFile1 := createTestFile(t, "bucket1 content")
 	defer os.Remove(testFile1)
 	location1 := messages.FileLocation{Bucket: "bucket1", Path: samePath}
-	err = cache.CacheFile(location1, version, testFile1)
+	err = cache.CacheFile(location1, testFile1)
 	require.NoError(t, err)
 
 	// Cache file in bucket2 with same path
 	testFile2 := createTestFile(t, "bucket2 content")
 	defer os.Remove(testFile2)
 	location2 := messages.FileLocation{Bucket: "bucket2", Path: samePath}
-	err = cache.CacheFile(location2, version, testFile2)
+	err = cache.CacheFile(location2, testFile2)
 	require.NoError(t, err)
 
 	// Verify both are cached separately
-	cachedPath1, found1, err := cache.GetCachedFile(location1, version)
+	cachedPath1, found1, err := cache.GetCachedFile(location1)
 	require.NoError(t, err)
 	assert.True(t, found1)
 
-	cachedPath2, found2, err := cache.GetCachedFile(location2, version)
+	cachedPath2, found2, err := cache.GetCachedFile(location2)
 	require.NoError(t, err)
 	assert.True(t, found2)
 
@@ -361,11 +323,11 @@ func TestFileCache_CacheWithDifferentExtensions(t *testing.T) {
 		testFile := createTestFile(t, "content for "+ext)
 		defer os.Remove(testFile)
 
-		err := cache.CacheFile(fileLocation, testTaskVersion, testFile)
+		err := cache.CacheFile(fileLocation, testFile)
 		require.NoError(t, err)
 
 		// Verify the cached file preserves the extension
-		cachedPath, found, err := cache.GetCachedFile(fileLocation, testTaskVersion)
+		cachedPath, found, err := cache.GetCachedFile(fileLocation)
 		require.NoError(t, err)
 		assert.True(t, found)
 		assert.Equal(t, ext, filepath.Ext(cachedPath), "Extension mismatch for %s", ext)
@@ -388,13 +350,12 @@ func TestFileCache_GetCachedFile_FileDeleted(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/deleted.txt",
 	}
-	taskVersion := testTaskVersion
 
-	err = cache.CacheFile(fileLocation, taskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Get the cached file path
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	require.True(t, found)
 
@@ -403,7 +364,7 @@ func TestFileCache_GetCachedFile_FileDeleted(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to get again - should return not found
-	cachedPath2, found2, err := cache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath2, found2, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.False(t, found2)
 	assert.Empty(t, cachedPath2)
@@ -426,9 +387,8 @@ func TestFileCache_InitCache_WithExistingMetadata(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/persistent.txt",
 	}
-	taskVersion := testTaskVersion
 
-	err = cache.CacheFile(fileLocation, taskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Create a new cache instance (simulating restart)
@@ -437,7 +397,7 @@ func TestFileCache_InitCache_WithExistingMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the cached file is still available
-	cachedPath, found, err := cache2.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache2.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.NotEmpty(t, cachedPath)
@@ -460,7 +420,7 @@ func TestFileCache_CacheFile_InvalidSourcePath(t *testing.T) {
 	}
 
 	// Try to cache a non-existent file
-	err = cache.CacheFile(fileLocation, testTaskVersion, "/non/existent/file.txt")
+	err = cache.CacheFile(fileLocation, "/non/existent/file.txt")
 	assert.Error(t, err)
 }
 
@@ -480,9 +440,8 @@ func TestFileCache_CleanExpiredCache_NoExpiredEntries(t *testing.T) {
 		Bucket: "test-bucket",
 		Path:   "test/fresh.txt",
 	}
-	taskVersion := testTaskVersion
 
-	err = cache.CacheFile(fileLocation, taskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Clean expired cache
@@ -490,7 +449,7 @@ func TestFileCache_CleanExpiredCache_NoExpiredEntries(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the file is still cached
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, taskVersion)
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.NotEmpty(t, cachedPath)
@@ -513,11 +472,11 @@ func TestFileCache_SpecialCharactersInPath(t *testing.T) {
 	testFile := createTestFile(t, testContent)
 	defer os.Remove(testFile)
 
-	err = cache.CacheFile(fileLocation, testTaskVersion, testFile)
+	err = cache.CacheFile(fileLocation, testFile)
 	require.NoError(t, err)
 
 	// Verify cached file can be retrieved
-	cachedPath, found, err := cache.GetCachedFile(fileLocation, testTaskVersion)
+	cachedPath, found, err := cache.GetCachedFile(fileLocation)
 	require.NoError(t, err)
 	assert.True(t, found)
 
@@ -548,7 +507,7 @@ func TestFileCache_EvictionWhenFull(t *testing.T) {
 		testFile := createTestFile(t, content)
 		defer os.Remove(testFile)
 
-		err := cache.CacheFile(files[i], testTaskVersion, testFile)
+		err := cache.CacheFile(files[i], testFile)
 		require.NoError(t, err)
 
 		// Small delay to ensure different CachedAt times
@@ -557,14 +516,14 @@ func TestFileCache_EvictionWhenFull(t *testing.T) {
 
 	// Since we added maxEntries+2 files, oldest entries should be evicted
 	// Files 0 and 1 should be evicted (oldest two)
-	_, _, err = cache.GetCachedFile(files[0], testTaskVersion)
+	_, _, err = cache.GetCachedFile(files[0])
 	require.NoError(t, err)
 	// File 0 might be evicted depending on implementation
 	// But at least some files should still be cached
 
 	// Most recent files should still be cached
 	lastIdx := maxEntries + 1
-	cachedPath, found, err := cache.GetCachedFile(files[lastIdx], testTaskVersion)
+	cachedPath, found, err := cache.GetCachedFile(files[lastIdx])
 	require.NoError(t, err)
 	assert.True(t, found, "Most recent file should still be cached")
 	assert.NotEmpty(t, cachedPath)
