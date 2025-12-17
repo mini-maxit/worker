@@ -246,7 +246,7 @@ func TestEvaluateAllTestCases_CompareOutputFailure(t *testing.T) {
 	if len(res.TestResults) != 1 {
 		t.Fatalf("expected 1 test result, got %d", len(res.TestResults))
 	}
-	if res.TestResults[0].StatusCode != solution.TestCaseStatus(solution.InternalError) {
+	if res.TestResults[0].StatusCode != solution.InternalErrorStatus {
 		t.Fatalf("expected internal error status for test result, got: %v", res.TestResults[0].StatusCode)
 	}
 	if res.TestResults[0].ErrorMessage == "" {

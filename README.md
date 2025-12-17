@@ -226,7 +226,7 @@ This message occurs when any of the test cases fail. The worker will return an e
   "ok": true,
   "payload": {
     "status_code": 2,
-    "message": "1. runtime error",
+    "message": "1. solution returned non-zero exit code.",
     "test_results": [
       {
         "passed": false,
@@ -246,7 +246,7 @@ Error messages for test case failures are as follows:
 - **Output Different** error message will be empty.
 - **Time Limit Exceeded** error message: "Solution timed out after x ms" (exit code 143)
 - **Memory Limit Exceeded** error message: "Solution exceeded memory limit of x kb" (exit code 134)
-- **Runtime Error** error message: "Solution exited with non-zero exit code x" for standard errors, or "Solution exited with non-zero exit code 127, possibly exceeded memory limit of x kb" when the exit code is 127 (command not found, which may indicate memory limit preventing shared library loading)
+- **Runtime Error** error message: "Solution exited with non-zero exit code x" for standard errors, or "Solution exit code 127, possibly exceeded memory limit of x kb" when the exit code is 127 (command not found, which may indicate memory limit preventing shared library loading)
 
 **Compilation Error**
 This message occurs when the worker encounters a compilation error while executing the task. The worker will return an error message indicating that a compilation error occurred.
@@ -296,7 +296,7 @@ This message occurs when the worker successfully executes the task. The worker w
   "ok": true,
   "payload": {
     "status_code": 2,
-    "message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. non-zero exit code, 5. output difference",
+    "message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. solution returned non-zero exit code, 5. output difference",
     "test_results": [
       {
         "passed": true,

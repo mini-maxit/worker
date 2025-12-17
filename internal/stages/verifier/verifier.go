@@ -236,7 +236,7 @@ func (v *verifier) evaluateTestCase(
 				ExecutionTime: execResult.ExecTime,
 				PeakMem:       execResult.PeakMem,
 				ExitCode:      execResult.ExitCode,
-				StatusCode:    solution.TestCaseStatus(solution.InternalError),
+				StatusCode:    solution.InternalErrorStatus,
 				ErrorMessage:  err.Error(),
 				Order:         testCaseIdx,
 			}, solution.InternalError, constants.SolutionMessageInternalError

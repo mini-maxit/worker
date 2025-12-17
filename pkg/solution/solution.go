@@ -29,6 +29,8 @@ const (
 	// Means that the solution exited with a non-zero exit code
 	// that is different than memory limit exceeded or time limit exceeded.
 	NonZeroExitCode
+	// Means that an internal error occurred while verifying the test case.
+	InternalErrorStatus
 )
 
 type Result struct {
