@@ -2,6 +2,7 @@ package storage
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -163,7 +164,7 @@ func (c *fileCache) CleanExpiredCache() error {
 func (c *fileCache) generateKey(fileLocation messages.FileLocation) string {
 	data := fmt.Sprintf("%s:%s", fileLocation.Bucket, fileLocation.Path)
 	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
+	return hex.EncodeToString(hash[:])
 }
 
 func (c *fileCache) generateCacheFileName(fileLocation messages.FileLocation) string {

@@ -274,23 +274,41 @@ func (p *packager) SendSolutionPackage(
 	return nil
 }
 
-func (p *packager) downloadOrCopyFromCache(fileLocation messages.FileLocation, destPath string, taskVersion string) error {
+func (p *packager) downloadOrCopyFromCache(
+	fileLocation messages.FileLocation,
+	destPath string,
+	taskVersion string,
+) error {
 	// Try to get from cache
-	if p.fileCache != nil && taskVersion != "" {
-		cachedPath, isCached, err := p.fileCache.GetCachedFile(fileLocation, taskVersion)
-		if err != nil {
-			p.logger.Warnf("Error checking cache for %s: %v", fileLocation.Path, err)
-		} else if isCached {
-			// Copy from cache to destination
-			if err := utils.CopyFile(cachedPath, destPath); err != nil {
-				p.logger.Warnf("Failed to copy from cache, will download: %v", err)
-			} else {
-				p.logger.Debugf("Used cached file for %s", fileLocation.Path)
-				return nil
-			}
-		}
+	if p.fileCache == nil || taskVersion == "" {
+		return p.downloadAndCache(fileLocation, destPath, taskVersion)
 	}
 
+	cachedPath, isCached, err := p.fileCache.GetCachedFile(fileLocation, taskVersion)
+	if err != nil {
+		p.logger.Warnf("Error checking cache for %s: %v", fileLocation.Path, err)
+		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+	}
+
+	if !isCached {
+		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+	}
+
+	// Copy from cache to destination
+	if err := utils.CopyFile(cachedPath, destPath); err != nil {
+		p.logger.Warnf("Failed to copy from cache, will download: %v", err)
+		return p.downloadAndCache(fileLocation, destPath, taskVersion)
+	}
+
+	p.logger.Debugf("Used cached file for %s", fileLocation.Path)
+	return nil
+}
+
+func (p *packager) downloadAndCache(
+	fileLocation messages.FileLocation,
+	destPath string,
+	taskVersion string,
+) error {
 	// Download the file
 	if _, err := p.storage.DownloadFile(fileLocation, destPath); err != nil {
 		return err
