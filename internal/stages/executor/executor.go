@@ -233,7 +233,7 @@ func buildContainerConfig(
 		Cmd:         []string{"bash", "-lc", constants.DockerTestScript},
 		WorkingDir:  userPackageDirPath,
 		Env:         env,
-		User:        "0:0",
+		User:        "runner",
 		StopTimeout: &stopTimeout,
 		StopSignal:  "SIGKILL",
 	}
