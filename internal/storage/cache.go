@@ -114,6 +114,13 @@ func (c *fileCache) CacheFile(fileLocation messages.FileLocation, taskVersion st
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
+	// Evict oldest entries if cache is full and this is a new entry
+	if _, exists := c.metadata.Entries[key]; !exists {
+		if len(c.metadata.Entries) >= constants.CacheMaxEntries {
+			c.evictOldestEntry()
+		}
+	}
+
 	// Generate a unique cache file path.
 	cacheFileName := c.generateCacheFileName(fileLocation)
 	cacheFilePath := filepath.Join(c.cacheDirPath, cacheFileName)
@@ -164,6 +171,34 @@ func (c *fileCache) CleanExpiredCache() error {
 	}
 
 	return nil
+}
+
+func (c *fileCache) evictOldestEntry() {
+	if len(c.metadata.Entries) == 0 {
+		return
+	}
+
+	// Find the oldest entry
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+
+	for key, entry := range c.metadata.Entries {
+		if first || entry.CachedAt.Before(oldestTime) {
+			oldestKey = key
+			oldestTime = entry.CachedAt
+			first = false
+		}
+	}
+
+	// Remove the oldest entry
+	if entry, exists := c.metadata.Entries[oldestKey]; exists {
+		if err := os.Remove(entry.FilePath); err != nil && !os.IsNotExist(err) {
+			c.logger.Warnf("Failed to remove evicted cache file %s: %v", entry.FilePath, err)
+		}
+		delete(c.metadata.Entries, oldestKey)
+		c.logger.Debugf("Evicted oldest cache entry: %s", entry.OriginalPath)
+	}
 }
 
 func (c *fileCache) generateKey(fileLocation messages.FileLocation) string {

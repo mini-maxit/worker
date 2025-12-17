@@ -80,6 +80,7 @@ const (
 	CacheDirPath      = "/tmp/worker-cache"
 	CacheTTLHours     = 24
 	CacheMetadataFile = ".cache_meta.json"
+	CacheMaxEntries   = 1000 // Maximum number of cached files
 )
 
 // Docker execution constants.
