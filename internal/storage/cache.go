@@ -109,6 +109,11 @@ func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation, taskVersio
 func (c *fileCache) CacheFile(fileLocation messages.FileLocation, taskVersion string, sourcePath string) error {
 	key := c.generateKey(fileLocation)
 
+	// Ensure cache directory exists.
+	if err := os.MkdirAll(c.cacheDirPath, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
 	// Generate a unique cache file path.
 	cacheFileName := c.generateCacheFileName(fileLocation)
 	cacheFilePath := filepath.Join(c.cacheDirPath, cacheFileName)
