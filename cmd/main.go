@@ -13,7 +13,6 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/internal/storage"
-	"github.com/mini-maxit/worker/pkg/constants"
 )
 
 func main() {
@@ -44,7 +43,10 @@ func main() {
 
 	// Initialize the services
 	storageService := storage.NewStorage(config.StorageBaseUrl)
-	fileCache := storage.NewFileCache(constants.CacheDirPath)
+	fileCache := storage.NewFileCache(config.CacheDirPath)
+	if err := fileCache.InitCache(); err != nil {
+		logger.Fatalf("Failed to initialize file cache: %v", err)
+	}
 	compiler := compiler.NewCompiler()
 	packager := packager.NewPackager(storageService, fileCache)
 	executor := executor.NewExecutor(dCli)

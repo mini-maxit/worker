@@ -23,7 +23,6 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockFileCache := mocks.NewMockFileCache(ctrl)
-	mockFileCache.EXPECT().InitCache().Return(nil)
 	// prepare message
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
 	tc := messages.TestCase{
@@ -114,7 +113,6 @@ func TestSendSolutionPackage_WithCompilationError_Uploads(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockFileCache := mocks.NewMockFileCache(ctrl)
-	mockFileCache.EXPECT().InitCache().Return(nil)
 
 	dir := t.TempDir()
 	compErrPath := filepath.Join(dir, "compile.err")
@@ -142,7 +140,6 @@ func TestSendSolutionPackage_NoCompilation_UploadsNonEmptyFiles(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockFileCache := mocks.NewMockFileCache(ctrl)
-	mockFileCache.EXPECT().InitCache().Return(nil)
 
 	dir := t.TempDir()
 	userOutDir := filepath.Join(dir, "userOut")
@@ -203,7 +200,6 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockCache := mocks.NewMockFileCache(ctrl)
-	mockCache.EXPECT().InitCache().Return(nil)
 
 	// prepare message
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
@@ -279,7 +275,6 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockCache := mocks.NewMockFileCache(ctrl)
-	mockCache.EXPECT().InitCache().Return(nil)
 
 	// prepare message
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
@@ -336,7 +331,6 @@ func TestPrepareSolutionPackage_CacheGetError_FallbackToDownload(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockCache := mocks.NewMockFileCache(ctrl)
-	mockCache.EXPECT().InitCache().Return(nil)
 
 	// prepare message
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
@@ -388,7 +382,6 @@ func TestPrepareSolutionPackage_CacheFileError_ContinuesWithoutCaching(t *testin
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockCache := mocks.NewMockFileCache(ctrl)
-	mockCache.EXPECT().InitCache().Return(nil)
 
 	// prepare message
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
@@ -440,7 +433,6 @@ func TestPrepareSolutionPackage_NoTaskVersion_SkipsCache(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockCache := mocks.NewMockFileCache(ctrl)
-	mockCache.EXPECT().InitCache().Return(nil)
 
 	// prepare message WITHOUT TaskFilesVersion
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
@@ -525,7 +517,6 @@ func TestPrepareSolutionPackage_MixedCacheResults(t *testing.T) {
 
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockCache := mocks.NewMockFileCache(ctrl)
-	mockCache.EXPECT().InitCache().Return(nil)
 
 	// prepare message
 	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}

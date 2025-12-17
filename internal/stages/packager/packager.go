@@ -49,11 +49,6 @@ type TaskDirConfig struct {
 
 func NewPackager(storageService storage.Storage, fileCache storage.FileCache) Packager {
 	logger := logger.NewNamedLogger("packager")
-	if fileCache != nil {
-		if err := fileCache.InitCache(); err != nil {
-			logger.Warnf("Failed to initialize file cache: %v", err)
-		}
-	}
 	return &packager{
 		logger:    logger,
 		storage:   storageService,
