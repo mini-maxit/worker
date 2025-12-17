@@ -41,6 +41,7 @@ type TestResult struct {
 	Passed        bool           `json:"passed"` // Whether the test passed or failed
 	ExecutionTime float64        `json:"execution_time"`
 	PeakMem       int64          `json:"peak_memory"`
+	ExitCode      int            `json:"exit_code"`   // Exit code of the solution for this test case
 	StatusCode    TestCaseStatus `json:"status_code"` // Status of the test case
 	// Error message in case of failure. Does not include information about difference in expected and actual output
 	ErrorMessage string `json:"error_message"`

@@ -235,6 +235,7 @@ func (v *verifier) evaluateTestCase(
 				Passed:        false,
 				ExecutionTime: execResult.ExecTime,
 				PeakMem:       execResult.PeakMem,
+				ExitCode:      execResult.ExitCode,
 				StatusCode:    solution.TestCaseStatus(solution.InternalError),
 				ErrorMessage:  err.Error(),
 				Order:         testCaseIdx,
@@ -254,6 +255,7 @@ func (v *verifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			PeakMem:       execResult.PeakMem,
 			StatusCode:    statusCode,
+			ExitCode:      execResult.ExitCode,
 			ErrorMessage:  "",
 			Order:         testCaseIdx,
 		}, solutionStatus, solutionMessage
@@ -268,6 +270,7 @@ func (v *verifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			PeakMem:       execResult.PeakMem,
 			StatusCode:    solution.TimeLimitExceeded,
+			ExitCode:      execResult.ExitCode,
 			ErrorMessage:  message,
 			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageTimeout
@@ -282,9 +285,26 @@ func (v *verifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			PeakMem:       execResult.PeakMem,
 			StatusCode:    solution.MemoryLimitExceeded,
+			ExitCode:      execResult.ExitCode,
 			ErrorMessage:  message,
 			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageMemoryLimitExceeded
+
+	case constants.ExitCodeCommandNotFound:
+		message := fmt.Sprintf(
+			constants.TestCaseMessagePossiblyExceededMemory,
+			execResult.ExitCode,
+			memoryLimit,
+		)
+		return solution.TestResult{
+			Passed:        false,
+			ExecutionTime: execResult.ExecTime,
+			PeakMem:       execResult.PeakMem,
+			StatusCode:    solution.NonZeroExitCode,
+			ExitCode:      execResult.ExitCode,
+			ErrorMessage:  message,
+			Order:         testCaseIdx,
+		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode
 
 	default:
 		return solution.TestResult{
@@ -292,6 +312,7 @@ func (v *verifier) evaluateTestCase(
 			ExecutionTime: execResult.ExecTime,
 			PeakMem:       execResult.PeakMem,
 			StatusCode:    solution.NonZeroExitCode,
+			ExitCode:      execResult.ExitCode,
 			ErrorMessage:  fmt.Sprintf(constants.TestCaseMessageNonZeroExitCode, execResult.ExitCode),
 			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode

@@ -23,18 +23,79 @@ The body of the message is a JSON object with the following structure:
 #### Task Message
 ```json
 {
-"type": "task",
-"message_id": "adsa",
-"payload":
-{
-  "task_id": 1,
-  "user_id": 1,
-  "submission_number": 1,
-  "language_type": "CPP",
-  "language_version": "20",
-  "time_limits": [25,25,25,25],
-  "memory_limits": [512,512,512,512]
-}
+  "type": "task",
+  "message_id": "adsa",
+  "payload": {
+    "language_type": "cpp",
+    "language_version": "17",
+    "submission_file": {
+      "server_type": "file_storage",
+      "bucket": "task1",
+      "path": "Task/prog.cpp"
+    },
+    "test_cases": [
+      {
+        "order": 1,
+        "input_file": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/inputs/1.txt"
+        },
+        "expected_output": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/outputs/1.txt"
+        },
+        "stdout_result": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/stdout/1.txt"
+        },
+        "stderr_result": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/stderr/1.err"
+        },
+        "diff_result": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/diff/1.diff"
+        },
+        "time_limit_ms": 2000,
+        "memory_limit_kb": 65536
+      },
+      {
+        "order": 2,
+        "input_file": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/inputs/2.txt"
+        },
+        "expected_output": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/outputs/2.txt"
+        },
+        "stdout_result": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/stdout/2.txt"
+        },
+        "stderr_result": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/stderr/2.err"
+        },
+        "diff_result": {
+          "server_type": "file_storage",
+          "bucket": "task1",
+          "path": "Task/diff/2.diff"
+        },
+        "time_limit_ms": 2000,
+        "memory_limit_kb": 65536
+      }
+    ]
+  }
 }
 ```
 #### Handshake Message
@@ -58,9 +119,11 @@ The body of the message is a JSON object with the following structure:
 ## Processing Flow
 
 1. **Message Reception**: The worker listens to the `worker_queue` for incoming messages.
-2. **File Retrieval**: After parsing the message, the worker retrieves necessary files from the file storage service based on the provided `task_id`, `user_id`, and `user_solution_id`.
-3. **Execution**: The worker delegates the task to the Solution Runner service for processing.
-4. **Response Sending**: The worker sends a response back to the specified `backend_response_queue`, indicating the success or failure of the task execution.
+2. **File Retrieval**: After parsing the message, the worker retrieves the submission file and test case files (inputs and expected outputs) from the file storage service based on the file locations specified in the message.
+3. **Execution**: The worker compiles (if needed) and executes the solution against each test case, enforcing time and memory limits.
+4. **Verification**: The worker compares the output with expected results and evaluates test case outcomes.
+5. **File Upload**: The worker uploads result files (stdout, stderr, diff) to the file storage service at the specified locations.
+6. **Response Sending**: The worker sends a response back to the specified reply queue, indicating the success or failure of the task execution along with detailed test results.
 
 ## Response Structure
 Below are the possible responses from the worker service to different types of messages.
@@ -92,6 +155,8 @@ Basic Task Message structure
         "passed": true,
         "status_code": 1,
         "execution_time": 0.000000,
+        "peak_memory": 2048,
+        "exit_code": 0,
         "error_message": "",
         "order": 1
       }
@@ -161,13 +226,15 @@ This message occurs when any of the test cases fail. The worker will return an e
   "ok": true,
   "payload": {
     "status_code": 2,
-    "message": "1. solution execution failed",
+    "message": "1. runtime error",
     "test_results": [
       {
         "passed": false,
         "status_code": 5,
         "execution_time": 0.000000,
-        "error_message": "Segmentation fault",
+        "peak_memory": 1024,
+        "exit_code": 11,
+        "error_message": "Solution exited with non-zero exit code 11",
         "order": 1
       }
     ]
@@ -177,9 +244,9 @@ This message occurs when any of the test cases fail. The worker will return an e
 
 Error messages for test case failures are as follows:
 - **Output Different** error message will be empty.
-- **Time Limit Exceeded** error message: "Solution timed out after x s"
-- **Memory Limit Exceeded** error message: "Solution exceeded memory limit of x MB"
-- **Runtime Error** error message: "Segmentation fault" for example
+- **Time Limit Exceeded** error message: "Solution timed out after x ms" (exit code 143)
+- **Memory Limit Exceeded** error message: "Solution exceeded memory limit of x kb" (exit code 134)
+- **Runtime Error** error message: "Solution exited with non-zero exit code x" for standard errors, or "Solution exited with non-zero exit code 127, possibly exceeded memory limit of x kb" when the exit code is 127 (command not found, which may indicate memory limit preventing shared library loading)
 
 **Compilation Error**
 This message occurs when the worker encounters a compilation error while executing the task. The worker will return an error message indicating that a compilation error occurred.
@@ -211,6 +278,8 @@ This message occurs when the worker successfully executes the task. The worker w
         "passed": true,
         "status_code": 1,
         "execution_time": 0.000000,
+        "peak_memory": 2048,
+        "exit_code": 0,
         "error_message": "",
         "order": 1
       }
@@ -227,40 +296,50 @@ This message occurs when the worker successfully executes the task. The worker w
   "ok": true,
   "payload": {
     "status_code": 2,
-    "message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. runtime error, 5. output difference",
+    "message": "1. solution executed successfully, 2. time limit exceeded, 3. memory limit exceeded, 4. non-zero exit code, 5. output difference",
     "test_results": [
       {
         "passed": true,
         "status_code": 1,
-        "execution_time": 0.000000,
+        "execution_time": 0.001234,
+        "peak_memory": 2048,
+        "exit_code": 0,
         "error_message": "",
         "order": 1
       },
       {
         "passed": false,
         "status_code": 3,
-        "execution_time": 0.000000,
-        "error_message": "Solution timed out after x s",
+        "execution_time": 5.000000,
+        "peak_memory": 3072,
+        "exit_code": 143,
+        "error_message": "Solution timed out after 5000 ms",
         "order": 2
       },
       {
         "passed": false,
         "status_code": 4,
-        "execution_time": 0.000000,
-        "error_message": "Solution exceeded memory limit of x MB",
+        "execution_time": 0.100000,
+        "peak_memory": 524288,
+        "exit_code": 134,
+        "error_message": "Solution exceeded memory limit of 512000 kb",
         "order": 3
       },
       {
         "passed": false,
         "status_code": 5,
-        "execution_time": 0.000000,
-        "error_message": "Segmentation fault",
+        "execution_time": 0.050000,
+        "peak_memory": 1024,
+        "exit_code": 11,
+        "error_message": "Solution exited with non-zero exit code 11",
         "order": 4
       },
       {
         "passed": false,
         "status_code": 2,
-        "execution_time": 0.000000,
+        "execution_time": 0.020000,
+        "peak_memory": 1536,
+        "exit_code": 0,
         "error_message": "",
         "order": 5
       }
@@ -342,9 +421,9 @@ The `status_code` field in the `test_results` array indicates the status of indi
 
 - **1 (TestCasePassed)**: The test case passed successfully.
 - **2 (OutputDifference)**: The output of the solution differs from the expected output.
-- **3 (TimeLimitExceeded)**: The solution exceeded the allowed time limit for the test case.
-- **4 (MemoryLimitExceeded)**: The solution exceeded the allowed memory limit for the test case.
-- **5 (RuntimeError)**: A runtime error occurred during the execution of the test case (e.g., segmentation fault).
+- **3 (TimeLimitExceeded)**: The solution exceeded the allowed time limit for the test case (exit code 143).
+- **4 (MemoryLimitExceeded)**: The solution exceeded the allowed memory limit for the test case (exit code 134).
+- **5 (NonZeroExitCode)**: The solution exited with a non-zero exit code that is different than memory limit exceeded or time limit exceeded. This includes runtime errors (e.g., segmentation fault with exit code 11) and other error conditions (e.g., exit code 127 which may indicate memory limit preventing shared library loading).
 
 ## Development
 
