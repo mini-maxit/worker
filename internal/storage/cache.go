@@ -42,14 +42,14 @@ type fileCache struct {
 	metadataPath string
 }
 
-func NewFileCache() FileCache {
+func NewFileCache(cacheDirPath string) FileCache {
 	logger := logger.NewNamedLogger("cache")
 	return &fileCache{
 		logger:       logger,
-		cacheDirPath: constants.CacheDirPath,
+		cacheDirPath: cacheDirPath,
 		ttl:          time.Duration(constants.CacheTTLHours) * time.Hour,
 		metadata:     &CacheMetadata{Entries: make(map[string]CacheEntry)},
-		metadataPath: filepath.Join(constants.CacheDirPath, constants.CacheMetadataFile),
+		metadataPath: filepath.Join(cacheDirPath, constants.CacheMetadataFile),
 	}
 }
 

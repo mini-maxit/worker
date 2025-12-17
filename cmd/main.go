@@ -13,6 +13,7 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/internal/storage"
+	"github.com/mini-maxit/worker/pkg/constants"
 )
 
 func main() {
@@ -43,7 +44,7 @@ func main() {
 
 	// Initialize the services
 	storageService := storage.NewStorage(config.StorageBaseUrl)
-	fileCache := storage.NewFileCache()
+	fileCache := storage.NewFileCache(constants.CacheDirPath)
 	compiler := compiler.NewCompiler()
 	packager := packager.NewPackager(storageService, fileCache)
 	executor := executor.NewExecutor(dCli)

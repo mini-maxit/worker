@@ -29,28 +29,26 @@ func createTestFile(t *testing.T, content string) string {
 }
 
 func TestNewFileCache(t *testing.T) {
-	cache := storage.NewFileCache()
+	cache := storage.NewFileCache("")
 	require.NotNil(t, cache)
 }
 
 func TestFileCache_InitCache(t *testing.T) {
-	cache := storage.NewFileCache()
-
-	// Clean up before and after test
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
 
 	// Verify cache directory was created
-	info, err := os.Stat(constants.CacheDirPath)
+	info, err := os.Stat(cachedir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 }
 
 func TestFileCache_CacheFile(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -83,8 +81,8 @@ func TestFileCache_CacheFile(t *testing.T) {
 }
 
 func TestFileCache_GetCachedFile_NotFound(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -101,8 +99,8 @@ func TestFileCache_GetCachedFile_NotFound(t *testing.T) {
 }
 
 func TestFileCache_GetCachedFile_VersionMismatch(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -128,8 +126,8 @@ func TestFileCache_GetCachedFile_VersionMismatch(t *testing.T) {
 }
 
 func TestFileCache_GetCachedFile_Success(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -160,8 +158,8 @@ func TestFileCache_GetCachedFile_Success(t *testing.T) {
 }
 
 func TestFileCache_CleanExpiredCache(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -181,7 +179,7 @@ func TestFileCache_CleanExpiredCache(t *testing.T) {
 	require.NoError(t, err)
 
 	// Manually update metadata to simulate expired cache
-	metadataPath := filepath.Join(constants.CacheDirPath, constants.CacheMetadataFile)
+	metadataPath := filepath.Join(cachedir, constants.CacheMetadataFile)
 	data, err := os.ReadFile(metadataPath)
 	require.NoError(t, err)
 
@@ -202,7 +200,7 @@ func TestFileCache_CleanExpiredCache(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create new cache instance to reload metadata
-	cache2 := storage.NewFileCache()
+	cache2 := storage.NewFileCache(cachedir)
 	err = cache2.InitCache()
 	require.NoError(t, err)
 
@@ -214,8 +212,8 @@ func TestFileCache_CleanExpiredCache(t *testing.T) {
 }
 
 func TestFileCache_MultipleCacheEntries(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -264,8 +262,8 @@ func TestFileCache_MultipleCacheEntries(t *testing.T) {
 }
 
 func TestFileCache_OverwriteExistingCache(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -299,8 +297,8 @@ func TestFileCache_OverwriteExistingCache(t *testing.T) {
 }
 
 func TestFileCache_DifferentBucketsSamePath(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -345,8 +343,8 @@ func TestFileCache_DifferentBucketsSamePath(t *testing.T) {
 }
 
 func TestFileCache_CacheWithDifferentExtensions(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -374,8 +372,8 @@ func TestFileCache_CacheWithDifferentExtensions(t *testing.T) {
 }
 
 func TestFileCache_GetCachedFile_FileDeleted(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -411,8 +409,8 @@ func TestFileCache_GetCachedFile_FileDeleted(t *testing.T) {
 }
 
 func TestFileCache_InitCache_WithExistingMetadata(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	// First initialization
 	err := cache.InitCache()
@@ -433,7 +431,7 @@ func TestFileCache_InitCache_WithExistingMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a new cache instance (simulating restart)
-	cache2 := storage.NewFileCache()
+	cache2 := storage.NewFileCache(cachedir)
 	err = cache2.InitCache()
 	require.NoError(t, err)
 
@@ -449,8 +447,8 @@ func TestFileCache_InitCache_WithExistingMetadata(t *testing.T) {
 }
 
 func TestFileCache_CacheFile_InvalidSourcePath(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -466,8 +464,8 @@ func TestFileCache_CacheFile_InvalidSourcePath(t *testing.T) {
 }
 
 func TestFileCache_CleanExpiredCache_NoExpiredEntries(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
@@ -498,8 +496,8 @@ func TestFileCache_CleanExpiredCache_NoExpiredEntries(t *testing.T) {
 }
 
 func TestFileCache_SpecialCharactersInPath(t *testing.T) {
-	cache := storage.NewFileCache()
-	defer func() { _ = os.RemoveAll(constants.CacheDirPath) }()
+	cachedir := t.TempDir()
+	cache := storage.NewFileCache(cachedir)
 
 	err := cache.InitCache()
 	require.NoError(t, err)
