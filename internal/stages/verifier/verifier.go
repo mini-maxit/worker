@@ -12,6 +12,7 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	"go.uber.org/zap"
@@ -25,6 +26,7 @@ type Verifier interface {
 		dirConfig *packager.TaskDirConfig,
 		testCases []messages.TestCase,
 		messageID string,
+		langType languages.LanguageType,
 	) solution.Result
 }
 
@@ -93,6 +95,7 @@ func (v *verifier) EvaluateAllTestCases(
 	dirConfig *packager.TaskDirConfig,
 	testCases []messages.TestCase,
 	messageID string,
+	langType languages.LanguageType,
 ) solution.Result {
 	v.logger.Infof("Starting evaluation of test cases [MsgID: %s]", messageID)
 	numberOfTest := len(testCases)
@@ -135,6 +138,7 @@ func (v *verifier) EvaluateAllTestCases(
 			testCases[i].TimeLimitMs,
 			testCases[i].MemoryLimitKB,
 			(i + 1),
+			langType,
 		)
 	}
 
@@ -221,10 +225,13 @@ func (v *verifier) evaluateTestCase(
 	timeLimit int64,
 	memoryLimit int64,
 	testCaseIdx int,
-
+	langType languages.LanguageType,
 ) (solution.TestResult, solution.ResultStatus, string) {
 	solutionStatus := solution.Success
 	solutionMessage := constants.SolutionMessageSuccess
+
+	// Check if error file contains language-specific MLE patterns
+	hasMLEPattern := v.hasMemoryLimitErrorPattern(errorPath, langType)
 
 	switch execResult.ExitCode {
 	case constants.ExitCodeSuccess:
@@ -307,6 +314,22 @@ func (v *verifier) evaluateTestCase(
 		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode
 
 	default:
+		if hasMLEPattern {
+			message := fmt.Sprintf(
+				constants.TestCaseMessageMemoryLimitExceeded,
+				memoryLimit,
+			)
+			return solution.TestResult{
+				Passed:        false,
+				ExecutionTime: execResult.ExecTime,
+				PeakMem:       execResult.PeakMem,
+				StatusCode:    solution.MemoryLimitExceeded,
+				ExitCode:      execResult.ExitCode,
+				ErrorMessage:  message,
+				Order:         testCaseIdx,
+			}, solution.TestFailed, constants.SolutionMessageMemoryLimitExceeded
+		}
+
 		return solution.TestResult{
 			Passed:        false,
 			ExecutionTime: execResult.ExecTime,
@@ -317,4 +340,20 @@ func (v *verifier) evaluateTestCase(
 			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode
 	}
+}
+
+func (v *verifier) hasMemoryLimitErrorPattern(errorPath string, langType languages.LanguageType) bool {
+	errorContent, err := os.ReadFile(errorPath)
+	if err != nil {
+		return false
+	}
+
+	errorStr := string(errorContent)
+	patterns := langType.GetMemoryLimitErrorPatterns()
+	for _, pattern := range patterns {
+		if strings.Contains(errorStr, pattern) {
+			return true
+		}
+	}
+	return false
 }

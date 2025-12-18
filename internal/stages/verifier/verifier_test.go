@@ -9,6 +9,7 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	. "github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	"github.com/mini-maxit/worker/tests"
@@ -41,7 +42,7 @@ func TestEvaluateAllTestCases_AllPass(t *testing.T) {
 		StdOutResult:   messages.FileLocation{Path: "out.txt"},
 		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
 
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg1")
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg1", languages.Python)
 	if res.StatusCode != solution.Success {
 		t.Fatalf("expected success, got: %v, message: %s", res.StatusCode, res.Message)
 	}
@@ -80,7 +81,7 @@ func TestEvaluateAllTestCases_OutputDifference(t *testing.T) {
 	tc := messages.TestCase{
 		StdOutResult:   messages.FileLocation{Path: "out.txt"},
 		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg2")
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg2", languages.Python)
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected test failed, got: %v", res.StatusCode)
 	}
@@ -122,7 +123,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
 		TimeLimitMs:    5,
 	}
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg3")
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg3", languages.Python)
 	if res.TestResults[0].StatusCode != solution.TimeLimitExceeded {
 		t.Fatalf("expected time limit status, got: %v", res.TestResults[0].StatusCode)
 	}
@@ -136,7 +137,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 
 	// memory limit exceeded (exit code 134)
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "134 0.0 0\n")
-	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg4")
+	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg4", languages.Python)
 	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
 		t.Fatalf("expected memory limit status, got: %v", res.TestResults[0].StatusCode)
 	}
@@ -150,7 +151,7 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 
 	// runtime error (exit code 2)
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "2 0.0 0\n")
-	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg5")
+	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg5", languages.Python)
 	if res.TestResults[0].StatusCode != solution.NonZeroExitCode {
 		t.Fatalf("expected runtime error status, got: %v", res.TestResults[0].StatusCode)
 	}
@@ -189,7 +190,7 @@ func TestEvaluateAllTestCases_CommandNotFound(t *testing.T) {
 		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
 		MemoryLimitKB:  1024,
 	}
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-cmd-not-found")
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-cmd-not-found", languages.Python)
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected test failed, got: %v", res.StatusCode)
 	}
@@ -239,7 +240,7 @@ func TestEvaluateAllTestCases_CompareOutputFailure(t *testing.T) {
 		StdOutResult:   messages.FileLocation{Path: "out.txt"},
 		ExpectedOutput: messages.FileLocation{Path: "nonexistent.txt"}} // File doesn't exist
 
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-compare-fail")
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-compare-fail", languages.Python)
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected test failed due to comparison failure, got: %v, message: %s", res.StatusCode, res.Message)
 	}
@@ -283,7 +284,7 @@ func TestEvaluateAllTestCases_MissingExecResult(t *testing.T) {
 	tc := messages.TestCase{
 		StdOutResult:   messages.FileLocation{Path: "out.txt"},
 		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg6")
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg6", languages.Python)
 	if res.StatusCode != solution.InternalError {
 		t.Fatalf("expected internal error due to missing exec result, got: %v", res.StatusCode)
 	}
@@ -318,7 +319,7 @@ func TestEvaluateAllTestCases_WithFlags_IgnoreWhitespace(t *testing.T) {
 	tc := messages.TestCase{
 		StdOutResult:   messages.FileLocation{Path: "out.txt"},
 		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
-	res := verNoFlags.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-flags-1")
+	res := verNoFlags.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-flags-1", languages.Python)
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected test failed without flags, got: %v", res.StatusCode)
 	}
@@ -329,7 +330,7 @@ func TestEvaluateAllTestCases_WithFlags_IgnoreWhitespace(t *testing.T) {
 
 	// with -w flag (ignore whitespace) -> should pass
 	verIgnoreWS := NewVerifier([]string{"-w"})
-	res2 := verIgnoreWS.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-flags-2")
+	res2 := verIgnoreWS.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-flags-2", languages.Python)
 	if res2.StatusCode != solution.Success {
 		t.Fatalf("expected success with -w flag, got: %v, message: %s", res2.StatusCode, res2.Message)
 	}
@@ -391,7 +392,7 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 		{StdOutResult: messages.FileLocation{Path: "t5.txt"}, ExpectedOutput: messages.FileLocation{Path: "t5.txt"}},
 	}
 
-	res := ver.EvaluateAllTestCases(cfg, tcs, "msg-multi")
+	res := ver.EvaluateAllTestCases(cfg, tcs, "msg-multi", languages.Python)
 
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected overall TestFailed, got: %v, message: %s", res.StatusCode, res.Message)
