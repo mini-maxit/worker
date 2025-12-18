@@ -61,7 +61,7 @@ jobs:
               for version in 3.10 3.11 3.12; do
                 tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}"
                 if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
-                  tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:${RUNTIME_TAG}"
+                  tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:${RUNTIME_TAG} --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:latest"
                 fi
                 docker buildx build \
                   --push \
