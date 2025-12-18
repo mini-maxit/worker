@@ -105,9 +105,9 @@ for idx in "${!inputs[@]}"; do
       /usr/bin/time -f "%M" -o "${peak_mem_file}" \
       bash -c "ulimit -S -v ${mlimit_kb} && ulimit -H -v ${hard_kb} && ${RUN_CMD}" < "$infile" \
       > "${out}" 2> "${err}"
+    code=$?
 
     end_ns=$(date +%s%N)
-    code=$?
 
     if [[ ! -s "${peak_mem_file}" ]]; then
       peak_kb=0
