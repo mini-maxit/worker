@@ -13,7 +13,7 @@ type LanguageType int
 
 const (
 	CPP LanguageType = iota + 1
-	Python
+	PYTHON
 )
 
 func (lt LanguageType) String() string {
@@ -31,9 +31,9 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 		// C++ compiler does not require versioning, so a single runtime Docker image is used for all versions.
 		image := constants.RuntimeImagePrefix + "-cpp:latest"
 		return image, nil
-	case Python:
+	case PYTHON:
 		// Python uses version-specific runtime images
-		_, ok := LanguageVersionMap[Python][version]
+		_, ok := LanguageVersionMap[PYTHON][version]
 		if !ok {
 			return "", errors.ErrInvalidVersion
 		}
@@ -46,7 +46,7 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 
 func (lt LanguageType) IsScriptingLanguage() bool {
 	switch lt {
-	case Python:
+	case PYTHON:
 		return true
 	case CPP:
 		return false
@@ -61,7 +61,7 @@ func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) 
 	}
 
 	switch lt {
-	case Python:
+	case PYTHON:
 		return []string{"python3", "./" + solutionFileName}, nil
 	case CPP:
 		return []string{"./" + solutionFileName}, nil
@@ -72,12 +72,12 @@ func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) 
 
 var LanguageTypeMap = map[string]LanguageType{
 	"CPP":    CPP,
-	"PYTHON": Python,
+	"PYTHON": PYTHON,
 }
 
 var LanguageExtensionMap = map[LanguageType]string{
 	CPP:    "cpp",
-	Python: "py",
+	PYTHON: "py",
 }
 
 var LanguageVersionMap = map[LanguageType]map[string]string{
@@ -87,7 +87,7 @@ var LanguageVersionMap = map[LanguageType]map[string]string{
 		"17": "c++17",
 		"20": "c++20",
 	},
-	Python: {
+	PYTHON: {
 		"3.10": "3.10",
 		"3.11": "3.11",
 		"3.12": "3.12",

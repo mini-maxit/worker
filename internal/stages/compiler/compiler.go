@@ -36,7 +36,7 @@ func initializeSolutionCompiler(
 	switch langType {
 	case languages.CPP:
 		return NewCppCompiler(langVersion, messageID)
-	case languages.Python:
+	case languages.PYTHON:
 		return nil, customErr.ErrInvalidLanguageType // Make linter happy
 	default:
 		return nil, customErr.ErrInvalidLanguageType
