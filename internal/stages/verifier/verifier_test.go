@@ -3,6 +3,7 @@ package verifier_test
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mini-maxit/worker/internal/stages/packager"
@@ -47,6 +48,9 @@ func TestEvaluateAllTestCases_AllPass(t *testing.T) {
 	if len(res.TestResults) != 1 || !res.TestResults[0].Passed {
 		t.Fatalf("expected test passed, got %+v", res.TestResults)
 	}
+	if res.TestResults[0].ExitCode != constants.ExitCodeSuccess {
+		t.Fatalf("expected exit code %d, got %d", constants.ExitCodeSuccess, res.TestResults[0].ExitCode)
+	}
 	if res.Message != constants.SolutionMessageSuccess {
 		t.Fatalf("expected message %q, got %q", constants.SolutionMessageSuccess, res.Message)
 	}
@@ -82,6 +86,9 @@ func TestEvaluateAllTestCases_OutputDifference(t *testing.T) {
 	}
 	if res.TestResults[0].StatusCode != solution.OutputDifference {
 		t.Fatalf("expected output difference code, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.TestResults[0].ExitCode != constants.ExitCodeSuccess {
+		t.Fatalf("expected exit code %d, got %d", constants.ExitCodeSuccess, res.TestResults[0].ExitCode)
 	}
 	expectedMsg := "1. " + constants.SolutionMessageOutputDifference + "."
 	if res.Message != expectedMsg {
@@ -119,6 +126,9 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	if res.TestResults[0].StatusCode != solution.TimeLimitExceeded {
 		t.Fatalf("expected time limit status, got: %v", res.TestResults[0].StatusCode)
 	}
+	if res.TestResults[0].ExitCode != constants.ExitCodeTimeLimitExceeded {
+		t.Fatalf("expected exit code %d, got %d", constants.ExitCodeTimeLimitExceeded, res.TestResults[0].ExitCode)
+	}
 	expectedMsg := "1. " + constants.SolutionMessageTimeout + "."
 	if res.Message != expectedMsg {
 		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
@@ -129,6 +139,9 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg4")
 	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
 		t.Fatalf("expected memory limit status, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.TestResults[0].ExitCode != constants.ExitCodeMemoryLimitExceeded {
+		t.Fatalf("expected exit code %d, got %d", constants.ExitCodeMemoryLimitExceeded, res.TestResults[0].ExitCode)
 	}
 	expectedMsg = "1. " + constants.SolutionMessageMemoryLimitExceeded + "."
 	if res.Message != expectedMsg {
@@ -141,9 +154,109 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	if res.TestResults[0].StatusCode != solution.NonZeroExitCode {
 		t.Fatalf("expected runtime error status, got: %v", res.TestResults[0].StatusCode)
 	}
+	if res.TestResults[0].ExitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", res.TestResults[0].ExitCode)
+	}
 	expectedMsg = "1. " + constants.SolutionMessageNonZeroExitCode + "."
 	if res.Message != expectedMsg {
 		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
+	}
+}
+
+func TestEvaluateAllTestCases_CommandNotFound(t *testing.T) {
+	dir := t.TempDir()
+	userOutDir := filepath.Join(dir, "userOut")
+	expectedOutDir := filepath.Join(dir, "expected")
+	userDiffDir := filepath.Join(dir, "userDiff")
+	userErrDir := filepath.Join(dir, "userErr")
+	execResDir := filepath.Join(dir, "execRes")
+
+	tests.WriteFile(t, expectedOutDir, "out.txt", "result\n")
+	tests.WriteFile(t, userOutDir, "out.txt", "result\n")
+	// exit code 127 (command not found, possibly due to memory limit preventing shared library mapping)
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "127 0.0 0\n")
+
+	cfg := &packager.TaskDirConfig{
+		UserOutputDirPath:     userOutDir,
+		OutputDirPath:         expectedOutDir,
+		UserDiffDirPath:       userDiffDir,
+		UserErrorDirPath:      userErrDir,
+		UserExecResultDirPath: execResDir,
+	}
+	ver := NewVerifier([]string{})
+	tc := messages.TestCase{
+		StdOutResult:   messages.FileLocation{Path: "out.txt"},
+		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		MemoryLimitKB:  1024,
+	}
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-cmd-not-found")
+	if res.StatusCode != solution.TestFailed {
+		t.Fatalf("expected test failed, got: %v", res.StatusCode)
+	}
+	if res.TestResults[0].StatusCode != solution.NonZeroExitCode {
+		t.Fatalf("expected non-zero exit code status, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.TestResults[0].ExitCode != constants.ExitCodeCommandNotFound {
+		t.Fatalf("expected exit code %d, got %d", constants.ExitCodeCommandNotFound, res.TestResults[0].ExitCode)
+	}
+	// Verify the error message mentions the possibility of memory limit being exceeded
+	if !strings.Contains(res.TestResults[0].ErrorMessage, "possibly exceeded memory limit") {
+		t.Fatalf(
+			"expected error message to mention 'possibly exceeded memory limit', got: %q",
+			res.TestResults[0].ErrorMessage,
+		)
+	}
+	expectedMsg := "1. " + constants.SolutionMessageNonZeroExitCode + "."
+	if res.Message != expectedMsg {
+		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
+	}
+}
+
+func TestEvaluateAllTestCases_CompareOutputFailure(t *testing.T) {
+	dir := t.TempDir()
+	userOutDir := filepath.Join(dir, "userOut")
+	expectedOutDir := filepath.Join(dir, "expected")
+	userDiffDir := filepath.Join(dir, "userDiff")
+	userErrDir := filepath.Join(dir, "userErr")
+	execResDir := filepath.Join(dir, "execRes")
+
+	tests.WriteFile(t, userOutDir, "out.txt", "hello\n")
+	// Create expected output file but don't give read permissions (or reference non-existent file)
+	// We'll use a path that references a file that doesn't exist
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.100 0\n")
+
+	cfg := &packager.TaskDirConfig{
+		UserOutputDirPath:     userOutDir,
+		OutputDirPath:         expectedOutDir,
+		UserDiffDirPath:       userDiffDir,
+		UserErrorDirPath:      userErrDir,
+		UserExecResultDirPath: execResDir,
+	}
+
+	ver := NewVerifier([]string{})
+
+	tc := messages.TestCase{
+		StdOutResult:   messages.FileLocation{Path: "out.txt"},
+		ExpectedOutput: messages.FileLocation{Path: "nonexistent.txt"}} // File doesn't exist
+
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-compare-fail")
+	if res.StatusCode != solution.TestFailed {
+		t.Fatalf("expected test failed due to comparison failure, got: %v, message: %s", res.StatusCode, res.Message)
+	}
+	if len(res.TestResults) != 1 {
+		t.Fatalf("expected 1 test result, got %d", len(res.TestResults))
+	}
+	if res.TestResults[0].StatusCode != solution.InternalErrorStatus {
+		t.Fatalf("expected internal error status for test result, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.TestResults[0].ErrorMessage == "" {
+		t.Fatalf("expected non-empty error message when comparison fails")
+	}
+	if res.TestResults[0].Passed {
+		t.Fatalf("expected test to not pass when comparison fails")
+	}
+	if res.Message != "1. "+constants.SolutionMessageInternalError+"." {
+		t.Fatalf("expected message to contain internal error, got: %q", res.Message)
 	}
 }
 
