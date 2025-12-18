@@ -29,12 +29,12 @@ if [[ -z "${USER_ERROR_FILES:-}" ]]; then
   exit 1
 fi
 
-eval "times=($TIME_LIMITS_MS)"
-eval "mems=($MEM_LIMITS_KB)"
-eval "inputs=($INPUT_FILES)"
-eval "user_outputs=($USER_OUTPUT_FILES)"
-eval "user_errors=($USER_ERROR_FILES)"
-eval "exec_results=($USER_EXEC_RESULT_FILES)"
+read -r -a times <<< "$TIME_LIMITS_MS"
+read -r -a mems <<< "$MEM_LIMITS_KB"
+read -r -a inputs <<< "$INPUT_FILES"
+read -r -a user_outputs <<< "$USER_OUTPUT_FILES"
+read -r -a user_errors <<< "$USER_ERROR_FILES"
+read -r -a exec_results <<< "$USER_EXEC_RESULT_FILES"
 
 # Basic count validations
 if (( ${#times[@]} != ${#mems[@]} )); then
