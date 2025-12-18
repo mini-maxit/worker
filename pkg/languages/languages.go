@@ -72,7 +72,7 @@ func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) 
 
 func (lt LanguageType) GetMemoryLimitErrorPatterns() []string {
 	switch lt {
-	case Python:
+	case PYTHON:
 		return []string{"MemoryError"}
 	case CPP:
 		return []string{
