@@ -211,7 +211,7 @@ func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 	}
 
 	return []string{
-		"RUN_CMD=" + utils.ShellQuote(runCmd),
+		"RUN_CMD=" + utils.ShellQuoteSlice(runCmd),
 		"TIME_LIMITS_MS=" + utils.ShellQuoteSlice(timeEnv),
 		"MEM_LIMITS_KB=" + utils.ShellQuoteSlice(memEnv),
 		"INPUT_FILES=" + utils.ShellQuoteSlice(inputFilePaths),

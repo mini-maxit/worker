@@ -55,18 +55,18 @@ func (lt LanguageType) IsScriptingLanguage() bool {
 	}
 }
 
-func (lt LanguageType) GetRunCommand(solutionFileName string) (string, error) {
+func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) {
 	if err := utils.ValidateFilename(solutionFileName); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	switch lt {
 	case Python:
-		return "python3 ./" + solutionFileName, nil
+		return []string{"python3", "./" + solutionFileName}, nil
 	case CPP:
-		return "./" + solutionFileName, nil
+		return []string{"./" + solutionFileName}, nil
 	default:
-		return "", errors.ErrInvalidLanguageType
+		return nil, errors.ErrInvalidLanguageType
 	}
 }
 

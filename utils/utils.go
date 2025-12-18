@@ -132,14 +132,10 @@ func ValidateFilename(filename string) error {
 	return nil
 }
 
-func ShellQuote(s string) string {
-	return shellquote.Join(s)
-}
-
 func ShellQuoteSlice(strs []string) string {
 	quoted := make([]string, len(strs))
 	for i, s := range strs {
-		quoted[i] = ShellQuote(s)
+		quoted[i] = shellquote.Join(s)
 	}
 	return strings.Join(quoted, " ")
 }
