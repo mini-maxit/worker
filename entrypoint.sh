@@ -5,6 +5,9 @@ RUNTIME_IMAGE_BASE="ghcr.io/mini-maxit/runtime"
 
 RUNTIME_LANG_VERSIONS=(
     "cpp:latest"
+    "python-3.12:latest"
+    "python-3.11:latest"
+    "python-3.10:latest"
 )
 
 for lang_version in "${RUNTIME_LANG_VERSIONS[@]}"; do

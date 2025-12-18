@@ -7,8 +7,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
+
+	"github.com/kballard/go-shellquote"
 )
 
 // Attemts to close the file, and panics if something goes wrong.
@@ -100,6 +103,43 @@ func Contains[V string](array []V, value V) bool {
 	return false
 }
 
+// ValidateFilename checks if a filename contains only safe characters.
+// Returns an error if the filename contains shell metacharacters or path separators
+// that could be used for command injection or directory traversal attacks.
+// Allowed characters: alphanumeric (a-z, A-Z, 0-9), dots (.), underscores (_), and hyphens (-).
+func ValidateFilename(filename string) error {
+	if filename == "" {
+		return errors.New("filename cannot be empty")
+	}
+
+	// Check for path separators
+	if strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return errors.New("filename cannot contain path separators")
+	}
+
+	// Check for dangerous patterns
+	if filename == "." || filename == ".." {
+		return errors.New("filename cannot be a dot or double-dot")
+	}
+
+	// Only allow alphanumeric characters, dots, underscores, and hyphens
+	// This prevents shell metacharacters like: ; & | $ ` ( ) < > [ ] { } ' " \ * ? # ~ ! space
+	validPattern := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	if !validPattern.MatchString(filename) {
+		return errors.New("filename contains invalid characters")
+	}
+
+	return nil
+}
+
+func ShellQuoteSlice(strs []string) string {
+	quoted := make([]string, len(strs))
+	for i, s := range strs {
+		quoted[i] = shellquote.Join(s)
+	}
+	return strings.Join(quoted, " ")
+}
+
 // attempts to remove dir and optionaly its content. Can ignore error, for example if folder does not exist.
 func RemoveIO(dir string, recursive, ignoreError bool) error {
 	var err error
@@ -159,6 +199,10 @@ func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInf
 		return err
 	}
 	header.Name = name
+	header.Gid = 1000
+	header.Uid = 1000
+	header.Gname = "runner"
+	header.Uname = "runner"
 
 	if err := tarWriter.WriteHeader(header); err != nil {
 		return err
@@ -178,12 +222,6 @@ func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInf
 	}
 
 	return nil
-}
-
-// CreateTarArchiveWithBase creates a tar archive from a directory, preserving the base directory name.
-// For example, if srcPath is "/tmp/msgID", the archive will contain "msgID/file1", "msgID/dir/file2", etc.
-func CreateTarArchiveWithBase(srcPath string) (io.ReadCloser, error) {
-	return CreateTarArchiveWithBaseFiltered(srcPath, nil)
 }
 
 // CreateTarArchiveWithBaseFiltered works like CreateTarArchiveWithBase but skips any top-level entries
