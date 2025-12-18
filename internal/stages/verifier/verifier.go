@@ -230,9 +230,6 @@ func (v *verifier) evaluateTestCase(
 	solutionStatus := solution.Success
 	solutionMessage := constants.SolutionMessageSuccess
 
-	// Check if error file contains language-specific MLE patterns
-	hasMLEPattern := v.hasMemoryLimitErrorPattern(errorPath, langType)
-
 	switch execResult.ExitCode {
 	case constants.ExitCodeSuccess:
 		passed, err := v.compareOutput(outputPath, expectedOutputPath, diffPath, errorPath)
@@ -314,7 +311,7 @@ func (v *verifier) evaluateTestCase(
 		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode
 
 	default:
-		if hasMLEPattern {
+		if v.hasMemoryLimitErrorPattern(errorPath, langType) {
 			message := fmt.Sprintf(
 				constants.TestCaseMessageMemoryLimitExceeded,
 				memoryLimit,
