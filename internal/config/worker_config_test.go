@@ -91,6 +91,19 @@ func TestVerifierConfig_DefaultsAndCustom(t *testing.T) {
 	}
 }
 
+func TestCacheConfig_DefaultsAndCustom(t *testing.T) {
+	config := NewConfig()
+	if config.CacheDirPath != constants.CacheDirPath {
+		t.Fatalf("expected default cache dir path %q, got %q", constants.CacheDirPath, config.CacheDirPath)
+	}
+
+	t.Setenv("CACHE_DIR_PATH", "/custom/cache/path")
+	config2 := NewConfig()
+	if config2.CacheDirPath != "/custom/cache/path" {
+		t.Fatalf("expected cache dir path %q, got %q", "/custom/cache/path", config2.CacheDirPath)
+	}
+}
+
 func TestNewConfig_PicksUpValues(t *testing.T) {
 	// set a variety of envs and ensure NewConfig reads them
 	t.Setenv("RABBITMQ_HOST", "xhost")
@@ -104,6 +117,7 @@ func TestNewConfig_PicksUpValues(t *testing.T) {
 	t.Setenv("MAX_WORKERS", "5")
 	t.Setenv("JOBS_DATA_VOLUME", "vol-1")
 	t.Setenv("VERIFIER_FLAGS", "-a,-b")
+	t.Setenv("CACHE_DIR_PATH", "/test/cache")
 
 	cfg := NewConfig()
 	if cfg.RabbitMQURL == "" {
@@ -121,6 +135,9 @@ func TestNewConfig_PicksUpValues(t *testing.T) {
 	}
 	if len(cfg.VerifierFlags) != 2 || cfg.VerifierFlags[0] != "-a" || cfg.VerifierFlags[1] != "-b" {
 		t.Fatalf("unexpected VerifierFlags: %v", cfg.VerifierFlags)
+	}
+	if cfg.CacheDirPath != "/test/cache" {
+		t.Fatalf("unexpected CacheDirPath: %s", cfg.CacheDirPath)
 	}
 	// ensure publish chan size parsed
 	if cfg.PublishChanSize != 4 {

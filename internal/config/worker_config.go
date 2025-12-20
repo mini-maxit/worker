@@ -19,6 +19,7 @@ type Config struct {
 	ConsumeQueueName string
 	MaxWorkers       int
 	VerifierFlags    []string
+	CacheDirPath     string
 }
 
 func NewConfig() *Config {
@@ -43,6 +44,7 @@ func NewConfig() *Config {
 	storageBaseUrl := storageConfig()
 	workerQueueName, maxWorkers := workerConfig()
 	verifierFlagsStr := verifierConfig()
+	cacheDirPath := cacheConfig()
 
 	return &Config{
 		RabbitMQURL:      rabbitmqURL,
@@ -51,6 +53,7 @@ func NewConfig() *Config {
 		ConsumeQueueName: workerQueueName,
 		MaxWorkers:       maxWorkers,
 		VerifierFlags:    verifierFlagsStr,
+		CacheDirPath:     cacheDirPath,
 	}
 }
 
@@ -156,4 +159,16 @@ func verifierConfig() []string {
 	}
 
 	return strings.Split(verifierFlagsStr, ",")
+}
+
+func cacheConfig() string {
+	logger := logger.NewNamedLogger("config")
+
+	cacheDirPath := os.Getenv("CACHE_DIR_PATH")
+	if cacheDirPath == "" {
+		cacheDirPath = constants.CacheDirPath
+		logger.Warnf("CACHE_DIR_PATH is not set, using default value %s", constants.CacheDirPath)
+	}
+
+	return cacheDirPath
 }
