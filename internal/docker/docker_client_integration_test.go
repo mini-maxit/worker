@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,8 @@ var (
 	testLanguages []languages.LanguageType
 	// testImageName is set from the first supported language.
 	testImageName string
+	// setupOnce ensures setupTestLanguages is called exactly once, preventing race conditions.
+	setupOnce sync.Once
 )
 
 func setupTestLanguages() {
@@ -48,6 +51,16 @@ func setupTestLanguages() {
 			testImageName = image
 		}
 	}
+}
+
+// ensureTestLanguagesSetup ensures test languages are initialized exactly once.
+func ensureTestLanguagesSetup(t *testing.T) {
+	setupOnce.Do(func() {
+		setupTestLanguages()
+		if testImageName == "" {
+			t.Fatal("no supported languages configured or docker image not available")
+		}
+	})
 }
 
 // TestNewDockerClient_Success tests successful creation of a docker client.
@@ -153,6 +166,7 @@ func TestEnsureImage_PullImage(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	ensureTestLanguagesSetup(t)
 	removeImageIfExists(t, testImageName)
 
 	dc, err := docker.NewDockerClient("")
@@ -177,9 +191,7 @@ func TestEnsureImage_AllSupportedLanguages(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	if len(testLanguages) == 0 {
-		t.Skip("No supported languages configured")
-	}
+	ensureTestLanguagesSetup(t)
 
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
@@ -216,6 +228,8 @@ func TestEnsureImage_ImageAlreadyExists(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	ensureTestLanguagesSetup(t)
+
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
@@ -240,6 +254,8 @@ func TestCreateAndStartContainer_Success(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+
+	ensureTestLanguagesSetup(t)
 
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
@@ -281,6 +297,8 @@ func TestWaitContainer_Success(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+
+	ensureTestLanguagesSetup(t)
 
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
@@ -325,6 +343,8 @@ func TestWaitContainer_WithTimeout(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	ensureTestLanguagesSetup(t)
+
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
@@ -366,6 +386,8 @@ func TestContainerWait_Success(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+
+	ensureTestLanguagesSetup(t)
 
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
@@ -414,6 +436,8 @@ func TestContainerKill(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	ensureTestLanguagesSetup(t)
+
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
@@ -455,6 +479,8 @@ func TestCreateContainerWithVolume(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+
+	ensureTestLanguagesSetup(t)
 
 	dc, err := docker.NewDockerClient("")
 	if err != nil {
@@ -547,6 +573,8 @@ func cleanupVolume(t *testing.T, volumeName string) {
 }
 
 func createContainerWithVolume(t *testing.T, volumeName string) string {
+	ensureTestLanguagesSetup(t)
+
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		t.Fatalf("failed to create docker client for container creation: %v", err)
