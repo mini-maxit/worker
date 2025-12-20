@@ -9,7 +9,6 @@ import (
 
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/docker/docker/api/types/container"
 
@@ -22,6 +21,7 @@ import (
 	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/utils"
 )
 
 var containerNameRegex = regexp.MustCompile("[^a-zA-Z0-9_.-]")
@@ -66,7 +66,11 @@ func (d *executor) ExecuteCommand(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(d.maxRunTimeSec)*time.Second)
 	defer cancel()
 
-	env := buildEnvironmentVariables(cfg)
+	env, err := buildEnvironmentVariables(cfg)
+	if err != nil {
+		d.logger.Errorf("Failed to build environment variables: %s [MsgID: %s]", err, cfg.MessageID)
+		return err
+	}
 
 	dockerImage, err := cfg.LanguageType.GetDockerImage(cfg.LanguageVersion)
 	if err != nil {
@@ -78,7 +82,6 @@ func (d *executor) ExecuteCommand(
 	containerCfg := buildContainerConfig(
 		cfg.DirConfig.PackageDirPath,
 		dockerImage,
-		cfg.DirConfig.UserExecFilePath,
 		env,
 	)
 
@@ -168,12 +171,19 @@ func SanitizeContainerName(raw string) string {
 	return "submission-" + cleaned
 }
 
-func buildEnvironmentVariables(cfg CommandConfig) []string {
+func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 	timeEnv := make([]string, len(cfg.TestCases))
 	memEnv := make([]string, len(cfg.TestCases))
 	for i, tc := range cfg.TestCases {
 		timeEnv[i] = strconv.FormatInt(tc.TimeLimitMs, 10)
 		memEnv[i] = strconv.FormatInt(tc.MemoryLimitKB, 10)
+	}
+
+	// Build run command
+	bin := filepath.Base(cfg.DirConfig.UserExecFilePath) // e.g. "solution" or "solution.py"
+	runCmd, err := cfg.LanguageType.GetRunCommand(bin)
+	if err != nil {
+		return nil, err
 	}
 
 	inputFilePaths := make([]string, len(cfg.TestCases))
@@ -201,31 +211,29 @@ func buildEnvironmentVariables(cfg CommandConfig) []string {
 	}
 
 	return []string{
-		"TIME_LIMITS_MS=" + strings.Join(timeEnv, " "),
-		"MEM_LIMITS_KB=" + strings.Join(memEnv, " "),
-		"INPUT_FILES=" + strings.Join(inputFilePaths, " "),
-		"USER_OUTPUT_FILES=" + strings.Join(userOutputFilePaths, " "),
-		"USER_ERROR_FILES=" + strings.Join(userErrorFilePaths, " "),
-		"USER_EXEC_RESULT_FILES=" + strings.Join(userExecResultFilePaths, " "),
-	}
+		"RUN_CMD=" + utils.ShellQuoteSlice(runCmd),
+		"TIME_LIMITS_MS=" + utils.ShellQuoteSlice(timeEnv),
+		"MEM_LIMITS_KB=" + utils.ShellQuoteSlice(memEnv),
+		"INPUT_FILES=" + utils.ShellQuoteSlice(inputFilePaths),
+		"USER_OUTPUT_FILES=" + utils.ShellQuoteSlice(userOutputFilePaths),
+		"USER_ERROR_FILES=" + utils.ShellQuoteSlice(userErrorFilePaths),
+		"USER_EXEC_RESULT_FILES=" + utils.ShellQuoteSlice(userExecResultFilePaths),
+	}, nil
 }
 
 func buildContainerConfig(
 	userPackageDirPath string,
 	dockerImage string,
-	absoluteSolutionPath string,
 	env []string,
 ) *container.Config {
 	stopTimeout := int(2)
-	bin := filepath.Base(absoluteSolutionPath) // e.g. "solution"
-	runCmd := constants.DockerTestScript + " ./" + bin
 
 	return &container.Config{
 		Image:       dockerImage,
-		Cmd:         []string{"bash", "-lc", runCmd},
+		Cmd:         []string{"bash", "-lc", constants.DockerTestScript},
 		WorkingDir:  userPackageDirPath,
 		Env:         env,
-		User:        "0:0",
+		User:        "runner",
 		StopTimeout: &stopTimeout,
 		StopSignal:  "SIGKILL",
 	}

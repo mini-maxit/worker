@@ -25,7 +25,6 @@ func NewCompiler() Compiler {
 
 // LanguageCompiler is a language-specific compiler invoked internally.
 type LanguageCompiler interface {
-	RequiresCompilation() bool
 	Compile(sourceFilePath, outFilePath, compErrFilePath, messageID string) error
 }
 
@@ -37,6 +36,8 @@ func initializeSolutionCompiler(
 	switch langType {
 	case languages.CPP:
 		return NewCppCompiler(langVersion, messageID)
+	case languages.PYTHON:
+		return nil, customErr.ErrInvalidLanguageType // Make linter happy
 	default:
 		return nil, customErr.ErrInvalidLanguageType
 	}
@@ -51,13 +52,14 @@ func (c *compiler) CompileSolutionIfNeeded(
 	compErrFilePath,
 	messageID string,
 ) error {
+	if langType.IsScriptingLanguage() {
+		return nil
+	}
+
 	compiler, err := initializeSolutionCompiler(langType, langVersion, messageID)
 	if err != nil {
 		return err
 	}
 
-	if compiler.RequiresCompilation() {
-		return compiler.Compile(sourceFilePath, execFilePath, compErrFilePath, messageID)
-	}
-	return nil
+	return compiler.Compile(sourceFilePath, execFilePath, compErrFilePath, messageID)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/mini-maxit/worker/internal/storage"
 	"github.com/mini-maxit/worker/pkg/constants"
 	customErr "github.com/mini-maxit/worker/pkg/errors"
+	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 
 	"github.com/mini-maxit/worker/utils"
@@ -18,7 +19,11 @@ import (
 )
 
 type Packager interface {
-	PrepareSolutionPackage(taskQueueMessage *messages.TaskQueueMessage, msgID string) (*TaskDirConfig, error)
+	PrepareSolutionPackage(
+		taskQueueMessage *messages.TaskQueueMessage,
+		langType languages.LanguageType,
+		msgID string,
+	) (*TaskDirConfig, error)
 	SendSolutionPackage(
 		dirConfig *TaskDirConfig,
 		testCases []messages.TestCase,
@@ -58,6 +63,7 @@ func NewPackager(storageService storage.Storage, fileCache storage.FileCache) Pa
 
 func (p *packager) PrepareSolutionPackage(
 	taskQueueMessage *messages.TaskQueueMessage,
+	langType languages.LanguageType,
 	msgID string,
 ) (*TaskDirConfig, error) {
 	if p.storage == nil {
@@ -65,6 +71,13 @@ func (p *packager) PrepareSolutionPackage(
 	}
 
 	p.logger.Infof("Preparing solution package [MsgID: %s]", msgID)
+
+	// Validate the submission filename to prevent shell injection attacks
+	submissionBaseName := filepath.Base(taskQueueMessage.SubmissionFile.Path)
+	if err := utils.ValidateFilename(submissionBaseName); err != nil {
+		p.logger.Errorf("Invalid submission filename: %s [MsgID: %s]", err, msgID)
+		return nil, fmt.Errorf("invalid submission filename: %w", err)
+	}
 
 	basePath := filepath.Join(constants.TmpDirPath, msgID)
 
@@ -99,9 +112,15 @@ func (p *packager) PrepareSolutionPackage(
 		return nil, err
 	}
 
-	userFileExt := filepath.Ext(taskQueueMessage.SubmissionFile.Path)
-	userFileNameWithoutExt := strings.TrimSuffix(filepath.Base(taskQueueMessage.SubmissionFile.Path), userFileExt)
-	userExecPath := filepath.Join(basePath, userFileNameWithoutExt)
+	// For interpreted languages, keep the extension. For compiled languages, remove it.
+	var userExecPath string
+	if langType.IsScriptingLanguage() {
+		userExecPath = filepath.Join(basePath, filepath.Base(taskQueueMessage.SubmissionFile.Path))
+	} else {
+		userFileExt := filepath.Ext(taskQueueMessage.SubmissionFile.Path)
+		userFileNameWithoutExt := strings.TrimSuffix(filepath.Base(taskQueueMessage.SubmissionFile.Path), userFileExt)
+		userExecPath = filepath.Join(basePath, userFileNameWithoutExt)
+	}
 
 	cfg := &TaskDirConfig{
 		TmpDirPath:            constants.TmpDirPath,

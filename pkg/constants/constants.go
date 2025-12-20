@@ -20,9 +20,10 @@ const (
 
 // TestCaseResult messages.
 const (
-	TestCaseMessageTimeOut             = "Solution timed out after %d ms"
-	TestCaseMessageMemoryLimitExceeded = "Solution exceeded memory limit of %d kb"
-	TestCaseMessageNonZeroExitCode     = "Solution exited with non-zero exit code %d"
+	TestCaseMessageTimeOut                = "Solution timed out after %d ms"
+	TestCaseMessageMemoryLimitExceeded    = "Solution exceeded memory limit of %d kb"
+	TestCaseMessageNonZeroExitCode        = "Solution exited with non-zero exit code %d"
+	TestCaseMessagePossiblyExceededMemory = "Solution exit code %d, possibly exceeded memory limit of %d kb"
 )
 
 const (
@@ -42,6 +43,7 @@ const (
 	ExitCodeSuccess             = 0
 	ExitCodeTimeLimitExceeded   = 143
 	ExitCodeMemoryLimitExceeded = 134
+	ExitCodeCommandNotFound     = 127
 )
 
 // Configuration constants.

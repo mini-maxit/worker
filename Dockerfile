@@ -24,7 +24,10 @@ apt-get install -y \
 WORKDIR /app
 
 COPY --from=builder /worker-service /app/worker-service
+COPY entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
 
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 
-ENTRYPOINT [ "/app/worker-service" ]
+ENTRYPOINT [ "/app/entrypoint.sh" ]
