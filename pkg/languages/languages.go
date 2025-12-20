@@ -70,6 +70,21 @@ func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) 
 	}
 }
 
+func (lt LanguageType) GetMemoryLimitErrorPatterns() []string {
+	switch lt {
+	case PYTHON:
+		return []string{"MemoryError"}
+	case CPP:
+		return []string{
+			"std::bad_alloc",
+			"Memory limit exceeded",
+			"Cannot allocate memory",
+		}
+	default:
+		return []string{}
+	}
+}
+
 var LanguageTypeMap = map[string]LanguageType{
 	"CPP":    CPP,
 	"PYTHON": PYTHON,

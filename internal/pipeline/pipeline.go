@@ -186,7 +186,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		return
 	}
 
-	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID)
+	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID, langType)
 
 	err = ws.packager.SendSolutionPackage(dc, task.TestCases /*hasCompilationErr*/, false, messageID)
 	if err != nil {
