@@ -105,8 +105,7 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 }
 
 func TestPrepareSolutionPackage_NoStorage(t *testing.T) {
-
-	p := packager.NewPackager(nil)
+	p := packager.NewPackager(nil, nil)
 	_, err := p.PrepareSolutionPackage(&messages.TaskQueueMessage{}, languages.CPP, "id-no-storage")
 	if err == nil {
 		t.Fatalf("expected error when storage is nil")
@@ -248,7 +247,7 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)
 	}
@@ -316,7 +315,7 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)
 	}
@@ -370,7 +369,7 @@ func TestPrepareSolutionPackage_CacheGetError_FallbackToDownload(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage should succeed with fallback: %v", err)
 	}
@@ -419,7 +418,7 @@ func TestPrepareSolutionPackage_CacheFileError_ContinuesWithoutCaching(t *testin
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage should succeed even if caching fails: %v", err)
 	}
@@ -468,7 +467,7 @@ func TestPrepareSolutionPackage_NoTaskVersion_SkipsCache(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)
 	}
@@ -507,7 +506,7 @@ func TestPrepareSolutionPackage_NilCache_DownloadsDirectly(t *testing.T) {
 	// Create packager with nil cache
 	p := packager.NewPackager(mockStorage, nil)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)
 	}
@@ -558,7 +557,7 @@ func TestPrepareSolutionPackage_MixedCacheResults(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage, mockCache)
 
-	cfg, err := p.PrepareSolutionPackage(msg, msgID)
+	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)
 	}
