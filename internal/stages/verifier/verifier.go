@@ -338,9 +338,9 @@ func isLikelyMemoryLimit(
 		return false
 	}
 
-	// SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(10) possibly mem limit exceeded, but this is NOT guaranteed by POSIX.
+	// SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(7) possibly mem limit exceeded, but this is NOT guaranteed by POSIX.
 	sig := execResult.ExitCode - 128
-	memSignal := sig == 9 || sig == 11 || sig == 6 || sig == 10
+	memSignal := sig == 9 || sig == 11 || sig == 6 || sig == 7
 	if !memSignal {
 		return false
 	}

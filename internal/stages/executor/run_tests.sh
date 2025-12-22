@@ -108,7 +108,10 @@ for idx in "${!inputs[@]}"; do
     code=$?
     end_ns=$(date +%s%N)
 
-    peak_kb=$(<"$peak_mem_file")
+    peak_kb=0
+    if [[ -s "$peak_mem_file" ]]; then
+      peak_kb=$(<"$peak_mem_file")
+    fi
     rm -f "$peak_mem_file"
 
     duration_ns=$((end_ns - start_ns))

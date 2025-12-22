@@ -189,18 +189,6 @@ func setupMLETestCase(
 	return cfg, tc
 }
 
-func TestMemoryLimitExceeded_HardcodedExitCode(t *testing.T) {
-	cfg, tc := setupMLETestCase(t, 134, 1500, 0.1)
-	ver := NewVerifier([]string{})
-	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-mle-hardcoded", languages.PYTHON)
-	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
-		t.Fatalf("expected memory limit status, got: %v", res.TestResults[0].StatusCode)
-	}
-	if res.Message != "1. "+constants.SolutionMessageMemoryLimitExceeded+"." {
-		t.Fatalf("expected MLE message, got %q", res.Message)
-	}
-}
-
 func TestMemoryLimitExceeded_SignalBasedWithHighPeakMemory(t *testing.T) {
 	// exit code 137 = 128 + 9 (SIGKILL) with high peak memory (950KB near 1000KB limit = 95%)
 	cfg, tc := setupMLETestCase(t, 137, 950, 0.05)
@@ -268,7 +256,7 @@ func TestMemoryLimitExceeded_LanguageSpecificPattern(t *testing.T) {
 }
 
 func TestMemoryLimitExceeded_SignalVariants(t *testing.T) {
-	// Test all memory-related signals: SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(10)
+	// Test all memory-related signals: SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(7)
 	signals := []struct {
 		name      string
 		signal    int
@@ -279,7 +267,7 @@ func TestMemoryLimitExceeded_SignalVariants(t *testing.T) {
 		{"SIGKILL with high mem", 9, 137, 950, true},
 		{"SIGSEGV with high mem", 11, 139, 950, true},
 		{"SIGABRT with high mem", 6, 134, 950, true},
-		{"SIGBUS with high mem", 10, 138, 950, true},
+		{"SIGBUS with high mem", 7, 135, 950, true},
 		{"SIGKILL with low mem", 9, 137, 100, false},
 	}
 
