@@ -40,10 +40,9 @@ const (
 
 // Exit codes.
 const (
-	ExitCodeSuccess             = 0
-	ExitCodeTimeLimitExceeded   = 143
-	ExitCodeMemoryLimitExceeded = 134
-	ExitCodeCommandNotFound     = 127
+	ExitCodeSuccess           = 0
+	ExitCodeTimeLimitExceeded = 143
+	ExitCodeCommandNotFound   = 127
 )
 
 // Configuration constants.
