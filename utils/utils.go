@@ -308,14 +308,41 @@ func isAllowedDirectory(header *tar.Header, allowedSet map[string]struct{}) bool
 	return allowed
 }
 
-// validateFileCount enforces the maximum number of files per directory.
-func validateFileCount(header *tar.Header, dirFileCount map[string]int, maxFilesInDir int) error {
-	if header.Typeflag == tar.TypeReg {
-		dirPath := filepath.Dir(header.Name)
-		dirFileCount[dirPath]++
-		if dirFileCount[dirPath] > maxFilesInDir {
-			return fmt.Errorf("directory %s exceeds maximum file count of %d", dirPath, maxFilesInDir)
-		}
+func validatePathDepth(entryPath string) error {
+	const maxDepth = 1
+
+	parts := strings.Split(entryPath, string(os.PathSeparator))
+	if len(parts) > maxDepth+1 {
+		return fmt.Errorf("subdirectories not allowed in archives: %s", entryPath)
+	}
+
+	return nil
+}
+
+// validateTarEntrySize validates that a tar entry doesn't exceed maximum file size.
+func validateTarEntrySize(header *tar.Header, maxFileSize int64) error {
+	if header.Typeflag == tar.TypeReg && header.Size > maxFileSize {
+		return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
+	}
+	return nil
+}
+
+// validateAndTrackFileCount validates per-directory file count and updates the tracking map.
+func validateAndTrackFileCount(header *tar.Header, dirFileCount map[string]int, maxFilesInDir int) error {
+	if header.Typeflag != tar.TypeReg {
+		return nil
+	}
+
+	// Extract the allowed directory name (second path component)
+	parts := strings.Split(header.Name, string(os.PathSeparator))
+	if len(parts) < 2 {
+		return fmt.Errorf("invalid file path structure: %s", header.Name)
+	}
+	dirName := parts[1]
+
+	dirFileCount[dirName]++
+	if dirFileCount[dirName] > maxFilesInDir {
+		return fmt.Errorf("directory %s exceeds maximum file count of %d", dirName, maxFilesInDir)
 	}
 	return nil
 }
@@ -339,6 +366,7 @@ func ExtractTarArchiveFiltered(
 		allowedSet[dir] = struct{}{}
 	}
 
+	// Track files per allowed directory to enforce per-directory limits
 	dirFileCount := make(map[string]int, len(allowedDirs))
 
 	for {
@@ -354,12 +382,15 @@ func ExtractTarArchiveFiltered(
 			continue
 		}
 
-		// Validate file size for regular files.
-		if header.Typeflag == tar.TypeReg && header.Size > maxFileSize {
-			return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
+		if err := validateTarEntrySize(header, maxFileSize); err != nil {
+			return err
 		}
 
-		if err := validateFileCount(header, dirFileCount, maxFilesInDir); err != nil {
+		if err := validatePathDepth(header.Name); err != nil {
+			return err
+		}
+
+		if err := validateAndTrackFileCount(header, dirFileCount, maxFilesInDir); err != nil {
 			return err
 		}
 
