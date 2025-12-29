@@ -99,7 +99,7 @@ func (d *executor) ExecuteCommand(
 
 	// Ensure container cleanup
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 10*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cleanupCancel()
 		d.docker.ContainerRemove(cleanupCtx, containerID)
 	}()
