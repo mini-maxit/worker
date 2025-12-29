@@ -333,7 +333,6 @@ func ExtractTarArchiveFiltered(
 		return err
 	}
 
-	// Build a set of allowed directories for fast lookup
 	allowedSet := make(map[string]struct{}, len(allowedDirs))
 	for _, dir := range allowedDirs {
 		allowedSet[dir] = struct{}{}
@@ -355,12 +354,10 @@ func ExtractTarArchiveFiltered(
 			return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
 		}
 
-		// Check if the file is in an allowed directory
 		if !isAllowedDirectory(header, allowedSet) {
 			continue
 		}
 
-		// Enforce max files per directory
 		if err := validateFileCount(header, dirFileCount, maxFilesInDir); err != nil {
 			return err
 		}
