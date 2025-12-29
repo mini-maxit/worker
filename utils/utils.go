@@ -304,7 +304,7 @@ func isAllowedDirectory(header *tar.Header, allowedSet map[string]struct{}) bool
 	}
 
 	_, allowed := allowedSet[baseDir]
-	return allowed || header.Typeflag == tar.TypeDir
+	return allowed
 }
 
 // validateFileCount enforces the maximum number of files per directory.
@@ -349,13 +349,13 @@ func ExtractTarArchiveFiltered(
 			return err
 		}
 
-		// Validate file size for regular files
-		if header.Typeflag == tar.TypeReg && header.Size > maxFileSize {
-			return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
-		}
-
 		if !isAllowedDirectory(header, allowedSet) {
 			continue
+		}
+
+		// Validate file size for regular files.
+		if header.Typeflag == tar.TypeReg && header.Size > maxFileSize {
+			return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
 		}
 
 		if err := validateFileCount(header, dirFileCount, maxFilesInDir); err != nil {
