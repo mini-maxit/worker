@@ -273,7 +273,7 @@ func buildHostConfig(testCases []messages.TestCase) *container.HostConfig {
 		Resources: container.Resources{
 			Memory:     containerBytes,
 			MemorySwap: containerBytes,
-			PidsLimit:  func(v int64) *int64 { return &v }(64),
+			PidsLimit:  func(v int64) *int64 { return &v }(4),
 			CPUPeriod:  100_000,
 			CPUQuota:   100_000,
 		},
