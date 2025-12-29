@@ -93,17 +93,6 @@ func copyAndRemove(src, dst string) error {
 	return os.Remove(src)
 }
 
-// Checks if given elements is contained in given array.
-func Contains[V string](array []V, value V) bool {
-	for _, el := range array {
-		if el == value {
-			return true
-		}
-	}
-
-	return false
-}
-
 // ValidateFilename checks if a filename contains only safe characters.
 // Returns an error if the filename contains shell metacharacters or path separators
 // that could be used for command injection or directory traversal attacks.
@@ -154,42 +143,6 @@ func RemoveIO(dir string, recursive, ignoreError bool) error {
 		return nil
 	}
 	return err
-}
-
-// CreateTarArchive creates a tar archive from a directory.
-func CreateTarArchive(srcPath string) (io.ReadCloser, error) {
-	pipeReader, pipeWriter := io.Pipe()
-
-	go func() {
-		tarWriter := tar.NewWriter(pipeWriter)
-		defer func() { _ = tarWriter.Close() }()
-		defer func() { _ = pipeWriter.Close() }()
-
-		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// Get relative path.
-			relPath, err := filepath.Rel(srcPath, path)
-			if err != nil {
-				return err
-			}
-
-			// Skip the root directory itself.
-			if relPath == "." {
-				return nil
-			}
-
-			return writeToTarArchive(tarWriter, path, relPath, info)
-		})
-
-		if err != nil {
-			pipeWriter.CloseWithError(err)
-		}
-	}()
-
-	return pipeReader, nil
 }
 
 // writeToTarArchive writes a file or directory to a tar archive.
@@ -295,35 +248,6 @@ func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) 
 	}()
 
 	return pipeReader, nil
-}
-
-// ExtractTarArchive extracts a tar archive to a directory.
-func ExtractTarArchive(reader io.Reader, dstPath string) error {
-	tarReader := tar.NewReader(reader)
-
-	absDstPath, err := filepath.Abs(dstPath)
-	if err != nil {
-		return err
-	}
-
-	for {
-		header, err := tarReader.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		target, err := safeArchiveTarget(absDstPath, header.Name)
-		if err != nil {
-			return err
-		}
-
-		if err := materializeTarEntry(tarReader, header, target); err != nil {
-			return err
-		}
-	}
 }
 
 func safeArchiveTarget(absDstPath, entryName string) (string, error) {
