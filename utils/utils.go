@@ -309,7 +309,7 @@ func isAllowedDirectory(header *tar.Header, allowedSet map[string]struct{}) bool
 }
 
 func validatePathDepth(entryPath string) error {
-	const maxDepth = 1
+	const maxDepth = 2
 
 	parts := strings.Split(entryPath, string(os.PathSeparator))
 	if len(parts) > maxDepth+1 {
