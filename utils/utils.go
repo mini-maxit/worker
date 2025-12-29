@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/kballard/go-shellquote"
+	"github.com/mini-maxit/worker/pkg/constants"
 )
 
 // Attemts to close the file, and panics if something goes wrong.
@@ -153,10 +154,10 @@ func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInf
 		return err
 	}
 	header.Name = name
-	header.Gid = 1000
-	header.Uid = 1000
-	header.Gname = "runner"
-	header.Uname = "runner"
+	header.Gid = constants.RunnerGID
+	header.Uid = constants.RunnerUID
+	header.Gname = constants.RunnerName
+	header.Uname = constants.RunnerName
 
 	if err := tarWriter.WriteHeader(header); err != nil {
 		return err
