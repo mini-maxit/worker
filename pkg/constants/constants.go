@@ -79,8 +79,9 @@ const (
 
 // Docker execution constants.
 const (
-	MinContainerMemoryKB int64 = 64 * 1024 // 64 MB
-	DockerTestScript           = "run_tests.sh"
+	MinContainerMemoryKB       int64 = 64 * 1024   // 64 MB
+	MaxContainerOutputFileSize int64 = 1024 * 1024 // 1 MB per output file
+	DockerTestScript                 = "run_tests.sh"
 )
 
 // RabbitMQ specific constants.

@@ -129,11 +129,21 @@ func (d *executor) ExecuteCommand(
 	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
 	copyCtx, copyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer copyCancel()
-	err = d.docker.CopyFromContainer(
+
+	allowedDirs := []string{
+		constants.UserOutputDirName,
+		constants.UserErrorDirName,
+		constants.UserDiffDirName,
+		constants.UserExecResultDirName,
+	}
+	err = d.docker.CopyFromContainerFiltered(
 		copyCtx,
 		containerID,
 		cfg.DirConfig.PackageDirPath,
 		cfg.DirConfig.TmpDirPath,
+		allowedDirs,
+		constants.MaxContainerOutputFileSize,
+		len(cfg.TestCases),
 	)
 	if err != nil {
 		return err

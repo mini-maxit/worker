@@ -3,6 +3,7 @@ package utils
 import (
 	"archive/tar"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -346,7 +347,8 @@ func materializeTarEntry(tarReader *tar.Reader, header *tar.Header, target strin
 			return err
 		}
 
-		file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+		safeMode := os.FileMode(header.Mode) & 0666 // Remove execute bits
+		file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, safeMode)
 		if err != nil {
 			return err
 		}
@@ -357,7 +359,95 @@ func materializeTarEntry(tarReader *tar.Reader, header *tar.Header, target strin
 		}
 		CloseFile(file)
 		return nil
+	case tar.TypeSymlink, tar.TypeLink:
+		return errors.New("symlinks and hardlinks are not allowed in archives")
 	default:
 		return nil
+	}
+}
+
+func isAllowedDirectory(header *tar.Header, allowedSet map[string]struct{}) bool {
+	parts := strings.Split(header.Name, string(os.PathSeparator))
+	if len(parts) == 0 {
+		return false
+	}
+
+	var baseDir string
+	if len(parts) > 1 {
+		baseDir = parts[1] // Skip the package directory itself
+	} else {
+		baseDir = parts[0]
+	}
+
+	_, allowed := allowedSet[baseDir]
+	return allowed || header.Typeflag == tar.TypeDir
+}
+
+// validateFileCount enforces the maximum number of files per directory.
+func validateFileCount(header *tar.Header, dirFileCount map[string]int, maxFilesInDir int) error {
+	if header.Typeflag == tar.TypeReg {
+		dirPath := filepath.Dir(header.Name)
+		dirFileCount[dirPath]++
+		if dirFileCount[dirPath] > maxFilesInDir {
+			return fmt.Errorf("directory %s exceeds maximum file count of %d", dirPath, maxFilesInDir)
+		}
+	}
+	return nil
+}
+
+func ExtractTarArchiveFiltered(
+	reader io.Reader,
+	dstPath string,
+	allowedDirs []string,
+	maxFileSize int64,
+	maxFilesInDir int,
+) error {
+	tarReader := tar.NewReader(reader)
+
+	absDstPath, err := filepath.Abs(dstPath)
+	if err != nil {
+		return err
+	}
+
+	// Build a set of allowed directories for fast lookup
+	allowedSet := make(map[string]struct{}, len(allowedDirs))
+	for _, dir := range allowedDirs {
+		allowedSet[dir] = struct{}{}
+	}
+
+	dirFileCount := make(map[string]int, len(allowedDirs))
+
+	for {
+		header, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		// Validate file size for regular files
+		if header.Typeflag == tar.TypeReg && header.Size > maxFileSize {
+			return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
+		}
+
+		// Check if the file is in an allowed directory
+		if !isAllowedDirectory(header, allowedSet) {
+			continue
+		}
+
+		// Enforce max files per directory
+		if err := validateFileCount(header, dirFileCount, maxFilesInDir); err != nil {
+			return err
+		}
+
+		target, err := safeArchiveTarget(absDstPath, header.Name)
+		if err != nil {
+			return err
+		}
+
+		if err := materializeTarEntry(tarReader, header, target); err != nil {
+			return err
+		}
 	}
 }

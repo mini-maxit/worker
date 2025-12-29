@@ -77,8 +77,8 @@ func setupMockExpectations(
 		mockDocker.EXPECT().WaitContainer(
 			gomock.Any(), containerID, gomock.Any(),
 		).Return(statusCode, nil).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), containerID, gomock.Any(), gomock.Any(),
+		mockDocker.EXPECT().CopyFromContainerFiltered(
+			gomock.Any(), containerID, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerRemove(gomock.Any(), containerID).Times(1),
 	)
@@ -117,8 +117,8 @@ func TestExecuteCommand_Success(t *testing.T) {
 		mockDocker.EXPECT().WaitContainer(
 			gomock.Any(), "cid123", gomock.Any(),
 		).Return(int64(0), nil).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid123", gomock.Any(), gomock.Any(),
+		mockDocker.EXPECT().CopyFromContainerFiltered(
+			gomock.Any(), "cid123", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(nil).Times(1),
 		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid123").Times(1),
 	)
@@ -319,8 +319,8 @@ func TestExecuteCommand_CopyFromContainerFails(t *testing.T) {
 		mockDocker.EXPECT().WaitContainer(
 			gomock.Any(), "cid-copyfrom-fail", gomock.Any(),
 		).Return(int64(0), nil).Times(1),
-		mockDocker.EXPECT().CopyFromContainer(
-			gomock.Any(), "cid-copyfrom-fail", gomock.Any(), gomock.Any(),
+		mockDocker.EXPECT().CopyFromContainerFiltered(
+			gomock.Any(), "cid-copyfrom-fail", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(errors.New("copy-from-failed")).Times(1),
 		mockDocker.EXPECT().ContainerRemove(gomock.Any(), "cid-copyfrom-fail").Times(1),
 	)
@@ -337,7 +337,7 @@ func TestExecuteCommand_CopyFromContainerFails(t *testing.T) {
 
 	err := ex.ExecuteCommand(cfg)
 	if err == nil {
-		t.Fatalf("expected error from CopyFromContainer, got nil")
+		t.Fatalf("expected error from CopyFromContainerFiltered, got nil")
 	}
 }
 
