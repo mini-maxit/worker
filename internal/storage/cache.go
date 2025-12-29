@@ -3,7 +3,6 @@ package storage
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/messages"
+	"github.com/mini-maxit/worker/utils"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +38,6 @@ type fileCache struct {
 	cacheDirPath string
 	ttl          time.Duration
 	metadata     *CacheMetadata
-	metadataPath string
 }
 
 func NewFileCache(cacheDirPath string) FileCache {
@@ -48,19 +47,13 @@ func NewFileCache(cacheDirPath string) FileCache {
 		cacheDirPath: cacheDirPath,
 		ttl:          time.Duration(constants.CacheTTLHours) * time.Hour,
 		metadata:     &CacheMetadata{Entries: make(map[string]CacheEntry)},
-		metadataPath: filepath.Join(cacheDirPath, constants.CacheMetadataFile),
 	}
 }
 
-// InitCache initializes the cache directory and loads metadata.
+// InitCache initializes the cache directory.
 func (c *fileCache) InitCache() error {
 	if err := os.MkdirAll(c.cacheDirPath, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
-	if err := c.loadMetadata(); err != nil {
-		c.logger.Warnf("Failed to load cache metadata, starting fresh: %v", err)
-		c.metadata = &CacheMetadata{Entries: make(map[string]CacheEntry)}
 	}
 
 	if err := c.CleanExpiredCache(); err != nil {
@@ -82,7 +75,6 @@ func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation) (string, b
 	if time.Since(entry.CachedAt) > c.ttl {
 		c.logger.Debugf("Cache expired for %s", fileLocation.Path)
 		delete(c.metadata.Entries, key)
-		_ = c.saveMetadata()
 		return "", false, nil
 	}
 
@@ -90,7 +82,6 @@ func (c *fileCache) GetCachedFile(fileLocation messages.FileLocation) (string, b
 	if _, err := os.Stat(entry.FilePath); os.IsNotExist(err) {
 		c.logger.Debugf("Cached file no longer exists: %s", entry.FilePath)
 		delete(c.metadata.Entries, key)
-		_ = c.saveMetadata()
 		return "", false, nil
 	}
 
@@ -118,7 +109,7 @@ func (c *fileCache) CacheFile(fileLocation messages.FileLocation, sourcePath str
 	cacheFilePath := filepath.Join(c.cacheDirPath, cacheFileName)
 
 	// Copy the file to cache.
-	if err := c.copyFile(sourcePath, cacheFilePath); err != nil {
+	if err := utils.CopyFile(sourcePath, cacheFilePath); err != nil {
 		return fmt.Errorf("failed to copy file to cache: %w", err)
 	}
 
@@ -128,10 +119,6 @@ func (c *fileCache) CacheFile(fileLocation messages.FileLocation, sourcePath str
 		CachedAt:       time.Now(),
 		OriginalPath:   fileLocation.Path,
 		OriginalBucket: fileLocation.Bucket,
-	}
-
-	if err := c.saveMetadata(); err != nil {
-		c.logger.Warnf("Failed to save cache metadata: %v", err)
 	}
 
 	c.logger.Debugf("Cached file %s", fileLocation.Path)
@@ -158,7 +145,6 @@ func (c *fileCache) CleanExpiredCache() error {
 
 	if len(toDelete) > 0 {
 		c.logger.Infof("Cleaned %d expired cache entries", len(toDelete))
-		return c.saveMetadata()
 	}
 
 	return nil
@@ -202,45 +188,4 @@ func (c *fileCache) generateCacheFileName(fileLocation messages.FileLocation) st
 	key := c.generateKey(fileLocation)
 	ext := filepath.Ext(fileLocation.Path)
 	return fmt.Sprintf("%s%s", key, ext)
-}
-
-func (c *fileCache) copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer destFile.Close()
-
-	if _, err := destFile.ReadFrom(sourceFile); err != nil {
-		return err
-	}
-
-	return destFile.Sync()
-}
-
-func (c *fileCache) loadMetadata() error {
-	data, err := os.ReadFile(c.metadataPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-
-	return json.Unmarshal(data, c.metadata)
-}
-
-func (c *fileCache) saveMetadata() error {
-	data, err := json.MarshalIndent(c.metadata, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(c.metadataPath, data, 0644)
 }

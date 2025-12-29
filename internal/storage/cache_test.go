@@ -1,7 +1,6 @@
 package storage_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +8,6 @@ import (
 	"time"
 
 	"github.com/mini-maxit/worker/internal/storage"
-	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -125,59 +123,6 @@ func TestFileCache_GetCachedFile_Success(t *testing.T) {
 	// Verify file exists
 	_, err = os.Stat(cachedPath)
 	require.NoError(t, err)
-}
-
-func TestFileCache_CleanExpiredCache(t *testing.T) {
-	cachedir := t.TempDir()
-	cache := storage.NewFileCache(cachedir)
-
-	err := cache.InitCache()
-	require.NoError(t, err)
-
-	// Create and cache a file
-	testContent := "expired cache test"
-	testFile := createTestFile(t, testContent)
-	defer os.Remove(testFile)
-
-	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
-		Path:   "test/expired.txt",
-	}
-
-	err = cache.CacheFile(fileLocation, testFile)
-	require.NoError(t, err)
-
-	// Manually update metadata to simulate expired cache
-	metadataPath := filepath.Join(cachedir, constants.CacheMetadataFile)
-	data, err := os.ReadFile(metadataPath)
-	require.NoError(t, err)
-
-	var metadata storage.CacheMetadata
-	err = json.Unmarshal(data, &metadata)
-	require.NoError(t, err)
-
-	// Set all entries to be expired (more than 24 hours old)
-	for key, entry := range metadata.Entries {
-		entry.CachedAt = time.Now().Add(-25 * time.Hour)
-		metadata.Entries[key] = entry
-	}
-
-	// Save modified metadata
-	modifiedData, err := json.MarshalIndent(metadata, "", "  ")
-	require.NoError(t, err)
-	err = os.WriteFile(metadataPath, modifiedData, 0644)
-	require.NoError(t, err)
-
-	// Create new cache instance to reload metadata
-	cache2 := storage.NewFileCache(cachedir)
-	err = cache2.InitCache()
-	require.NoError(t, err)
-
-	// Try to get the file - should not be found as it was cleaned
-	cachedPath, found, err := cache2.GetCachedFile(fileLocation)
-	require.NoError(t, err)
-	assert.False(t, found)
-	assert.Empty(t, cachedPath)
 }
 
 func TestFileCache_MultipleCacheEntries(t *testing.T) {
@@ -368,43 +313,6 @@ func TestFileCache_GetCachedFile_FileDeleted(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, found2)
 	assert.Empty(t, cachedPath2)
-}
-
-func TestFileCache_InitCache_WithExistingMetadata(t *testing.T) {
-	cachedir := t.TempDir()
-	cache := storage.NewFileCache(cachedir)
-
-	// First initialization
-	err := cache.InitCache()
-	require.NoError(t, err)
-
-	// Cache a file
-	testContent := "persistent metadata test"
-	testFile := createTestFile(t, testContent)
-	defer os.Remove(testFile)
-
-	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
-		Path:   "test/persistent.txt",
-	}
-
-	err = cache.CacheFile(fileLocation, testFile)
-	require.NoError(t, err)
-
-	// Create a new cache instance (simulating restart)
-	cache2 := storage.NewFileCache(cachedir)
-	err = cache2.InitCache()
-	require.NoError(t, err)
-
-	// Verify the cached file is still available
-	cachedPath, found, err := cache2.GetCachedFile(fileLocation)
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.NotEmpty(t, cachedPath)
-
-	content, err := os.ReadFile(cachedPath)
-	require.NoError(t, err)
-	assert.Equal(t, testContent, string(content))
 }
 
 func TestFileCache_CacheFile_InvalidSourcePath(t *testing.T) {
