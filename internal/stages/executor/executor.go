@@ -27,11 +27,13 @@ import (
 var containerNameRegex = regexp.MustCompile("[^a-zA-Z0-9_.-]")
 
 type CommandConfig struct {
-	MessageID       string
-	DirConfig       *packager.TaskDirConfig
-	LanguageType    languages.LanguageType
-	LanguageVersion string
-	TestCases       []messages.TestCase
+	MessageID         string
+	DirConfig         *packager.TaskDirConfig
+	LanguageType      languages.LanguageType
+	LanguageVersion   string
+	TestCases         []messages.TestCase
+	SourceFilePath    string
+	RequiresCompiling bool
 }
 
 type ExecutionResult struct {
@@ -181,6 +183,22 @@ func SanitizeContainerName(raw string) string {
 	return "submission-" + cleaned
 }
 
+func buildCompileCommand(cfg CommandConfig) []string {
+	switch cfg.LanguageType {
+	case languages.CPP:
+		versionFlag, _ := languages.GetVersionFlag(languages.CPP, cfg.LanguageVersion)
+		return []string{
+			"g++",
+			"-o",
+			filepath.Base(cfg.DirConfig.UserExecFilePath),
+			"-std=" + versionFlag,
+			filepath.Base(cfg.SourceFilePath),
+		}
+	default:
+		return []string{}
+	}
+}
+
 func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 	timeEnv := make([]string, len(cfg.TestCases))
 	memEnv := make([]string, len(cfg.TestCases))
@@ -220,7 +238,7 @@ func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 			fmt.Sprintf("%d.%s", tc.Order, constants.ExecutionResultFileExt))
 	}
 
-	return []string{
+	envVars := []string{
 		"RUN_CMD=" + utils.ShellQuoteSlice(runCmd),
 		"TIME_LIMITS_MS=" + utils.ShellQuoteSlice(timeEnv),
 		"MEM_LIMITS_KB=" + utils.ShellQuoteSlice(memEnv),
@@ -228,7 +246,20 @@ func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 		"USER_OUTPUT_FILES=" + utils.ShellQuoteSlice(userOutputFilePaths),
 		"USER_ERROR_FILES=" + utils.ShellQuoteSlice(userErrorFilePaths),
 		"USER_EXEC_RESULT_FILES=" + utils.ShellQuoteSlice(userExecResultFilePaths),
-	}, nil
+	}
+
+	if cfg.RequiresCompiling {
+		compileCmd := buildCompileCommand(cfg)
+		envVars = append(envVars,
+			"REQUIRES_COMPILATION=true",
+			"COMPILE_CMD="+utils.ShellQuoteSlice(compileCmd),
+			"SOURCE_FILE="+filepath.Base(cfg.SourceFilePath),
+			"EXEC_FILE="+filepath.Base(cfg.DirConfig.UserExecFilePath),
+			"COMPILE_ERR_FILE="+filepath.Base(cfg.DirConfig.CompileErrFilePath),
+		)
+	}
+
+	return envVars, nil
 }
 
 func buildContainerConfig(

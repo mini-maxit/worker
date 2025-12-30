@@ -1,7 +1,7 @@
 FROM golang:1.23-bookworm AS builder
 
 RUN apt-get update && \
-    apt-get install -y sudo debootstrap schroot g++ && \
+    apt-get install -y sudo debootstrap schroot && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -17,7 +17,6 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && \
 apt-get install -y \
-    g++ \
     docker.io \
     && rm -rf /var/lib/apt/lists/*
 
