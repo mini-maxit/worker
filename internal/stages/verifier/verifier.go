@@ -279,21 +279,6 @@ func (v *verifier) evaluateTestCase(
 			Order:         testCaseIdx,
 		}, solution.TestFailed, constants.SolutionMessageTimeout
 
-	case constants.ExitCodeMemoryLimitExceeded:
-		message := fmt.Sprintf(
-			constants.TestCaseMessageMemoryLimitExceeded,
-			memoryLimit,
-		)
-		return solution.TestResult{
-			Passed:        false,
-			ExecutionTime: execResult.ExecTime,
-			PeakMem:       execResult.PeakMem,
-			StatusCode:    solution.MemoryLimitExceeded,
-			ExitCode:      execResult.ExitCode,
-			ErrorMessage:  message,
-			Order:         testCaseIdx,
-		}, solution.TestFailed, constants.SolutionMessageMemoryLimitExceeded
-
 	case constants.ExitCodeCommandNotFound:
 		message := fmt.Sprintf(
 			constants.TestCaseMessagePossiblyExceededMemory,
@@ -311,7 +296,7 @@ func (v *verifier) evaluateTestCase(
 		}, solution.TestFailed, constants.SolutionMessageNonZeroExitCode
 
 	default:
-		if v.hasMemoryLimitErrorPattern(errorPath, langType) {
+		if isLikelyMemoryLimit(execResult, errorPath, langType, memoryLimit) {
 			message := fmt.Sprintf(
 				constants.TestCaseMessageMemoryLimitExceeded,
 				memoryLimit,
@@ -339,7 +324,36 @@ func (v *verifier) evaluateTestCase(
 	}
 }
 
-func (v *verifier) hasMemoryLimitErrorPattern(errorPath string, langType languages.LanguageType) bool {
+func isLikelyMemoryLimit(
+	execResult *executor.ExecutionResult,
+	errorPath string,
+	langType languages.LanguageType,
+	memoryLimit int64,
+) bool {
+	if hasMemoryLimitErrorPattern(errorPath, langType) {
+		return true
+	}
+
+	if execResult == nil || execResult.ExitCode <= 128 {
+		return false
+	}
+
+	// SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(7) possibly mem limit exceeded, but this is NOT guaranteed by POSIX.
+	sig := execResult.ExitCode - 128
+	memSignal := sig == 9 || sig == 11 || sig == 6 || sig == 7
+	if !memSignal {
+		return false
+	}
+
+	if memoryLimit <= 0 {
+		return false
+	}
+
+	nearLimit := execResult.PeakMem >= (memoryLimit*9)/10
+	return nearLimit
+}
+
+func hasMemoryLimitErrorPattern(errorPath string, langType languages.LanguageType) bool {
 	errorContent, err := os.ReadFile(errorPath)
 	if err != nil {
 		return false

@@ -135,20 +135,6 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
 	}
 
-	// memory limit exceeded (exit code 134)
-	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "134 0.0 0\n")
-	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg4", languages.PYTHON)
-	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
-		t.Fatalf("expected memory limit status, got: %v", res.TestResults[0].StatusCode)
-	}
-	if res.TestResults[0].ExitCode != constants.ExitCodeMemoryLimitExceeded {
-		t.Fatalf("expected exit code %d, got %d", constants.ExitCodeMemoryLimitExceeded, res.TestResults[0].ExitCode)
-	}
-	expectedMsg = "1. " + constants.SolutionMessageMemoryLimitExceeded + "."
-	if res.Message != expectedMsg {
-		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
-	}
-
 	// runtime error (exit code 2)
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "2 0.0 0\n")
 	res = ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg5", languages.PYTHON)
@@ -161,6 +147,172 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	expectedMsg = "1. " + constants.SolutionMessageNonZeroExitCode + "."
 	if res.Message != expectedMsg {
 		t.Fatalf("expected message %q, got %q", expectedMsg, res.Message)
+	}
+}
+
+func setupMLETestCase(
+	t *testing.T,
+	exitCode int,
+	peakMem int64,
+	execTime float64,
+) (*packager.TaskDirConfig, messages.TestCase) {
+	dir := t.TempDir()
+	userOutDir := filepath.Join(dir, "userOut")
+	expectedOutDir := filepath.Join(dir, "expected")
+	userDiffDir := filepath.Join(dir, "userDiff")
+	userErrDir := filepath.Join(dir, "userErr")
+	execResDir := filepath.Join(dir, "execRes")
+
+	tests.WriteFile(t, expectedOutDir, "out.txt", "output\n")
+	tests.WriteFile(t, userOutDir, "out.txt", "output\n")
+	tests.WriteFile(
+		t,
+		execResDir,
+		"1."+constants.ExecutionResultFileExt,
+		fmt.Sprintf("%d %.2f %d\n", exitCode, execTime, peakMem),
+	)
+
+	cfg := &packager.TaskDirConfig{
+		UserOutputDirPath:     userOutDir,
+		OutputDirPath:         expectedOutDir,
+		UserDiffDirPath:       userDiffDir,
+		UserErrorDirPath:      userErrDir,
+		UserExecResultDirPath: execResDir,
+	}
+
+	tc := messages.TestCase{
+		StdOutResult:   messages.FileLocation{Path: "out.txt"},
+		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		MemoryLimitKB:  1000,
+	}
+
+	return cfg, tc
+}
+
+func TestMemoryLimitExceeded_SignalBasedWithHighPeakMemory(t *testing.T) {
+	// exit code 137 = 128 + 9 (SIGKILL) with high peak memory (950KB near 1000KB limit = 95%)
+	cfg, tc := setupMLETestCase(t, 137, 950, 0.05)
+	ver := NewVerifier([]string{})
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-mle-signal-high-mem", languages.PYTHON)
+	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
+		t.Fatalf("expected memory limit status, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.Message != "1. "+constants.SolutionMessageMemoryLimitExceeded+"." {
+		t.Fatalf("expected MLE message, got %q", res.Message)
+	}
+}
+
+func TestNonZeroExitCode_SignalBasedWithLowPeakMemory(t *testing.T) {
+	// exit code 137 = 128 + 9 (SIGKILL) but low peak memory (100KB < 90% of 1000KB)
+	// Should be classified as NonZeroExitCode, not MLE
+	cfg, tc := setupMLETestCase(t, 137, 100, 0.05)
+	ver := NewVerifier([]string{})
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-signal-low-mem", languages.PYTHON)
+	if res.TestResults[0].StatusCode != solution.NonZeroExitCode {
+		t.Fatalf("expected non-zero exit code status, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.Message != "1. "+constants.SolutionMessageNonZeroExitCode+"." {
+		t.Fatalf("expected NonZeroExitCode message, got %q", res.Message)
+	}
+}
+
+func TestMemoryLimitExceeded_LanguageSpecificPattern(t *testing.T) {
+	dir := t.TempDir()
+	userOutDir := filepath.Join(dir, "userOut")
+	expectedOutDir := filepath.Join(dir, "expected")
+	userDiffDir := filepath.Join(dir, "userDiff")
+	userErrDir := filepath.Join(dir, "userErr")
+	execResDir := filepath.Join(dir, "execRes")
+
+	tests.WriteFile(t, expectedOutDir, "out.txt", "output\n")
+	tests.WriteFile(t, userOutDir, "out.txt", "output\n")
+	// exit code 1 (generic error) but stderr contains C++ memory limit error pattern
+	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "1 0.05 500\n")
+	tests.WriteFile(t, userErrDir, "1.txt", "std::bad_alloc\n")
+
+	cfg := &packager.TaskDirConfig{
+		UserOutputDirPath:     userOutDir,
+		OutputDirPath:         expectedOutDir,
+		UserDiffDirPath:       userDiffDir,
+		UserErrorDirPath:      userErrDir,
+		UserExecResultDirPath: execResDir,
+	}
+
+	ver := NewVerifier([]string{})
+	tc := messages.TestCase{
+		StdOutResult:   messages.FileLocation{Path: "out.txt"},
+		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		StdErrResult:   messages.FileLocation{Path: "1.txt"},
+		MemoryLimitKB:  1000,
+	}
+
+	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-mle-pattern", languages.CPP)
+	if res.TestResults[0].StatusCode != solution.MemoryLimitExceeded {
+		t.Fatalf("expected memory limit status from error pattern, got: %v", res.TestResults[0].StatusCode)
+	}
+	if res.Message != "1. "+constants.SolutionMessageMemoryLimitExceeded+"." {
+		t.Fatalf("expected MLE message from pattern, got %q", res.Message)
+	}
+}
+
+func TestMemoryLimitExceeded_SignalVariants(t *testing.T) {
+	// Test all memory-related signals: SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(7)
+	signals := []struct {
+		name      string
+		signal    int
+		exitCode  int
+		peakMem   int64
+		expectMLE bool
+	}{
+		{"SIGKILL with high mem", 9, 137, 950, true},
+		{"SIGSEGV with high mem", 11, 139, 950, true},
+		{"SIGABRT with high mem", 6, 134, 950, true},
+		{"SIGBUS with high mem", 7, 135, 950, true},
+		{"SIGKILL with low mem", 9, 137, 100, false},
+	}
+
+	for _, tc := range signals {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			userOutDir := filepath.Join(dir, "userOut")
+			expectedOutDir := filepath.Join(dir, "expected")
+			userDiffDir := filepath.Join(dir, "userDiff")
+			userErrDir := filepath.Join(dir, "userErr")
+			execResDir := filepath.Join(dir, "execRes")
+
+			tests.WriteFile(t, expectedOutDir, "out.txt", "output\n")
+			tests.WriteFile(t, userOutDir, "out.txt", "output\n")
+			tests.WriteFile(
+				t,
+				execResDir,
+				"1."+constants.ExecutionResultFileExt,
+				fmt.Sprintf("%d 0.05 %d\n", tc.exitCode, tc.peakMem),
+			)
+
+			cfg := &packager.TaskDirConfig{
+				UserOutputDirPath:     userOutDir,
+				OutputDirPath:         expectedOutDir,
+				UserDiffDirPath:       userDiffDir,
+				UserErrorDirPath:      userErrDir,
+				UserExecResultDirPath: execResDir,
+			}
+
+			ver := NewVerifier([]string{})
+			testCase := messages.TestCase{
+				StdOutResult:   messages.FileLocation{Path: "out.txt"},
+				ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+				MemoryLimitKB:  1000,
+			}
+
+			res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{testCase}, "msg-signal", languages.PYTHON)
+			expectedStatus := solution.NonZeroExitCode
+			if tc.expectMLE {
+				expectedStatus = solution.MemoryLimitExceeded
+			}
+			if res.TestResults[0].StatusCode != expectedStatus {
+				t.Fatalf("expected status %v, got %v", expectedStatus, res.TestResults[0].StatusCode)
+			}
+		})
 	}
 }
 
@@ -371,7 +523,7 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.001 0\n")
 	tests.WriteFile(t, execResDir, "2."+constants.ExecutionResultFileExt, "0 0.002 0\n")
 	tests.WriteFile(t, execResDir, "3."+constants.ExecutionResultFileExt, "2 0.003 0\n")
-	tests.WriteFile(t, execResDir, "4."+constants.ExecutionResultFileExt, "134 0.004 0\n")
+	tests.WriteFile(t, execResDir, "4."+constants.ExecutionResultFileExt, "134 0.004 203\n")
 	tests.WriteFile(t, execResDir, "5."+constants.ExecutionResultFileExt, "143 0.005 0\n")
 
 	cfg := &packager.TaskDirConfig{
@@ -388,7 +540,8 @@ func TestEvaluateAllTestCases_MultipleStatuses(t *testing.T) {
 		{StdOutResult: messages.FileLocation{Path: "t1.txt"}, ExpectedOutput: messages.FileLocation{Path: "t1.txt"}},
 		{StdOutResult: messages.FileLocation{Path: "t2.txt"}, ExpectedOutput: messages.FileLocation{Path: "t2.txt"}},
 		{StdOutResult: messages.FileLocation{Path: "t3.txt"}, ExpectedOutput: messages.FileLocation{Path: "t3.txt"}},
-		{StdOutResult: messages.FileLocation{Path: "t4.txt"}, ExpectedOutput: messages.FileLocation{Path: "t4.txt"}},
+		{StdOutResult: messages.FileLocation{Path: "t4.txt"},
+			ExpectedOutput: messages.FileLocation{Path: "t4.txt"}, MemoryLimitKB: 200},
 		{StdOutResult: messages.FileLocation{Path: "t5.txt"}, ExpectedOutput: messages.FileLocation{Path: "t5.txt"}},
 	}
 
