@@ -138,12 +138,18 @@ func (d *executor) ExecuteCommand(
 		constants.UserDiffDirName,
 		constants.UserExecResultDirName,
 	}
+
+	alwaysCopyFiles := []string{
+		filepath.Base(cfg.DirConfig.CompileErrFilePath),
+	}
+
 	err = d.docker.CopyFromContainerFiltered(
 		copyCtx,
 		containerID,
 		cfg.DirConfig.PackageDirPath,
 		cfg.DirConfig.TmpDirPath,
 		allowedDirs,
+		alwaysCopyFiles,
 		constants.MaxContainerOutputFileSize,
 		len(cfg.TestCases),
 	)

@@ -153,11 +153,6 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
-		if fileInfo, statErr := os.Stat(dc.CompileErrFilePath); statErr == nil && fileInfo.Size() > 0 {
-			ws.publishCompilationError(dc, task.TestCases)
-			return
-		}
-
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			ws.state.ProcessingMessageID,
@@ -166,7 +161,12 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		)
 		return
 	}
-
+	
+	// Check for compilation error
+	if fileInfo, statErr := os.Stat(dc.CompileErrFilePath); statErr == nil && fileInfo.Size() > 0 {
+		ws.publishCompilationError(dc, task.TestCases)
+		return
+	}
 	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID, langType)
 
 	err = ws.packager.SendSolutionPackage(dc, task.TestCases /*hasCompilationErr*/, false, messageID)
@@ -190,6 +190,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 }
 
 func (ws *worker) publishCompilationError(dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
+	ws.logger.Infof("Compilation error occured for message ID: %s", ws.state.ProcessingMessageID)
 	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, ws.state.ProcessingMessageID)
 	if sendErr != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(

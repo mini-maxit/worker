@@ -351,6 +351,7 @@ func ExtractTarArchiveFiltered(
 	reader io.Reader,
 	dstPath string,
 	allowedDirs []string,
+	alwaysCopyFiles []string,
 	maxFileSize int64,
 	maxFilesInDir int,
 ) error {
@@ -366,6 +367,11 @@ func ExtractTarArchiveFiltered(
 		allowedSet[dir] = struct{}{}
 	}
 
+	alwaysCopySet := make(map[string]struct{}, len(alwaysCopyFiles))
+	for _, file := range alwaysCopyFiles {
+		alwaysCopySet[file] = struct{}{}
+	}
+
 	// Track files per allowed directory to enforce per-directory limits
 	dirFileCount := make(map[string]int, len(allowedDirs))
 
@@ -378,7 +384,10 @@ func ExtractTarArchiveFiltered(
 			return err
 		}
 
-		if !isAllowedDirectory(header, allowedSet) {
+		// Check if this file should always be copied
+		_, alwaysCopy := alwaysCopySet[filepath.Base(header.Name)]
+
+		if !alwaysCopy && !isAllowedDirectory(header, allowedSet) {
 			continue
 		}
 
@@ -390,8 +399,10 @@ func ExtractTarArchiveFiltered(
 			return err
 		}
 
-		if err := validateAndTrackFileCount(header, dirFileCount, maxFilesInDir); err != nil {
-			return err
+		if !alwaysCopy {
+			if err := validateAndTrackFileCount(header, dirFileCount, maxFilesInDir); err != nil {
+				return err
+			}
 		}
 
 		target, err := safeArchiveTarget(absDstPath, header.Name)

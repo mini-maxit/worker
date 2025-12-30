@@ -31,6 +31,7 @@ type DockerClient interface {
 		ctx context.Context,
 		containerID, srcPath, dstPath string,
 		allowedDirs []string,
+		alwaysCopyFiles []string,
 		maxFileSize int64,
 		maxFilesInDir int,
 	) error
@@ -151,6 +152,7 @@ func (d *dockerClient) CopyFromContainerFiltered(
 	ctx context.Context,
 	containerID, srcPath, dstPath string,
 	allowedDirs []string,
+	alwaysCopyFiles []string,
 	maxFileSize int64,
 	maxFilesInDir int,
 ) error {
@@ -163,7 +165,7 @@ func (d *dockerClient) CopyFromContainerFiltered(
 	defer reader.Close()
 
 	// Extract tar archive with filtering to destination
-	err = utils.ExtractTarArchiveFiltered(reader, dstPath, allowedDirs, maxFileSize, maxFilesInDir)
+	err = utils.ExtractTarArchiveFiltered(reader, dstPath, allowedDirs, alwaysCopyFiles, maxFileSize, maxFilesInDir)
 	if err != nil {
 		d.logger.Errorf("Failed to extract filtered tar archive to %s: %s", dstPath, err)
 	}
