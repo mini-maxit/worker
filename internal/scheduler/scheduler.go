@@ -6,7 +6,6 @@ import (
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/pipeline"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
-	"github.com/mini-maxit/worker/internal/stages/compiler"
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
@@ -30,14 +29,13 @@ type scheduler struct {
 
 func NewScheduler(
 	maxWorkers int,
-	compiler compiler.Compiler,
 	packager packager.Packager,
 	executor executor.Executor,
 	verifier verifier.Verifier,
 	responder responder.Responder,
 
 ) Scheduler {
-	return NewSchedulerWithWorkers(maxWorkers, nil, compiler, packager, executor, verifier, responder)
+	return NewSchedulerWithWorkers(maxWorkers, nil, packager, executor, verifier, responder)
 }
 
 // NewSchedulerWithWorkers creates a Scheduler using the provided worker map.
@@ -46,7 +44,6 @@ func NewScheduler(
 func NewSchedulerWithWorkers(
 	maxWorkers int,
 	workers map[int]pipeline.Worker,
-	compiler compiler.Compiler,
 	packager packager.Packager,
 	executor executor.Executor,
 	verifier verifier.Verifier,
@@ -55,7 +52,7 @@ func NewSchedulerWithWorkers(
 	if workers == nil {
 		workers = make(map[int]pipeline.Worker, maxWorkers)
 		for i := range maxWorkers {
-			workers[i] = pipeline.NewWorker(i, compiler, packager, executor, verifier, responder)
+			workers[i] = pipeline.NewWorker(i, packager, executor, verifier, responder)
 		}
 	}
 

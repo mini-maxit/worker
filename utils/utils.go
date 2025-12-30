@@ -347,28 +347,79 @@ func validateAndTrackFileCount(header *tar.Header, dirFileCount map[string]int, 
 	return nil
 }
 
+type tarExtractionContext struct {
+	absDstPath    string
+	allowedSet    map[string]struct{}
+	alwaysCopySet map[string]struct{}
+	dirFileCount  map[string]int
+	maxFileSize   int64
+	maxFilesInDir int
+}
+
+func (ctx *tarExtractionContext) shouldExtractEntry(header *tar.Header) bool {
+	_, alwaysCopy := ctx.alwaysCopySet[filepath.Base(header.Name)]
+	return alwaysCopy || isAllowedDirectory(header, ctx.allowedSet)
+}
+
+func (ctx *tarExtractionContext) validateEntry(header *tar.Header) error {
+	if err := validateTarEntrySize(header, ctx.maxFileSize); err != nil {
+		return err
+	}
+
+	if err := validatePathDepth(header.Name); err != nil {
+		return err
+	}
+
+	_, alwaysCopy := ctx.alwaysCopySet[filepath.Base(header.Name)]
+	if !alwaysCopy {
+		if err := validateAndTrackFileCount(header, ctx.dirFileCount, ctx.maxFilesInDir); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (ctx *tarExtractionContext) processEntry(tarReader *tar.Reader, header *tar.Header) error {
+	if !ctx.shouldExtractEntry(header) {
+		return nil
+	}
+
+	if err := ctx.validateEntry(header); err != nil {
+		return err
+	}
+
+	target, err := safeArchiveTarget(ctx.absDstPath, header.Name)
+	if err != nil {
+		return err
+	}
+
+	return materializeTarEntry(tarReader, header, target)
+}
+
 func ExtractTarArchiveFiltered(
 	reader io.Reader,
 	dstPath string,
 	allowedDirs []string,
+	alwaysCopyFiles []string,
 	maxFileSize int64,
 	maxFilesInDir int,
 ) error {
-	tarReader := tar.NewReader(reader)
-
 	absDstPath, err := filepath.Abs(dstPath)
 	if err != nil {
 		return err
 	}
 
-	allowedSet := make(map[string]struct{}, len(allowedDirs))
-	for _, dir := range allowedDirs {
-		allowedSet[dir] = struct{}{}
+	ctx := &tarExtractionContext{
+		absDstPath:    absDstPath,
+		allowedSet:    makeStringSet(allowedDirs),
+		alwaysCopySet: makeStringSet(alwaysCopyFiles),
+		dirFileCount:  make(map[string]int, len(allowedDirs)),
+		maxFileSize:   maxFileSize,
+		maxFilesInDir: maxFilesInDir,
 	}
 
-	// Track files per allowed directory to enforce per-directory limits
-	dirFileCount := make(map[string]int, len(allowedDirs))
-
+	tarReader := tar.NewReader(reader)
 	for {
 		header, err := tarReader.Next()
 		if errors.Is(err, io.EOF) {
@@ -378,29 +429,16 @@ func ExtractTarArchiveFiltered(
 			return err
 		}
 
-		if !isAllowedDirectory(header, allowedSet) {
-			continue
-		}
-
-		if err := validateTarEntrySize(header, maxFileSize); err != nil {
-			return err
-		}
-
-		if err := validatePathDepth(header.Name); err != nil {
-			return err
-		}
-
-		if err := validateAndTrackFileCount(header, dirFileCount, maxFilesInDir); err != nil {
-			return err
-		}
-
-		target, err := safeArchiveTarget(absDstPath, header.Name)
-		if err != nil {
-			return err
-		}
-
-		if err := materializeTarEntry(tarReader, header, target); err != nil {
+		if err := ctx.processEntry(tarReader, header); err != nil {
 			return err
 		}
 	}
+}
+
+func makeStringSet(items []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		set[item] = struct{}{}
+	}
+	return set
 }

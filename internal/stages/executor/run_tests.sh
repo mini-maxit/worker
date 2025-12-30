@@ -29,6 +29,50 @@ if [[ -z "${USER_ERROR_FILES:-}" ]]; then
   exit 1
 fi
 
+# Handle compilation if needed
+if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
+  if [[ -z "${COMPILE_CMD:-}" ]]; then
+    echo "ERROR: COMPILE_CMD must be set when REQUIRES_COMPILATION is true" >&2
+    exit 1
+  fi
+  if [[ -z "${SOURCE_FILE:-}" ]]; then
+    echo "ERROR: SOURCE_FILE must be set when REQUIRES_COMPILATION is true" >&2
+    exit 1
+  fi
+  if [[ -z "${EXEC_FILE:-}" ]]; then
+    echo "ERROR: EXEC_FILE must be set when REQUIRES_COMPILATION is true" >&2
+    exit 1
+  fi
+  if [[ -z "${COMPILE_ERR_FILE:-}" ]]; then
+    echo "ERROR: COMPILE_ERR_FILE must be set when REQUIRES_COMPILATION is true" >&2
+    exit 1
+  fi
+
+  read -r -a compile_cmd <<< "$COMPILE_CMD"
+
+  echo "Compiling: ${compile_cmd[@]}"
+
+  # Run compilation and capture stderr
+  if ! "${compile_cmd[@]}" 2> "${COMPILE_ERR_FILE}"; then
+    echo "Compilation failed. Error details saved to ${COMPILE_ERR_FILE}"
+
+    # Intenially exit with 0 as this is not treated as a container failure,
+    # compilation errors are handled separately in the pipeline by inspecting the compile error file.
+    exit 0
+  fi
+
+  # Check if executable was created
+  if [[ ! -f "${EXEC_FILE}" ]]; then
+    echo "Compilation failed: executable not created" > "${COMPILE_ERR_FILE}"
+
+    # Same as above with
+    exit 0
+  fi
+
+  # Make executable if needed
+  chmod +x "${EXEC_FILE}" 2>/dev/null || true
+fi
+
 read -r -a times <<< "$TIME_LIMITS_MS"
 read -r -a mems <<< "$MEM_LIMITS_KB"
 read -r -a inputs <<< "$INPUT_FILES"

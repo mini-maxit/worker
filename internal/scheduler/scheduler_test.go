@@ -19,14 +19,13 @@ func TestNewScheduler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	compiler := mocktests.NewMockCompiler(ctrl)
 	packager := mocktests.NewMockPackager(ctrl)
 	executor := mocktests.NewMockExecutor(ctrl)
 	verifier := mocktests.NewMockVerifier(ctrl)
 	responder := mocktests.NewMockResponder(ctrl)
 
 	maxWorkers := 3
-	s := NewScheduler(maxWorkers, compiler, packager, executor, verifier, responder)
+	s := NewScheduler(maxWorkers, packager, executor, verifier, responder)
 	if s == nil {
 		t.Fatalf("NewScheduler returned nil")
 	}
@@ -53,7 +52,7 @@ func TestGetWorkersStatus(t *testing.T) {
 	w1.EXPECT().GetState().Return(pipeline.WorkerState{Status: constants.WorkerStatusIdle}).Times(1)
 	w1.EXPECT().GetId().Return(1).Times(1)
 
-	s := NewSchedulerWithWorkers(2, map[int]pipeline.Worker{0: w0, 1: w1}, nil, nil, nil, nil, nil)
+	s := NewSchedulerWithWorkers(2, map[int]pipeline.Worker{0: w0, 1: w1}, nil, nil, nil, nil)
 
 	st := s.GetWorkersStatus()
 	if len(st.WorkerStatus) != 2 {
@@ -111,7 +110,7 @@ func TestProcessTask_SuccessAndMarkIdle(t *testing.T) {
 	// After processing, scheduler.markWorkerAsIdle should call UpdateStatus(Idle)
 	w.EXPECT().UpdateStatus(constants.WorkerStatusIdle).Times(1)
 
-	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil, nil)
+	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil)
 
 	if err := s.ProcessTask("resp", "msg-id-1", &messages.TaskQueueMessage{}); err != nil {
 		t.Fatalf("unexpected error from ProcessTask: %v", err)
@@ -137,7 +136,7 @@ func TestProcessTask_NoFreeWorker(t *testing.T) {
 	// worker reports busy
 	w.EXPECT().GetState().Return(pipeline.WorkerState{Status: constants.WorkerStatusBusy}).Times(1)
 
-	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil, nil)
+	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil)
 
 	err := s.ProcessTask("resp", "msg-id-2", &messages.TaskQueueMessage{})
 	if err == nil {

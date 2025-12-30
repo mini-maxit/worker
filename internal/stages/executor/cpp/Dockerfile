@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libstdc++6 ca-certificates time \
+    libstdc++6 ca-certificates time g++\
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY run_tests.sh /usr/local/bin/run_tests.sh
