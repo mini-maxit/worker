@@ -48,7 +48,6 @@ if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
     exit 1
   fi
 
-  # Parse the COMPILE_CMD (it's space-separated)
   read -r -a compile_cmd <<< "$COMPILE_CMD"
 
   echo "Compiling: ${compile_cmd[@]}"
@@ -56,13 +55,13 @@ if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
   # Run compilation and capture stderr
   if ! "${compile_cmd[@]}" 2> "${COMPILE_ERR_FILE}"; then
     echo "Compilation failed. Error details saved to ${COMPILE_ERR_FILE}"
-    exit 1
+    exit 0
   fi
 
   # Check if executable was created
   if [[ ! -f "${EXEC_FILE}" ]]; then
     echo "Compilation failed: executable not created" > "${COMPILE_ERR_FILE}"
-    exit 1
+    exit 0
   fi
 
   # Make executable if needed

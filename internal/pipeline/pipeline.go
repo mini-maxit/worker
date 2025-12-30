@@ -153,9 +153,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
-		// Check if it's a compilation error by checking if the error file has content
 		if fileInfo, statErr := os.Stat(dc.CompileErrFilePath); statErr == nil && fileInfo.Size() > 0 {
-			// Compilation error file has content, treat as compilation error
 			ws.publishCompilationError(dc, task.TestCases)
 			return
 		}
