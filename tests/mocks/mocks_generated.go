@@ -709,18 +709,18 @@ func (mr *MockDockerClientMockRecorder) ContainerRemove(ctx, containerID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerRemove", reflect.TypeOf((*MockDockerClient)(nil).ContainerRemove), ctx, containerID)
 }
 
-// CopyFromContainer mocks base method.
-func (m *MockDockerClient) CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
+// CopyFromContainerFiltered mocks base method.
+func (m *MockDockerClient) CopyFromContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, allowedDirs []string, maxFileSize int64, maxFilesInDir int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CopyFromContainer", ctx, containerID, srcPath, dstPath)
+	ret := m.ctrl.Call(m, "CopyFromContainerFiltered", ctx, containerID, srcPath, dstPath, allowedDirs, maxFileSize, maxFilesInDir)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CopyFromContainer indicates an expected call of CopyFromContainer.
-func (mr *MockDockerClientMockRecorder) CopyFromContainer(ctx, containerID, srcPath, dstPath any) *gomock.Call {
+// CopyFromContainerFiltered indicates an expected call of CopyFromContainerFiltered.
+func (mr *MockDockerClientMockRecorder) CopyFromContainerFiltered(ctx, containerID, srcPath, dstPath, allowedDirs, maxFileSize, maxFilesInDir any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyFromContainer", reflect.TypeOf((*MockDockerClient)(nil).CopyFromContainer), ctx, containerID, srcPath, dstPath)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyFromContainerFiltered", reflect.TypeOf((*MockDockerClient)(nil).CopyFromContainerFiltered), ctx, containerID, srcPath, dstPath, allowedDirs, maxFileSize, maxFilesInDir)
 }
 
 // CopyToContainerFiltered mocks base method.

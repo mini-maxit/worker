@@ -85,7 +85,7 @@ func (d *executor) ExecuteCommand(
 		env,
 	)
 
-	hostCfg := buildHostConfig()
+	hostCfg := buildHostConfig(cfg.TestCases)
 
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
 		return err
@@ -99,7 +99,7 @@ func (d *executor) ExecuteCommand(
 
 	// Ensure container cleanup
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 10*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cleanupCancel()
 		d.docker.ContainerRemove(cleanupCtx, containerID)
 	}()
@@ -129,11 +129,21 @@ func (d *executor) ExecuteCommand(
 	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
 	copyCtx, copyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer copyCancel()
-	err = d.docker.CopyFromContainer(
+
+	allowedDirs := []string{
+		constants.UserOutputDirName,
+		constants.UserErrorDirName,
+		constants.UserDiffDirName,
+		constants.UserExecResultDirName,
+	}
+	err = d.docker.CopyFromContainerFiltered(
 		copyCtx,
 		containerID,
 		cfg.DirConfig.PackageDirPath,
 		cfg.DirConfig.TmpDirPath,
+		allowedDirs,
+		constants.MaxContainerOutputFileSize,
+		len(cfg.TestCases),
 	)
 	if err != nil {
 		return err
@@ -239,17 +249,37 @@ func buildContainerConfig(
 	}
 }
 
-func buildHostConfig() *container.HostConfig {
+func buildHostConfig(testCases []messages.TestCase) *container.HostConfig {
+	maxKB := constants.MinContainerMemoryKB
+	for _, tc := range testCases {
+		if tc.MemoryLimitKB > maxKB {
+			maxKB = tc.MemoryLimitKB
+		}
+	}
+
+	// Headroom: 20% + at least 64MB for runtime/script overhead
+	headroomKB := maxKB / 5
+	minHeadroomKB := int64(64 * 1024)
+	if headroomKB < minHeadroomKB {
+		headroomKB = minHeadroomKB
+	}
+
+	containerKB := maxKB + headroomKB
+	containerBytes := containerKB * 1024
+
 	return &container.HostConfig{
 		AutoRemove:  false,
 		NetworkMode: container.NetworkMode("none"),
 		Resources: container.Resources{
-			PidsLimit: func(v int64) *int64 { return &v }(64),
-			CPUPeriod: 100_000,
-			CPUQuota:  100_000,
+			Memory:     containerBytes,
+			MemorySwap: containerBytes,
+			PidsLimit:  func(v int64) *int64 { return &v }(8),
+			CPUPeriod:  100_000,
+			CPUQuota:   100_000,
 		},
 		SecurityOpt:  []string{"no-new-privileges"},
 		CgroupnsMode: container.CgroupnsModePrivate,
 		IpcMode:      container.IpcMode("private"),
+		CapDrop:      []string{"ALL"},
 	}
 }

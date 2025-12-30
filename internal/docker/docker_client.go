@@ -27,7 +27,13 @@ type DockerClient interface {
 	WaitContainer(ctx context.Context, containerID string, timeout time.Duration) (int64, error)
 	ContainerKill(ctx context.Context, containerID, signal string)
 	CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error
-	CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error
+	CopyFromContainerFiltered(
+		ctx context.Context,
+		containerID, srcPath, dstPath string,
+		allowedDirs []string,
+		maxFileSize int64,
+		maxFilesInDir int,
+	) error
 	ContainerRemove(ctx context.Context, containerID string)
 }
 
@@ -141,7 +147,13 @@ func (d *dockerClient) CopyToContainerFiltered(
 	return err
 }
 
-func (d *dockerClient) CopyFromContainer(ctx context.Context, containerID, srcPath, dstPath string) error {
+func (d *dockerClient) CopyFromContainerFiltered(
+	ctx context.Context,
+	containerID, srcPath, dstPath string,
+	allowedDirs []string,
+	maxFileSize int64,
+	maxFilesInDir int,
+) error {
 	// Get tar archive from container
 	reader, _, err := d.cli.CopyFromContainer(ctx, containerID, srcPath)
 	if err != nil {
@@ -150,10 +162,10 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerID, srcPa
 	}
 	defer reader.Close()
 
-	// Extract tar archive to destination
-	err = utils.ExtractTarArchive(reader, dstPath)
+	// Extract tar archive with filtering to destination
+	err = utils.ExtractTarArchiveFiltered(reader, dstPath, allowedDirs, maxFileSize, maxFilesInDir)
 	if err != nil {
-		d.logger.Errorf("Failed to extract tar archive to %s: %s", dstPath, err)
+		d.logger.Errorf("Failed to extract filtered tar archive to %s: %s", dstPath, err)
 	}
 	return err
 }

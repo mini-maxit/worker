@@ -3,6 +3,7 @@ package utils
 import (
 	"archive/tar"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/kballard/go-shellquote"
+	"github.com/mini-maxit/worker/pkg/constants"
 )
 
 // Attemts to close the file, and panics if something goes wrong.
@@ -92,17 +94,6 @@ func copyAndRemove(src, dst string) error {
 	return os.Remove(src)
 }
 
-// Checks if given elements is contained in given array.
-func Contains[V string](array []V, value V) bool {
-	for _, el := range array {
-		if el == value {
-			return true
-		}
-	}
-
-	return false
-}
-
 // ValidateFilename checks if a filename contains only safe characters.
 // Returns an error if the filename contains shell metacharacters or path separators
 // that could be used for command injection or directory traversal attacks.
@@ -155,42 +146,6 @@ func RemoveIO(dir string, recursive, ignoreError bool) error {
 	return err
 }
 
-// CreateTarArchive creates a tar archive from a directory.
-func CreateTarArchive(srcPath string) (io.ReadCloser, error) {
-	pipeReader, pipeWriter := io.Pipe()
-
-	go func() {
-		tarWriter := tar.NewWriter(pipeWriter)
-		defer func() { _ = tarWriter.Close() }()
-		defer func() { _ = pipeWriter.Close() }()
-
-		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// Get relative path.
-			relPath, err := filepath.Rel(srcPath, path)
-			if err != nil {
-				return err
-			}
-
-			// Skip the root directory itself.
-			if relPath == "." {
-				return nil
-			}
-
-			return writeToTarArchive(tarWriter, path, relPath, info)
-		})
-
-		if err != nil {
-			pipeWriter.CloseWithError(err)
-		}
-	}()
-
-	return pipeReader, nil
-}
-
 // writeToTarArchive writes a file or directory to a tar archive.
 func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInfo) error {
 	// Create tar header.
@@ -199,10 +154,10 @@ func writeToTarArchive(tarWriter *tar.Writer, path, name string, info os.FileInf
 		return err
 	}
 	header.Name = name
-	header.Gid = 1000
-	header.Uid = 1000
-	header.Gname = "runner"
-	header.Uname = "runner"
+	header.Gid = constants.RunnerGID
+	header.Uid = constants.RunnerUID
+	header.Gname = constants.RunnerName
+	header.Uname = constants.RunnerName
 
 	if err := tarWriter.WriteHeader(header); err != nil {
 		return err
@@ -296,35 +251,6 @@ func CreateTarArchiveWithBaseFiltered(srcPath string, excludeTopLevel []string) 
 	return pipeReader, nil
 }
 
-// ExtractTarArchive extracts a tar archive to a directory.
-func ExtractTarArchive(reader io.Reader, dstPath string) error {
-	tarReader := tar.NewReader(reader)
-
-	absDstPath, err := filepath.Abs(dstPath)
-	if err != nil {
-		return err
-	}
-
-	for {
-		header, err := tarReader.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		target, err := safeArchiveTarget(absDstPath, header.Name)
-		if err != nil {
-			return err
-		}
-
-		if err := materializeTarEntry(tarReader, header, target); err != nil {
-			return err
-		}
-	}
-}
-
 func safeArchiveTarget(absDstPath, entryName string) (string, error) {
 	target := filepath.Join(absDstPath, entryName)
 	absTarget, err := filepath.Abs(target)
@@ -346,7 +272,8 @@ func materializeTarEntry(tarReader *tar.Reader, header *tar.Header, target strin
 			return err
 		}
 
-		file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+		safeMode := os.FileMode(header.Mode) & 0666 // Remove execute bits
+		file, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, safeMode)
 		if err != nil {
 			return err
 		}
@@ -357,7 +284,123 @@ func materializeTarEntry(tarReader *tar.Reader, header *tar.Header, target strin
 		}
 		CloseFile(file)
 		return nil
+	case tar.TypeSymlink, tar.TypeLink:
+		return errors.New("symlinks and hardlinks are not allowed in archives")
 	default:
 		return nil
+	}
+}
+
+func isAllowedDirectory(header *tar.Header, allowedSet map[string]struct{}) bool {
+	parts := strings.Split(header.Name, string(os.PathSeparator))
+	if len(parts) == 0 {
+		return false
+	}
+
+	var baseDir string
+	if len(parts) > 1 {
+		baseDir = parts[1] // Skip the package directory itself
+	} else {
+		baseDir = parts[0]
+	}
+
+	_, allowed := allowedSet[baseDir]
+	return allowed
+}
+
+func validatePathDepth(entryPath string) error {
+	const maxDepth = 2
+
+	parts := strings.Split(entryPath, string(os.PathSeparator))
+	if len(parts) > maxDepth+1 {
+		return fmt.Errorf("subdirectories not allowed in archives: %s", entryPath)
+	}
+
+	return nil
+}
+
+// validateTarEntrySize validates that a tar entry doesn't exceed maximum file size.
+func validateTarEntrySize(header *tar.Header, maxFileSize int64) error {
+	if header.Typeflag == tar.TypeReg && header.Size > maxFileSize {
+		return fmt.Errorf("file %s exceeds maximum size of %d bytes (size: %d)", header.Name, maxFileSize, header.Size)
+	}
+	return nil
+}
+
+// validateAndTrackFileCount validates per-directory file count and updates the tracking map.
+func validateAndTrackFileCount(header *tar.Header, dirFileCount map[string]int, maxFilesInDir int) error {
+	if header.Typeflag != tar.TypeReg {
+		return nil
+	}
+
+	// Extract the allowed directory name (second path component)
+	parts := strings.Split(header.Name, string(os.PathSeparator))
+	if len(parts) < 2 {
+		return fmt.Errorf("invalid file path structure: %s", header.Name)
+	}
+	dirName := parts[1]
+
+	dirFileCount[dirName]++
+	if dirFileCount[dirName] > maxFilesInDir {
+		return fmt.Errorf("directory %s exceeds maximum file count of %d", dirName, maxFilesInDir)
+	}
+	return nil
+}
+
+func ExtractTarArchiveFiltered(
+	reader io.Reader,
+	dstPath string,
+	allowedDirs []string,
+	maxFileSize int64,
+	maxFilesInDir int,
+) error {
+	tarReader := tar.NewReader(reader)
+
+	absDstPath, err := filepath.Abs(dstPath)
+	if err != nil {
+		return err
+	}
+
+	allowedSet := make(map[string]struct{}, len(allowedDirs))
+	for _, dir := range allowedDirs {
+		allowedSet[dir] = struct{}{}
+	}
+
+	// Track files per allowed directory to enforce per-directory limits
+	dirFileCount := make(map[string]int, len(allowedDirs))
+
+	for {
+		header, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		if !isAllowedDirectory(header, allowedSet) {
+			continue
+		}
+
+		if err := validateTarEntrySize(header, maxFileSize); err != nil {
+			return err
+		}
+
+		if err := validatePathDepth(header.Name); err != nil {
+			return err
+		}
+
+		if err := validateAndTrackFileCount(header, dirFileCount, maxFilesInDir); err != nil {
+			return err
+		}
+
+		target, err := safeArchiveTarget(absDstPath, header.Name)
+		if err != nil {
+			return err
+		}
+
+		if err := materializeTarEntry(tarReader, header, target); err != nil {
+			return err
+		}
 	}
 }
