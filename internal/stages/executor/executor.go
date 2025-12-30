@@ -200,6 +200,8 @@ func buildCompileCommand(cfg CommandConfig) []string {
 			"-std=" + versionFlag,
 			filepath.Base(cfg.SourceFilePath),
 		}
+	case languages.PYTHON: // make linter happy.
+		return []string{}
 	default:
 		return []string{}
 	}

@@ -161,7 +161,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		)
 		return
 	}
-	
+
 	// Check for compilation error
 	if fileInfo, statErr := os.Stat(dc.CompileErrFilePath); statErr == nil && fileInfo.Size() > 0 {
 		ws.publishCompilationError(dc, task.TestCases)
