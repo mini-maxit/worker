@@ -52,7 +52,7 @@ if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
   read -r -a compile_cmd <<< "$COMPILE_CMD"
 
   echo "Compiling: ${compile_cmd[@]}"
-  
+
   # Run compilation and capture stderr
   if ! "${compile_cmd[@]}" 2> "${COMPILE_ERR_FILE}"; then
     echo "Compilation failed. Error details saved to ${COMPILE_ERR_FILE}"
