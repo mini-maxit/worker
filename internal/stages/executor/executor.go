@@ -189,21 +189,24 @@ func SanitizeContainerName(raw string) string {
 	return "submission-" + cleaned
 }
 
-func buildCompileCommand(cfg CommandConfig) []string {
+func buildCompileCommand(cfg CommandConfig) ([]string, error) {
 	switch cfg.LanguageType {
 	case languages.CPP:
-		versionFlag, _ := languages.GetVersionFlag(languages.CPP, cfg.LanguageVersion)
+		versionFlag, err := languages.GetVersionFlag(languages.CPP, cfg.LanguageVersion)
+		if err != nil {
+			return []string{}, err
+		}
 		return []string{
 			"g++",
 			"-o",
 			filepath.Base(cfg.DirConfig.UserExecFilePath),
 			"-std=" + versionFlag,
 			filepath.Base(cfg.SourceFilePath),
-		}
+		}, nil
 	case languages.PYTHON: // make linter happy.
-		return []string{}
+		return []string{}, nil
 	default:
-		return []string{}
+		return []string{}, nil
 	}
 }
 
@@ -257,7 +260,10 @@ func buildEnvironmentVariables(cfg CommandConfig) ([]string, error) {
 	}
 
 	if cfg.RequiresCompiling {
-		compileCmd := buildCompileCommand(cfg)
+		compileCmd, err := buildCompileCommand(cfg)
+		if err != nil {
+			return nil, err
+		}
 		envVars = append(envVars,
 			"REQUIRES_COMPILATION=true",
 			"COMPILE_CMD="+utils.ShellQuoteSlice(compileCmd),

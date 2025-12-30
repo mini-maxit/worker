@@ -55,12 +55,17 @@ if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
   # Run compilation and capture stderr
   if ! "${compile_cmd[@]}" 2> "${COMPILE_ERR_FILE}"; then
     echo "Compilation failed. Error details saved to ${COMPILE_ERR_FILE}"
+
+    # Intenially exit with 0 as this is not treated as a container failure,
+    # compilation errors are handled separately in the pipeline by inspecting the compile error file.
     exit 0
   fi
 
   # Check if executable was created
   if [[ ! -f "${EXEC_FILE}" ]]; then
     echo "Compilation failed: executable not created" > "${COMPILE_ERR_FILE}"
+
+    # Same as above with
     exit 0
   fi
 
