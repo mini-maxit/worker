@@ -76,6 +76,14 @@ const (
 	ExecutionResultFileExt = "res"
 )
 
+// Cache configuration.
+const (
+	CacheDirPath      = "/tmp/worker-cache"
+	CacheTTLHours     = 24
+	CacheMetadataFile = ".cache_meta.json"
+	CacheMaxEntries   = 1000
+)
+
 // Docker execution constants.
 const (
 	MinContainerMemoryKB int64 = 64 * 1024 // 64 MB

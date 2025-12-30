@@ -33,8 +33,9 @@ type Packager interface {
 }
 
 type packager struct {
-	logger  *zap.SugaredLogger
-	storage storage.Storage
+	logger    *zap.SugaredLogger
+	storage   storage.Storage
+	fileCache storage.FileCache
 }
 
 type TaskDirConfig struct {
@@ -51,11 +52,12 @@ type TaskDirConfig struct {
 	CompileErrFilePath    string
 }
 
-func NewPackager(storage storage.Storage) Packager {
+func NewPackager(storageService storage.Storage, fileCache storage.FileCache) Packager {
 	logger := logger.NewNamedLogger("packager")
 	return &packager{
-		logger:  logger,
-		storage: storage,
+		logger:    logger,
+		storage:   storageService,
+		fileCache: fileCache,
 	}
 }
 
@@ -177,7 +179,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		p.logger.Warnf("Test case %d input location is empty, skipping", idx)
 	} else {
 		inputDest := filepath.Join(basePath, constants.InputDirName, filepath.Base(tc.InputFile.Path))
-		if _, err := p.storage.DownloadFile(tc.InputFile, inputDest); err != nil {
+		if err := p.downloadOrCopyFromCache(tc.InputFile, inputDest); err != nil {
 			return err
 		}
 	}
@@ -187,7 +189,7 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 		p.logger.Warnf("Test case %d expected output location is empty, skipping", idx)
 	} else {
 		outputDest := filepath.Join(basePath, constants.OutputDirName, filepath.Base(tc.ExpectedOutput.Path))
-		if _, err := p.storage.DownloadFile(tc.ExpectedOutput, outputDest); err != nil {
+		if err := p.downloadOrCopyFromCache(tc.ExpectedOutput, outputDest); err != nil {
 			return err
 		}
 	}
@@ -286,11 +288,65 @@ func (p *packager) SendSolutionPackage(
 	return nil
 }
 
+func (p *packager) downloadOrCopyFromCache(
+	fileLocation messages.FileLocation,
+	destPath string,
+) error {
+	// Try to get from cache
+	if p.fileCache == nil {
+		return p.downloadAndCache(fileLocation, destPath)
+	}
+
+	cachedPath, isCached, err := p.fileCache.GetCachedFile(fileLocation)
+	if err != nil {
+		p.logger.Warnf("Error checking cache for %s: %v", fileLocation.Path, err)
+		return p.downloadAndCache(fileLocation, destPath)
+	}
+
+	if !isCached {
+		return p.downloadAndCache(fileLocation, destPath)
+	}
+
+	// Copy from cache to destination
+	if err := utils.CopyFile(cachedPath, destPath); err != nil {
+		p.logger.Warnf("Failed to copy from cache, will download: %v", err)
+		return p.downloadAndCache(fileLocation, destPath)
+	}
+
+	p.logger.Debugf("Used cached file for %s", fileLocation.Path)
+	return nil
+}
+
+func (p *packager) downloadAndCache(
+	fileLocation messages.FileLocation,
+	destPath string,
+) error {
+	// Download the file
+	if _, err := p.storage.DownloadFile(fileLocation, destPath); err != nil {
+		return err
+	}
+
+	// Cache the downloaded file
+	if p.fileCache != nil {
+		if err := p.fileCache.CacheFile(fileLocation, destPath); err != nil {
+			p.logger.Warnf("Failed to cache file %s: %v", fileLocation.Path, err)
+		}
+	}
+
+	return nil
+}
+
 func (p *packager) uploadNonEmptyFile(filePath string, outputFileLocation messages.FileLocation) error {
 	if fi, err := os.Stat(filePath); err == nil {
 		if fi.Size() == 0 {
 			return nil
 		}
+	} else {
+		if os.IsNotExist(err) {
+			// Missing file is treated as empty; nothing to upload.
+			return nil
+		}
+		return err
 	}
 
 	objPath := outputFileLocation.Path
