@@ -14,7 +14,6 @@ import (
 	"github.com/mini-maxit/worker/internal/rabbitmq/consumer"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/pkg/constants"
-	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/tests/mocks"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -101,7 +100,7 @@ func TestConsumer_ProcessHandshakeMessage(t *testing.T) {
 
 		// Verify the payload contains language information
 		var handshakePayload struct {
-			Languages []languages.LanguageSpec `json:"languages"`
+			Languages []messages.LanguageSpec `json:"languages"`
 		}
 		if err := json.Unmarshal(responseMsg.Payload, &handshakePayload); err != nil {
 			t.Fatalf("failed to unmarshal handshake payload: %v", err)

@@ -12,7 +12,6 @@ import (
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
-	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -266,7 +265,7 @@ func TestResponder_PublishSuccessHandshakeRespond(t *testing.T) {
 	}
 
 	// Create test language specs
-	languageSpecs := []languages.LanguageSpec{
+	languageSpecs := []messages.LanguageSpec{
 		{LanguageName: "cpp", Versions: []string{"17"}, Extension: "cpp"},
 		{LanguageName: "python", Versions: []string{"3.11"}, Extension: "py"},
 	}
@@ -274,11 +273,12 @@ func TestResponder_PublishSuccessHandshakeRespond(t *testing.T) {
 	messageType := constants.QueueMessageTypeHandshake
 	messageID := "handshake-message-id"
 
-	// Publish handshake response
-	err = resp.PublishSuccessHandshakeRespond(messageType, messageID, queue.Name, languageSpecs)
-	if err != nil {
-		t.Fatalf("failed to publish handshake response: %v", err)
+	languagesPayload := messages.ResponseHandshakePayload{
+		Languages: languageSpecs,
 	}
+
+	// Publish handshake response
+	resp.PublishSuccessHandshakeRespond(messageType, messageID, queue.Name, languagesPayload)
 
 	// Consume and verify the response
 	msgs, err := channel.Consume(queue.Name, "", true, false, false, false, nil)
@@ -304,7 +304,7 @@ func TestResponder_PublishSuccessHandshakeRespond(t *testing.T) {
 		}
 
 		var handshakePayload struct {
-			Languages []languages.LanguageSpec `json:"languages"`
+			Languages []messages.LanguageSpec `json:"languages"`
 		}
 		if err := json.Unmarshal(responseMsg.Payload, &handshakePayload); err != nil {
 			t.Fatalf("failed to unmarshal handshake payload: %v", err)
@@ -357,10 +357,7 @@ func TestResponder_PublishSuccessStatusRespond(t *testing.T) {
 	messageID := "status-message-id"
 
 	// Publish status response
-	err = resp.PublishSuccessStatusRespond(messageType, messageID, queue.Name, status)
-	if err != nil {
-		t.Fatalf("failed to publish status response: %v", err)
-	}
+	resp.PublishSuccessStatusRespond(messageType, messageID, queue.Name, status)
 
 	// Consume and verify the response
 	msgs, err := channel.Consume(queue.Name, "", true, false, false, false, nil)
@@ -445,10 +442,7 @@ func TestResponder_PublishPayloadTaskRespond(t *testing.T) {
 	messageID := "task-result-message-id"
 
 	// Publish task result response
-	err = resp.PublishPayloadTaskRespond(messageType, messageID, queue.Name, taskResult)
-	if err != nil {
-		t.Fatalf("failed to publish task result response: %v", err)
-	}
+	resp.PublishPayloadTaskRespond(messageType, messageID, queue.Name, taskResult)
 
 	// Consume and verify the response
 	msgs, err := channel.Consume(queue.Name, "", true, false, false, false, nil)

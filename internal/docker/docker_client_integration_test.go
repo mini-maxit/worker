@@ -4,7 +4,6 @@ package docker_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -18,8 +17,8 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/mini-maxit/worker/internal/docker"
 	"github.com/mini-maxit/worker/pkg/constants"
-	pkgerrors "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
+	"github.com/mini-maxit/worker/pkg/messages"
 )
 
 const (
@@ -29,7 +28,7 @@ const (
 
 var (
 	// testLanguages contains all supported languages to test.
-	testLanguages []languages.LanguageType
+	testLanguages []messages.LanguageSpec
 	// testImageName is set from the first supported language.
 	testImageName string
 	// setupOnce ensures setupTestLanguages is called exactly once, preventing race conditions.
@@ -38,16 +37,12 @@ var (
 
 func setupTestLanguages() {
 	// Get all supported languages
-	supportedLangs := languages.GetSupportedLanguages()
-	for _, langStr := range supportedLangs {
-		if lang, err := languages.ParseLanguageType(langStr); err == nil {
-			testLanguages = append(testLanguages, lang)
-		}
-	}
+	testLanguages = languages.GetSupportedLanguagesWithVersions().Languages
 
 	// Use the first language's image for basic tests
 	if len(testLanguages) > 0 {
-		if image, err := testLanguages[0].GetDockerImage(""); err == nil {
+		lang := languages.LanguageTypeMap[testLanguages[0].LanguageName]
+		if image, err := lang.GetDockerImage(""); err == nil {
 			testImageName = image
 		}
 	}
@@ -74,7 +69,7 @@ func TestNewDockerClient_Success(t *testing.T) {
 		setupTestLanguages()
 	}
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -83,7 +78,7 @@ func TestNewDockerClient_Success(t *testing.T) {
 	}
 }
 
-// TestNewDockerClient_WithVolume tests creating a client with a volume check.
+// TestNewDockerClient_WithVolume tests creating a client and checking it works with volumes.
 func TestNewDockerClient_WithVolume(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -95,68 +90,12 @@ func TestNewDockerClient_WithVolume(t *testing.T) {
 	containerID := createContainerWithVolume(t, volumeName)
 	defer cleanupContainer(t, containerID)
 
-	dc, err := docker.NewDockerClient(volumeName)
-	if err != nil {
-		t.Fatalf("failed to create docker client with volume: %v", err)
-	}
-	if dc.DataVolumeName() != volumeName {
-		t.Errorf("expected volume name %s, got %s", volumeName, dc.DataVolumeName())
-	}
-}
-
-// TestDataVolumeName tests the DataVolumeName getter.
-func TestDataVolumeName(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
-
-	if dc.DataVolumeName() != "" {
-		t.Errorf("expected empty volume name, got %s", dc.DataVolumeName())
-	}
-}
-
-// TestCheckDataVolume_NotMounted tests error when volume is not mounted.
-func TestCheckDataVolume_NotMounted(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	dc, err := docker.NewDockerClient("")
-	if err != nil {
-		t.Fatalf("failed to create docker client: %v", err)
-	}
-
-	err = dc.CheckDataVolume("non_existent_volume_test")
-	if !errors.Is(err, pkgerrors.ErrVolumeNotMounted) {
-		t.Errorf("expected ErrVolumeNotMounted, got %v", err)
-	}
-}
-
-// TestCheckDataVolume_Mounted tests successful volume mount check.
-func TestCheckDataVolume_Mounted(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	volumeName := createTestVolume(t)
-	defer cleanupVolume(t, volumeName)
-
-	containerID := createContainerWithVolume(t, volumeName)
-	defer cleanupContainer(t, containerID)
-
-	dc, err := docker.NewDockerClient("")
-	if err != nil {
-		t.Fatalf("failed to create docker client: %v", err)
-	}
-
-	err = dc.CheckDataVolume(volumeName)
-	if err != nil {
-		t.Errorf("expected no error when checking mounted volume, got %v", err)
+	if dc == nil {
+		t.Fatal("docker client is nil")
 	}
 }
 
@@ -169,7 +108,7 @@ func TestEnsureImage_PullImage(t *testing.T) {
 	ensureTestLanguagesSetup(t)
 	removeImageIfExists(t, testImageName)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -193,7 +132,7 @@ func TestEnsureImage_AllSupportedLanguages(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -201,24 +140,27 @@ func TestEnsureImage_AllSupportedLanguages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	for _, lang := range testLanguages {
-		langName := lang.String()
-		imageName, err := lang.GetDockerImage("")
-		if err != nil {
-			t.Fatalf("failed to get docker image for language %s: %v", langName, err)
+	for _, langStruct := range testLanguages {
+		for _, version := range langStruct.Versions {
+			lang := languages.LanguageTypeMap[langStruct.LanguageName]
+			langName := langStruct.LanguageName
+			imageName, err := lang.GetDockerImage(version)
+			if err != nil {
+				t.Fatalf("failed to get docker image for language %s: %v", langName, err)
+			}
+
+			t.Logf("Testing language: %s (image: %s)", langName, imageName)
+
+			// Ensure the image can be pulled
+			err = dc.EnsureImage(ctx, imageName)
+			if err != nil {
+				t.Errorf("failed to ensure image for language %s: %v", langName, err)
+				continue
+			}
+
+			// Verify the image exists
+			verifyImageExists(t, imageName)
 		}
-
-		t.Logf("Testing language: %s (image: %s)", langName, imageName)
-
-		// Ensure the image can be pulled
-		err = dc.EnsureImage(ctx, imageName)
-		if err != nil {
-			t.Errorf("failed to ensure image for language %s: %v", langName, err)
-			continue
-		}
-
-		// Verify the image exists
-		verifyImageExists(t, imageName)
 	}
 }
 
@@ -230,7 +172,7 @@ func TestEnsureImage_ImageAlreadyExists(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -257,7 +199,7 @@ func TestCreateAndStartContainer_Success(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -279,11 +221,16 @@ func TestCreateAndStartContainer_Success(t *testing.T) {
 	hostCfg := &container.HostConfig{}
 	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
 
-	containerID, err := dc.CreateAndStartContainer(ctx, containerCfg, hostCfg, containerName)
+	containerID, err := dc.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
-		t.Fatalf("failed to create and start container: %v", err)
+		t.Fatalf("failed to create container: %v", err)
 	}
 	defer cleanupContainer(t, containerID)
+
+	err = dc.StartContainer(ctx, containerID)
+	if err != nil {
+		t.Fatalf("failed to start container: %v", err)
+	}
 
 	if containerID == "" {
 		t.Fatal("container ID is empty")
@@ -300,7 +247,7 @@ func TestWaitContainer_Success(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -321,13 +268,18 @@ func TestWaitContainer_Success(t *testing.T) {
 	hostCfg := &container.HostConfig{}
 	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
 
-	containerID, err := dc.CreateAndStartContainer(ctx, containerCfg, hostCfg, containerName)
+	containerID, err := dc.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
-		t.Fatalf("failed to create and start container: %v", err)
+		t.Fatalf("failed to create container: %v", err)
 	}
 	defer cleanupContainer(t, containerID)
 
-	exitCode, err := dc.WaitContainer(ctx, containerID)
+	err = dc.StartContainer(ctx, containerID)
+	if err != nil {
+		t.Fatalf("failed to start container: %v", err)
+	}
+
+	exitCode, err := dc.WaitContainer(ctx, containerID, 30*time.Second)
 	if err != nil {
 		t.Errorf("failed to wait for container: %v", err)
 	}
@@ -345,7 +297,7 @@ func TestWaitContainer_WithTimeout(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -366,30 +318,32 @@ func TestWaitContainer_WithTimeout(t *testing.T) {
 	hostCfg := &container.HostConfig{}
 	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
 
-	containerID, err := dc.CreateAndStartContainer(ctx, containerCfg, hostCfg, containerName)
+	containerID, err := dc.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
-		t.Fatalf("failed to create and start container: %v", err)
+		t.Fatalf("failed to create container: %v", err)
 	}
 	defer cleanupContainer(t, containerID)
 
-	shortCtx, shortCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer shortCancel()
+	err = dc.StartContainer(ctx, containerID)
+	if err != nil {
+		t.Fatalf("failed to start container: %v", err)
+	}
 
-	_, err = dc.WaitContainer(shortCtx, containerID)
+	_, err = dc.WaitContainer(ctx, containerID, 100*time.Millisecond)
 	if err == nil {
 		t.Error("expected timeout error, got nil")
 	}
 }
 
-// TestContainerWait_Success tests the ContainerWait method.
-func TestContainerWait_Success(t *testing.T) {
+// TestWaitContainer_ExitCode tests waiting for a container with specific exit code.
+func TestWaitContainer_ExitCode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -410,23 +364,23 @@ func TestContainerWait_Success(t *testing.T) {
 	hostCfg := &container.HostConfig{}
 	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
 
-	containerID, err := dc.CreateAndStartContainer(ctx, containerCfg, hostCfg, containerName)
+	containerID, err := dc.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
-		t.Fatalf("failed to create and start container: %v", err)
+		t.Fatalf("failed to create container: %v", err)
 	}
 	defer cleanupContainer(t, containerID)
 
-	statusCh, errCh := dc.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+	err = dc.StartContainer(ctx, containerID)
+	if err != nil {
+		t.Fatalf("failed to start container: %v", err)
+	}
 
-	select {
-	case err := <-errCh:
-		t.Errorf("unexpected error from ContainerWait: %v", err)
-	case status := <-statusCh:
-		if status.StatusCode != 5 {
-			t.Errorf("expected exit code 5, got %d", status.StatusCode)
-		}
-	case <-time.After(10 * time.Second):
-		t.Error("ContainerWait timed out")
+	exitCode, err := dc.WaitContainer(ctx, containerID, 10*time.Second)
+	if err != nil {
+		t.Errorf("unexpected error from WaitContainer: %v", err)
+	}
+	if exitCode != 5 {
+		t.Errorf("expected exit code 5, got %d", exitCode)
 	}
 }
 
@@ -438,7 +392,7 @@ func TestContainerKill(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -459,16 +413,18 @@ func TestContainerKill(t *testing.T) {
 	hostCfg := &container.HostConfig{}
 	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
 
-	containerID, err := dc.CreateAndStartContainer(ctx, containerCfg, hostCfg, containerName)
+	containerID, err := dc.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
-		t.Fatalf("failed to create and start container: %v", err)
+		t.Fatalf("failed to create container: %v", err)
 	}
 	defer cleanupContainer(t, containerID)
 
-	err = dc.ContainerKill(ctx, containerID, "KILL")
+	err = dc.StartContainer(ctx, containerID)
 	if err != nil {
-		t.Errorf("failed to kill container: %v", err)
+		t.Fatalf("failed to start container: %v", err)
 	}
+
+	dc.ContainerKill(ctx, containerID, "KILL")
 
 	time.Sleep(500 * time.Millisecond)
 	verifyContainerStopped(t, containerID)
@@ -482,7 +438,7 @@ func TestCreateContainerWithVolume(t *testing.T) {
 
 	ensureTestLanguagesSetup(t)
 
-	dc, err := docker.NewDockerClient("")
+	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
 	}
@@ -515,13 +471,18 @@ func TestCreateContainerWithVolume(t *testing.T) {
 
 	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
 
-	containerID, err := dc.CreateAndStartContainer(ctx, containerCfg, hostCfg, containerName)
+	containerID, err := dc.CreateContainer(ctx, containerCfg, hostCfg, containerName)
 	if err != nil {
-		t.Fatalf("failed to create and start container with volume: %v", err)
+		t.Fatalf("failed to create container with volume: %v", err)
 	}
 	defer cleanupContainer(t, containerID)
 
-	exitCode, err := dc.WaitContainer(ctx, containerID)
+	err = dc.StartContainer(ctx, containerID)
+	if err != nil {
+		t.Fatalf("failed to start container: %v", err)
+	}
+
+	exitCode, err := dc.WaitContainer(ctx, containerID, 30*time.Second)
 	if err != nil {
 		t.Errorf("failed to wait for container: %v", err)
 	}
