@@ -9,6 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY run_tests.sh /usr/local/bin/run_tests.sh
 RUN chmod +x /usr/local/bin/run_tests.sh
 
-RUN useradd -M -s /usr/sbin/nologin runner
+RUN groupadd -g 1000 runner && useradd -u 1000 -g 1000 -M -s /usr/sbin/nologin runner
 USER runner
 WORKDIR /tmp
