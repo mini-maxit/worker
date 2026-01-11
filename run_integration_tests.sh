@@ -4,6 +4,7 @@ set -e
 
 TEST_SUITES=(
     "./internal/docker/..."
+    "./internal/rabbitmq/..."
 )
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -37,9 +38,32 @@ fi
 echo "[OK] Docker daemon is accessible"
 echo ""
 
+# Start RabbitMQ container
+echo "[*] Starting RabbitMQ container..."
+cd "$SCRIPT_DIR"
+
+docker-compose -f docker-compose.test.yml up -d rabbitmq
+
+# Wait for RabbitMQ to be ready
+echo "[*] Waiting for RabbitMQ to be ready..."
+max_attempts=30
+attempt=0
+until docker exec rabbitmq rabbitmqctl status &>/dev/null; do
+    attempt=$((attempt + 1))
+    if [ $attempt -ge $max_attempts ]; then
+        echo "[ERROR] RabbitMQ failed to start after $max_attempts attempts"
+        docker-compose -f docker-compose.test.yml down
+        exit 1
+    fi
+    echo "Waiting for RabbitMQ... (attempt $attempt/$max_attempts)"
+    sleep 1
+done
+
+echo "[OK] RabbitMQ is ready"
+echo ""
+
 # Run the tests
 echo "[*] Running integration tests..."
-cd "$SCRIPT_DIR"
 
 TEST_FLAGS="-v -tags=integration -timeout 5m"
 
@@ -71,5 +95,10 @@ else
     echo ""
     echo "[ERROR] Tests failed with exit code $EXIT_CODE"
 fi
+
+# Cleanup: Stop RabbitMQ container
+echo ""
+echo "[*] Stopping RabbitMQ container..."
+docker-compose -f docker-compose.test.yml down
 
 exit $EXIT_CODE
