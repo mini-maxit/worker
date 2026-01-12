@@ -24,13 +24,12 @@ import (
 )
 
 const (
-	testRabbitMQURL      = "amqp://guest:guest@localhost:5672/"
-	fileStorageURL       = "http://localhost:8888"
-	testBucket           = "e2e-test"
-	workerQueueName      = "worker_queue"
-	responseQueueName    = "response_queue"
-	waitForWorkerTimeout = 60 * time.Second
-	messageTimeout       = 120 * time.Second
+	testRabbitMQURL   = "amqp://guest:guest@localhost:5672/"
+	fileStorageURL    = "http://localhost:8888"
+	testBucket        = "e2e-test"
+	workerQueueName   = "worker_queue"
+	responseQueueName = "response_queue"
+	messageTimeout    = 120 * time.Second
 )
 
 // Helper functions for file storage operations
@@ -109,51 +108,6 @@ func uploadToFileStorage(t *testing.T, bucket, path, content string) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("failed to upload file, status: %d, body: %s", resp.StatusCode, string(body))
 	}
-}
-
-func downloadFromFileStorage(t *testing.T, bucket, path string) string {
-	t.Helper()
-	// Build download URL: /buckets/{bucket}/{path}?metadataOnly=false
-	downloadURL := fmt.Sprintf("%s/buckets/%s/%s?metadataOnly=false", fileStorageURL, bucket, path)
-
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		t.Fatalf("failed to download file from %s: %v", downloadURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("failed to download file, status: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
-
-	return string(body)
-}
-
-func deleteFromFileStorage(t *testing.T, bucket, path string) {
-	t.Helper()
-	// Build delete URL: /buckets/{bucket}/{path}
-	deleteURL := fmt.Sprintf("%s/buckets/%s/%s", fileStorageURL, bucket, path)
-
-	req, err := http.NewRequest("DELETE", deleteURL, nil)
-	if err != nil {
-		t.Logf("warning: failed to create DELETE request: %v", err)
-		return
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		// Don't fail on cleanup errors
-		t.Logf("warning: failed to delete file from %s: %v", deleteURL, err)
-		return
-	}
-	defer resp.Body.Close()
 }
 
 func cleanupBucket(t *testing.T, bucket string) {
