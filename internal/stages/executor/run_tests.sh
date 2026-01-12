@@ -141,46 +141,22 @@ for idx in "${!inputs[@]}"; do
 
     tlimit_s=$(awk "BEGIN {print ${tlimit_ms}/1000}")
 
-    start_ns=$(date +%s%N)
-
     # Run the command with timeout and track peak memory usage
     hard_kb=$(( mlimit_kb + mlimit_kb / 10 ))
-    timeout --preserve-status "${tlimit_s}s" \
-      /usr/bin/time -f "%M" -o "${peak_mem_file}" \
-      bash -c "ulimit -S -v ${mlimit_kb} && ulimit -H -v ${hard_kb} && ${RUN_CMD}" < "$infile" \
-      > "${out}" 2> "${err}"
-    code=$?
 
+    start_ns=$(date +%s%N)
+    timeout --preserve-status "${tlimit_s}s" \
+      /usr/bin/time -q -f "%M" -o "$peak_mem_file" \
+      bash -lc "ulimit -Sv ${mlimit_kb}; ulimit -Hv ${hard_kb}; exec ${RUN_CMD}" \
+      < "$infile" > "$out" 2> "$err"
+    code=$?
     end_ns=$(date +%s%N)
 
-    if [[ ! -s "${peak_mem_file}" ]]; then
-      peak_kb=0
-    else
-      peak_kb=$(grep -o '[0-9]*' "${peak_mem_file}" | tail -n 1)
+    peak_kb=0
+    if [[ -s "$peak_mem_file" ]]; then
+      peak_kb=$(<"$peak_mem_file")
     fi
-    rm -f "${peak_mem_file}"
-
-    sig=0
-    if (( code > 128 )); then
-      sig=$((code - 128))
-    fi
-
-    is_mle=0
-    if (( sig == 15 )); then
-      echo "Time limit exceeded after ${tlimit_ms}ms" >> "${err}"
-    # SIGKILL(9), SIGSEGV(11), SIGABRT(6), SIGBUS(10) possibly mem limit exceeded, but this is NOT guaranteed by POSIX.
-    elif (( sig == 9 || sig == 11 || sig == 6 || sig == 10 )); then
-      # Require that we were close to the memory limit
-      threshold_kb=$(( mlimit_kb * 9 / 10 ))
-      if (( peak_kb >= threshold_kb )); then
-      is_mle=1
-      fi
-    fi
-
-    if ((is_mle)); then
-      echo "Memory limit exceeded max ${mlimit_kb}KB" >> "${err}"
-      code=134
-    fi
+    rm -f "$peak_mem_file"
 
     duration_ns=$((end_ns - start_ns))
     duration_sec=$(awk "BEGIN {printf \"%.6f\", ${duration_ns}/1000000000}")

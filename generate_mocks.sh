@@ -18,6 +18,7 @@ INTERFACES=(
 	"internal/storage Storage"
 	"internal/pipeline Worker"
 	"internal/docker DockerClient"
+	"internal/storage FileCache"
 )
 
 
