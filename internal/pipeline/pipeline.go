@@ -1,17 +1,15 @@
 package pipeline
 
 import (
-	"errors"
 	"fmt"
+	"os"
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
-	"github.com/mini-maxit/worker/internal/stages/compiler"
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/pkg/constants"
-	customErr "github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/languages"
 	"github.com/mini-maxit/worker/pkg/messages"
 	"github.com/mini-maxit/worker/pkg/solution"
@@ -37,7 +35,6 @@ type worker struct {
 	id            int
 	state         WorkerState
 	responseQueue string
-	compiler      compiler.Compiler
 	packager      packager.Packager
 	executor      executor.Executor
 	verifier      verifier.Verifier
@@ -47,7 +44,6 @@ type worker struct {
 
 func NewWorker(
 	id int,
-	compiler compiler.Compiler,
 	packager packager.Packager,
 	executor executor.Executor,
 	verifier verifier.Verifier,
@@ -58,7 +54,6 @@ func NewWorker(
 	return &worker{
 		id:        id,
 		state:     WorkerState{Status: constants.WorkerStatusIdle, ProcessingMessageID: ""},
-		compiler:  compiler,
 		packager:  packager,
 		executor:  executor,
 		verifier:  verifier,
@@ -136,28 +131,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		}
 	}()
 
-	err = ws.compiler.CompileSolutionIfNeeded(
-		langType,
-		task.LanguageVersion,
-		dc.UserSolutionPath,
-		dc.UserExecFilePath,
-		dc.CompileErrFilePath,
-		messageID)
-
-	if err != nil {
-		if errors.Is(err, customErr.ErrCompilationFailed) {
-			ws.publishCompilationError(dc, task.TestCases)
-			return
-		}
-
-		ws.responder.PublishTaskErrorToResponseQueue(
-			constants.QueueMessageTypeTask,
-			ws.state.ProcessingMessageID,
-			ws.responseQueue,
-			err,
-		)
-		return
-	}
+	requiresCompilation := !langType.IsScriptingLanguage()
 
 	limits := make([]solution.Limit, len(task.TestCases))
 	for i, tc := range task.TestCases {
@@ -168,11 +142,13 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	}
 
 	cfg := executor.CommandConfig{
-		MessageID:       messageID,
-		DirConfig:       dc,
-		LanguageType:    langType,
-		LanguageVersion: task.LanguageVersion,
-		TestCases:       task.TestCases,
+		MessageID:         messageID,
+		DirConfig:         dc,
+		LanguageType:      langType,
+		LanguageVersion:   task.LanguageVersion,
+		TestCases:         task.TestCases,
+		SourceFilePath:    dc.UserSolutionPath,
+		RequiresCompiling: requiresCompilation,
 	}
 
 	err = ws.executor.ExecuteCommand(cfg)
@@ -184,6 +160,16 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 			err,
 		)
 		return
+	}
+
+	if requiresCompilation {
+		// Check for compilation error
+		fileInfo, statErr := os.Stat(dc.CompileErrFilePath)
+
+		if statErr == nil && fileInfo.Size() > 0 {
+			ws.publishCompilationError(dc, task.TestCases)
+			return
+		}
 	}
 
 	solutionResult := ws.verifier.EvaluateAllTestCases(dc, task.TestCases, messageID, langType)
@@ -209,6 +195,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 }
 
 func (ws *worker) publishCompilationError(dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
+	ws.logger.Infof("Compilation error occurred for message ID: %s", ws.state.ProcessingMessageID)
 	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, ws.state.ProcessingMessageID)
 	if sendErr != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(

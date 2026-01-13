@@ -8,7 +8,6 @@ import (
 	"github.com/mini-maxit/worker/internal/rabbitmq/consumer"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
 	"github.com/mini-maxit/worker/internal/scheduler"
-	"github.com/mini-maxit/worker/internal/stages/compiler"
 	"github.com/mini-maxit/worker/internal/stages/executor"
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
@@ -47,7 +46,6 @@ func main() {
 	if err := fileCache.InitCache(); err != nil {
 		logger.Fatalf("Failed to initialize file cache: %v", err)
 	}
-	compiler := compiler.NewCompiler()
 	packager := packager.NewPackager(storageService, fileCache)
 	executor := executor.NewExecutor(dCli)
 	verifier := verifier.NewVerifier(config.VerifierFlags)
@@ -57,7 +55,7 @@ func main() {
 			logger.Error("Failed to close responder", err)
 		}
 	}()
-	scheduler := scheduler.NewScheduler(config.MaxWorkers, compiler, packager, executor, verifier, responder)
+	scheduler := scheduler.NewScheduler(config.MaxWorkers, packager, executor, verifier, responder)
 	consumer := consumer.NewConsumer(workerChannel, config.ConsumeQueueName, scheduler, responder)
 
 	// Start listening for messages

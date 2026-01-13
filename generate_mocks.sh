@@ -12,7 +12,6 @@ INTERFACES=(
 	"internal/rabbitmq/channel Channel"
 	"internal/rabbitmq/responder Responder"
 	"internal/scheduler Scheduler"
-	"internal/stages/compiler Compiler"
 	"internal/stages/executor Executor"
 	"internal/stages/packager Packager"
 	"internal/stages/verifier Verifier"
