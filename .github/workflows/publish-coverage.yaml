@@ -91,10 +91,13 @@ jobs:
         run: |
           docker run -d \
             --name worker-service \
-            --network host \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -e RABBITMQ_URL=amqp://guest:guest@localhost:5672/ \
-            -e FILE_STORAGE_URL=http://localhost:8888 \
+            -e RABBITMQ_HOST=rabbitmq \
+            -e RABBITMQ_PORT=5672 \
+            -e RABBITMQ_USER=guest \
+            -e RABBITMQ_PASSWORD=guest \
+            -e STORAGE_HOST=file-storage \
+            -e STORAGE_PORT=8888 \
             -e DOCKER_HOST=unix:///var/run/docker.sock \
             worker:test
 
@@ -108,7 +111,7 @@ jobs:
 
       - name: Show worker logs on failure
         if: failure()
-        run: docker logs worker-service
+        run: docker logs worker-service || docker logs file-storage
 
       - name: Cleanup worker service
         if: always()
