@@ -85,7 +85,7 @@ echo ""
 echo "[*] Running end-to-end tests..."
 echo ""
 
-TEST_FLAGS="-v -tags=integration -timeout 10m"
+TEST_FLAGS="-v -tags=e2e -timeout 10m"
 
 EXIT_CODE=0
 

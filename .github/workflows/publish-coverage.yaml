@@ -4,11 +4,39 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch: # for testing purposes to be deleted later
 
 
 jobs:
-  test:
-    name: Run tests and collect coverage
+  unit-tests:
+    name: Run unit tests and upload coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: go test -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.txt
+          fail_ci_if_error: true
+
+  integration-and-e2e-tests:
+    name: Run integration and e2e tests
     runs-on: ubuntu-latest
     services:
       docker:
@@ -29,6 +57,12 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      file-storage:
+        image: seber/maxit-file-storage:latest
+        env:
+          APP_PORT: 8888
+        ports:
+          - 8888:8888
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,22 +77,39 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Run unit tests with coverage
-        run: go test -coverprofile=coverage-unit.txt -covermode=atomic ./...
-
-      - name: Run integration tests with coverage
+      - name: Run integration tests
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: go test -tags=integration -coverprofile=coverage-integration.txt -covermode=atomic ./...
+        run: go test -tags=integration ./...
 
-      - name: Merge coverage reports
+      - name: Build worker Docker image
+        run: docker build -t worker:test .
+
+      - name: Run worker service
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: |
-          go install github.com/wadey/gocovmerge@latest
-          gocovmerge coverage-unit.txt coverage-integration.txt > coverage.txt
+          docker run -d \
+            --name worker-service \
+            --network host \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -e RABBITMQ_URL=amqp://guest:guest@localhost:5672/ \
+            -e FILE_STORAGE_URL=http://localhost:8888 \
+            -e DOCKER_HOST=unix:///var/run/docker.sock \
+            worker:test
 
-      - name: Upload results to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.txt
-          fail_ci_if_error: true
+      - name: Wait for worker to be ready
+        run: sleep 10
+
+      - name: Run e2e tests
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: go test -tags=e2e ./...
+
+      - name: Show worker logs on failure
+        if: failure()
+        run: docker logs worker-service
+
+      - name: Cleanup worker service
+        if: always()
+        run: docker rm -f worker-service || true
