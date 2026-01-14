@@ -86,8 +86,8 @@ const (
 
 // Docker execution constants.
 const (
-	MinContainerMemoryKB       int64 = 64 * 1024   // 64 MB
-	MaxContainerOutputFileSize int64 = 1024 * 1024 // 1 MB per output file
+	MinContainerMemoryKB       int64 = 64 * 1024        // 64 MB
+	MaxContainerOutputFileSize int64 = 10 * 1024 * 1024 // 10 MB per output file
 	DockerTestScript                 = "run_tests.sh"
 	RunnerUID                        = 1000
 	RunnerGID                        = 1000
