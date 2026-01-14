@@ -76,7 +76,7 @@ echo ""
 
 # Wait for worker to be ready
 echo "[*] Waiting for worker to be ready..."
-sleep 5  # Give worker some time to start and connect
+sleep 10  # Give worker some time to start and connect
 
 echo "[OK] All services are ready"
 echo ""
