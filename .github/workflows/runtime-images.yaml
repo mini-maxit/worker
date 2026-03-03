@@ -48,52 +48,56 @@ jobs:
             cp internal/stages/executor/run_tests.sh "$folder/run_tests.sh"
           done
 
-      - name: Build and push runtime images
+      - name: Build and push Python runtime images
         env:
           RUNTIME_TAG: ${{ steps.version.outputs.version }}
           IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         run: |
-          for folder in $(find internal/stages/executor -type d -mindepth 1 -maxdepth 1); do
-            folder_name=$(basename "$folder")
-
-            # Special handling for Python - build multiple versions
-            if [ "$folder_name" = "python" ]; then
-              for version in 3.10 3.11 3.12; do
-                tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}"
-                if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
-                  tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:${RUNTIME_TAG} --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:latest"
-                fi
-                docker buildx build \
-                  --push \
-                  --platform linux/amd64,linux/arm64 \
-                  --build-arg PYTHON_VERSION=${version} \
-                  $tags \
-                  "$folder"
-              done
-            # Special handling for C# - build multiple versions
-            elif [ "$folder_name" = "csharp" ]; then
-              for version in 8 9 10; do
-                tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}"
-                if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
-                  tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:${RUNTIME_TAG} --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:latest"
-                fi
-                docker buildx build \
-                  --push \
-                  --platform linux/amd64,linux/arm64 \
-                  --build-arg DOTNET_VERSION=${version}.0 \
-                  $tags \
-                  "$folder"
-              done
-            else
-              # For non-Python/non-C# languages, build single image
-              tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:${RUNTIME_TAG}"
-              if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
-                tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:latest"
-              fi
-              docker buildx build \
-                --push \
-                --platform linux/amd64,linux/arm64 \
-                $tags \
-                "$folder"
+          # iterate the python versions defined in the repo
+          for version in 3.10 3.11 3.12; do
+            tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-python-${version}"
+            if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+              tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-python-${version}:${RUNTIME_TAG} --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-python-${version}:latest"
             fi
+            docker buildx build \
+              --push \
+              --platform linux/amd64,linux/arm64 \
+              --build-arg PYTHON_VERSION=${version} \
+              $tags \
+              "internal/stages/executor/python"
           done
+
+      - name: Build and push C# runtime images
+        env:
+          RUNTIME_TAG: ${{ steps.version.outputs.version }}
+          IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        run: |
+          for version in 8 9 10; do
+            tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-csharp-${version}"
+            if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+              tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-csharp-${version}:${RUNTIME_TAG} --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-csharp-${version}:latest"
+            fi
+            docker buildx build \
+              --push \
+              --platform linux/amd64,linux/arm64 \
+              --build-arg DOTNET_VERSION=${version}.0 \
+              $tags \
+              "internal/stages/executor/csharp"
+          done
+
+      - name: Build and push C++ runtime images
+        env:
+          RUNTIME_TAG: ${{ steps.version.outputs.version }}
+          IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        run: |
+          folder="internal/stages/executor/cpp"
+          folder_name="cpp"
+          tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:${RUNTIME_TAG}"
+          if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+            tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:latest"
+          fi
+          docker buildx build \
+            --push \
+            --platform linux/amd64,linux/arm64 \
+            $tags \
+            "$folder"

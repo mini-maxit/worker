@@ -18,7 +18,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY run_tests.sh /usr/local/bin/run_tests.sh
 RUN chmod +x /usr/local/bin/run_tests.sh
 
-# create runner user same as other images
-RUN groupadd -g 1000 runner && useradd -u 1000 -g 1000 -M -s /usr/sbin/nologin runner
+# create runner user same as other images (idempotent safe creation)
+# If GID/UID 1000 already exists in base image, fall back to creating a group/user without fixed IDs.
+RUN set -eux; \
+    # Ensure a group with GID 1000 exists and is named 'runner'. If a different group uses GID 1000, rename it.
+    if getent group 1000 >/dev/null 2>&1; then \
+        existing_group=$(getent group 1000 | cut -d: -f1); \
+        if [ "$existing_group" != "runner" ]; then \
+            groupmod -n runner "$existing_group" || true; \
+        fi; \
+    else \
+        groupadd -g 1000 runner; \
+    fi; \
+    # Ensure a user with UID 1000 exists and is named 'runner'. If a different user uses UID 1000, rename it.
+    if getent passwd 1000 >/dev/null 2>&1; then \
+        existing_user=$(getent passwd 1000 | cut -d: -f1); \
+        if [ "$existing_user" != "runner" ]; then \
+            usermod -l runner "$existing_user" || true; \
+            # update home/group reference if needed
+            usermod -g runner runner || true; \
+        fi; \
+    else \
+        useradd -u 1000 -g runner -M -s /usr/sbin/nologin runner || true; \
+    fi; \
+    true
 USER runner
 WORKDIR /tmp
