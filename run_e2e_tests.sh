@@ -37,7 +37,7 @@ echo ""
 echo "[*] Starting required services (RabbitMQ, File Storage, Worker)..."
 cd "$SCRIPT_DIR"
 
-docker-compose up -d
+docker-compose up --build -d
 
 # Wait for RabbitMQ to be ready
 echo "[*] Waiting for RabbitMQ to be ready..."
@@ -74,9 +74,29 @@ done
 echo "[OK] File storage is ready"
 echo ""
 
-# Wait for worker to be ready
+# Wait for worker to be ready by watching its logs for a readiness message
 echo "[*] Waiting for worker to be ready..."
-sleep 10  # Give worker some time to start and connect
+worker_max_attempts=60
+attempt=0
+worker_ready=false
+# This pattern comes from the worker logs when it starts listening for messages
+LOG_PATTERN="Listening for messages on queue"
+echo "[*] Waiting for worker log: \"$LOG_PATTERN\""
+while [ $attempt -lt $worker_max_attempts ]; do
+    attempt=$((attempt + 1))
+    if docker-compose logs --no-color --tail=200 worker 2>/dev/null | grep -q "$LOG_PATTERN"; then
+        worker_ready=true
+        break
+    fi
+    echo "Waiting for worker... (attempt $attempt/$worker_max_attempts)"
+    sleep 1
+done
+
+if [ "$worker_ready" = false ]; then
+    echo "[ERROR] Worker did not become ready after $worker_max_attempts attempts"
+    docker-compose down
+    exit 1
+fi
 
 echo "[OK] All services are ready"
 echo ""

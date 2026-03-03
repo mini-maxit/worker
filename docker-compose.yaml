@@ -8,11 +8,11 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-  go_app:
+  worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: go_app
+    container_name: worker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

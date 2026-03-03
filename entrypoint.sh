@@ -8,6 +8,9 @@ RUNTIME_LANG_VERSIONS=(
     "python-3.12:latest"
     "python-3.11:latest"
     "python-3.10:latest"
+    "csharp-8:latest"
+    "csharp-9:latest"
+    "csharp-10:latest"
 )
 
 for lang_version in "${RUNTIME_LANG_VERSIONS[@]}"; do

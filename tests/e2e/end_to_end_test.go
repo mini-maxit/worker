@@ -849,7 +849,7 @@ func runE2ETest(t *testing.T, tc e2eTestCase) {
 	t.Log("Starting test:", tc.name)
 
 	// Create unique bucket for this test
-	bucket := fmt.Sprintf("%s-%d", testBucket, time.Now().UnixNano())
+	bucket := fmt.Sprintf("%s-%s-%d", testBucket, tc.name, time.Now().UnixNano())
 	defer cleanupBucket(t, bucket)
 
 	// Setup RabbitMQ connection
