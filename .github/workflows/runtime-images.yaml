@@ -70,8 +70,22 @@ jobs:
                   $tags \
                   "$folder"
               done
+            # Special handling for C# - build multiple versions
+            elif [ "$folder_name" = "csharp" ]; then
+              for version in 8 9 10; do
+                tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}"
+                if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+                  tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:${RUNTIME_TAG} --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name-${version}:latest"
+                fi
+                docker buildx build \
+                  --push \
+                  --platform linux/amd64,linux/arm64 \
+                  --build-arg DOTNET_VERSION=${version}.0 \
+                  $tags \
+                  "$folder"
+              done
             else
-              # For non-Python languages, build single image
+              # For non-Python/non-C# languages, build single image
               tags="--tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:${RUNTIME_TAG}"
               if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
                 tags="$tags --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/runtime-$folder_name:latest"

@@ -363,8 +363,12 @@ This message occurs when the worker receives a handshake message. The worker wil
         "versions": ["20", "17"]
       },
       {
-        "name": "Python",
-        "versions": ["3", "2"]
+        "name": "PYTHON",
+        "versions": ["3.12", "3.11"]
+      },
+      {
+        "name": "CSHARP",
+        "versions": ["8", "9", "10"]
       }
     ]
   }

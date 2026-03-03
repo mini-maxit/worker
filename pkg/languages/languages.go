@@ -1,6 +1,7 @@
 package languages
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/mini-maxit/worker/pkg/constants"
@@ -14,6 +15,7 @@ type LanguageType int
 const (
 	CPP LanguageType = iota + 1
 	PYTHON
+	CSHARP
 )
 
 func (lt LanguageType) String() string {
@@ -39,6 +41,14 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 		}
 		image := constants.RuntimeImagePrefix + "-python-" + version + ":latest"
 		return image, nil
+	case CSHARP:
+		// C# uses version-specific runtime images
+		_, ok := LanguageVersionMap[CSHARP][version]
+		if !ok {
+			return "", errors.ErrInvalidVersion
+		}
+		image := constants.RuntimeImagePrefix + "-csharp-" + version + ":latest"
+		return image, nil
 	default:
 		return "", errors.ErrInvalidLanguageType
 	}
@@ -48,7 +58,7 @@ func (lt LanguageType) IsScriptingLanguage() bool {
 	switch lt {
 	case PYTHON:
 		return true
-	case CPP:
+	case CPP, CSHARP:
 		return false
 	default:
 		return false
@@ -65,8 +75,42 @@ func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) 
 		return []string{"python3", "./" + solutionFileName}, nil
 	case CPP:
 		return []string{"./" + solutionFileName}, nil
+	case CSHARP:
+		return []string{"dotnet", "./" + solutionFileName}, nil
 	default:
 		return nil, errors.ErrInvalidLanguageType
+	}
+}
+
+func (lt LanguageType) GetCompileCommand(version, userExecFilePath, solutionFileName string) ([]string, error) {
+	switch lt {
+	case CPP:
+		versionFlag, err := GetVersionFlag(lt, version)
+		if err != nil {
+			return []string{}, err
+		}
+		return []string{
+			"g++",
+			"-o",
+			filepath.Base(userExecFilePath),
+			"-std=" + versionFlag,
+			filepath.Base(solutionFileName),
+		}, nil
+	case PYTHON: // make linter happy.
+		return []string{}, nil
+	case CSHARP:
+		// compile with csc and specify language version if provided
+		if _, ok := LanguageVersionMap[CSHARP][version]; !ok {
+			return []string{}, errors.ErrInvalidVersion
+		}
+		return []string{
+			"csc",
+			"/langversion:" + version,
+			"/out:" + filepath.Base(userExecFilePath),
+			filepath.Base(solutionFileName),
+		}, nil
+	default:
+		return []string{}, nil
 	}
 }
 
@@ -80,6 +124,8 @@ func (lt LanguageType) GetMemoryLimitErrorPatterns() []string {
 			"Memory limit exceeded",
 			"Cannot allocate memory",
 		}
+	case CSHARP:
+		return []string{"OutOfMemoryException", "System.OutOfMemoryException"}
 	default:
 		return []string{}
 	}
@@ -88,11 +134,13 @@ func (lt LanguageType) GetMemoryLimitErrorPatterns() []string {
 var LanguageTypeMap = map[string]LanguageType{
 	"CPP":    CPP,
 	"PYTHON": PYTHON,
+	"CSHARP": CSHARP,
 }
 
 var LanguageExtensionMap = map[LanguageType]string{
 	CPP:    "cpp",
 	PYTHON: "py",
+	CSHARP: "cs",
 }
 
 var LanguageVersionMap = map[LanguageType]map[string]string{
@@ -106,6 +154,11 @@ var LanguageVersionMap = map[LanguageType]map[string]string{
 		"3.10": "3.10",
 		"3.11": "3.11",
 		"3.12": "3.12",
+	},
+	CSHARP: {
+		"8":  "8",
+		"9":  "9",
+		"10": "10",
 	},
 }
 
