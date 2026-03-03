@@ -2,6 +2,17 @@ name: Runtime Images
 
 on:
   workflow_dispatch:
+    inputs:
+      language:
+        description: 'Select which language runtime to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - python
+          - csharp
+          - cpp
 
 env:
   REGISTRY: ghcr.io
@@ -49,6 +60,7 @@ jobs:
           done
 
       - name: Build and push Python runtime images
+        if: github.event.inputs.language == 'all' || github.event.inputs.language == 'python'
         env:
           RUNTIME_TAG: ${{ steps.version.outputs.version }}
           IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
@@ -68,6 +80,7 @@ jobs:
           done
 
       - name: Build and push C# runtime images
+        if: github.event.inputs.language == 'all' || github.event.inputs.language == 'csharp'
         env:
           RUNTIME_TAG: ${{ steps.version.outputs.version }}
           IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
@@ -86,6 +99,7 @@ jobs:
           done
 
       - name: Build and push C++ runtime images
+        if: github.event.inputs.language == 'all' || github.event.inputs.language == 'cpp'
         env:
           RUNTIME_TAG: ${{ steps.version.outputs.version }}
           IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
