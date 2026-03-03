@@ -6,8 +6,8 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS sdk8
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS sdk9
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS sdk10
 
-# select SDK based on version
-FROM sdk${DOTNET_VERSION//./} AS runtime
+# select SDK based on version (extract major version from DOTNET_VERSION)
+FROM sdk${DOTNET_VERSION%%.*} AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 

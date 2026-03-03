@@ -639,7 +639,211 @@ print(a * b)`,
 	runE2ETest(t, tc)
 }
 
-// Common test runner
+// C# test cases
+
+func TestE2E_CSharp_Valid(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping end-to-end test in short mode")
+	}
+
+	tc := e2eTestCase{
+		name:            "CSharp Valid Submission",
+		language:        "csharp",
+		languageVersion: "9",
+		program: `using System;
+
+class Program {
+    static void Main() {
+        string line = Console.ReadLine();
+        var parts = line.Split(' ');
+        int a = int.Parse(parts[0]);
+        int b = int.Parse(parts[1]);
+        Console.WriteLine(a + b);
+    }
+}`,
+		programPath: "Program.cs",
+		inputFiles: map[string]string{
+			"1": "5 3\n",
+			"2": "10 20\n",
+			"3": "-5 5\n",
+		},
+		expectedOutputFiles: map[string]string{
+			"1": "8\n",
+			"2": "30\n",
+			"3": "0\n",
+		},
+		timeLimitMs:    2000,
+		memoryLimitKB:  65536,
+		expectedStatus: solution.Success,
+		expectedTestResults: map[int]solution.TestCaseStatus{
+			1: solution.TestCasePassed,
+			2: solution.TestCasePassed,
+			3: solution.TestCasePassed,
+		},
+	}
+
+	runE2ETest(t, tc)
+}
+
+func TestE2E_CSharp_CompilationError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping end-to-end test in short mode")
+	}
+
+	tc := e2eTestCase{
+		name:            "CSharp Compilation Error",
+		language:        "csharp",
+		languageVersion: "9",
+		program: `using System;
+
+class Program {
+    static void Main() {
+        string line = Console.ReadLine();
+        var parts = line.Split(' ');
+        int a = int.Parse(parts[0]);
+        int b = int.Parse(parts[1])
+        // Missing semicolon above
+        Console.WriteLine(a + b);
+    }
+}`,
+		programPath: "Program.cs",
+		inputFiles: map[string]string{
+			"1": "5 3\n",
+		},
+		expectedOutputFiles: map[string]string{
+			"1": "8\n",
+		},
+		timeLimitMs:         2000,
+		memoryLimitKB:       65536,
+		expectedStatus:      solution.CompilationError,
+		expectedTestResults: map[int]solution.TestCaseStatus{},
+	}
+
+	runE2ETest(t, tc)
+}
+
+func TestE2E_CSharp_Timeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping end-to-end test in short mode")
+	}
+
+	tc := e2eTestCase{
+		name:            "CSharp Timeout",
+		language:        "csharp",
+		languageVersion: "9",
+		program: `using System;
+using System.Threading;
+
+class Program {
+    static void Main() {
+        string line = Console.ReadLine();
+        var parts = line.Split(' ');
+        int a = int.Parse(parts[0]);
+        int b = int.Parse(parts[1]);
+        // Sleep for 5 seconds to trigger timeout
+        Thread.Sleep(5000);
+        Console.WriteLine(a + b);
+    }
+}`,
+		programPath: "Program.cs",
+		inputFiles: map[string]string{
+			"1": "5 3\n",
+		},
+		expectedOutputFiles: map[string]string{
+			"1": "8\n",
+		},
+		timeLimitMs:    1000, // 1 second limit
+		memoryLimitKB:  65536,
+		expectedStatus: solution.TestFailed,
+		expectedTestResults: map[int]solution.TestCaseStatus{
+			1: solution.TimeLimitExceeded,
+		},
+	}
+
+	runE2ETest(t, tc)
+}
+
+func TestE2E_CSharp_MemoryLimitExceeded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping end-to-end test in short mode")
+	}
+
+	tc := e2eTestCase{
+		name:            "CSharp Memory Limit Exceeded",
+		language:        "csharp",
+		languageVersion: "9",
+		program: `using System;
+
+class Program {
+    static void Main() {
+        string line = Console.ReadLine();
+        var parts = line.Split(' ');
+        int a = int.Parse(parts[0]);
+        int b = int.Parse(parts[1]);
+        // Allocate large amount of memory (100MB)
+        int[] largeArray = new int[25 * 1024 * 1024]; // 25M ints = 100MB
+        Console.WriteLine(a + b);
+    }
+}`,
+		programPath: "Program.cs",
+		inputFiles: map[string]string{
+			"1": "5 3\n",
+		},
+		expectedOutputFiles: map[string]string{
+			"1": "8\n",
+		},
+		timeLimitMs:    2000,
+		memoryLimitKB:  10240, // 10MB limit
+		expectedStatus: solution.TestFailed,
+		expectedTestResults: map[int]solution.TestCaseStatus{
+			1: solution.MemoryLimitExceeded,
+		},
+	}
+
+	runE2ETest(t, tc)
+}
+
+func TestE2E_CSharp_OutputDifference(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping end-to-end test in short mode")
+	}
+
+	tc := e2eTestCase{
+		name:            "CSharp Output Difference",
+		language:        "csharp",
+		languageVersion: "9",
+		program: `using System;
+
+class Program {
+    static void Main() {
+        string line = Console.ReadLine();
+        var parts = line.Split(' ');
+        int a = int.Parse(parts[0]);
+        int b = int.Parse(parts[1]);
+        // Wrong output - multiplication instead of addition
+        Console.WriteLine(a * b);
+    }
+}`,
+		programPath: "Program.cs",
+		inputFiles: map[string]string{
+			"1": "5 3\n",
+			"2": "10 20\n",
+		},
+		expectedOutputFiles: map[string]string{
+			"1": "8\n",
+			"2": "30\n",
+		},
+		timeLimitMs:    2000,
+		memoryLimitKB:  65536,
+		expectedStatus: solution.TestFailed,
+		expectedTestResults: map[int]solution.TestCaseStatus{
+			1: solution.OutputDifference,
+			2: solution.OutputDifference,
+		},
+	}
+
+	runE2ETest(t, tc)
+}
 
 func runE2ETest(t *testing.T, tc e2eTestCase) {
 	t.Log("Starting test:", tc.name)
