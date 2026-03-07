@@ -13,13 +13,14 @@ import (
 )
 
 type Config struct {
-	RabbitMQURL      string
-	PublishChanSize  int
-	StorageBaseUrl   string
-	ConsumeQueueName string
-	MaxWorkers       int
-	VerifierFlags    []string
-	CacheDirPath     string
+	RabbitMQURL        string
+	PublishChanSize    int
+	StorageBaseUrl     string
+	StorageInternalKey string
+	ConsumeQueueName   string
+	MaxWorkers         int
+	VerifierFlags      []string
+	CacheDirPath       string
 }
 
 func NewConfig() *Config {
@@ -41,19 +42,20 @@ func NewConfig() *Config {
 	}
 
 	rabbitmqURL, publishChanSize := rabbitmqConfig()
-	storageBaseUrl := storageConfig()
+	storageBaseUrl, storageInternalKey := storageConfig()
 	workerQueueName, maxWorkers := workerConfig()
 	verifierFlagsStr := verifierConfig()
 	cacheDirPath := cacheConfig()
 
 	return &Config{
-		RabbitMQURL:      rabbitmqURL,
-		PublishChanSize:  publishChanSize,
-		StorageBaseUrl:   storageBaseUrl,
-		ConsumeQueueName: workerQueueName,
-		MaxWorkers:       maxWorkers,
-		VerifierFlags:    verifierFlagsStr,
-		CacheDirPath:     cacheDirPath,
+		RabbitMQURL:        rabbitmqURL,
+		PublishChanSize:    publishChanSize,
+		StorageBaseUrl:     storageBaseUrl,
+		StorageInternalKey: storageInternalKey,
+		ConsumeQueueName:   workerQueueName,
+		MaxWorkers:         maxWorkers,
+		VerifierFlags:      verifierFlagsStr,
+		CacheDirPath:       cacheDirPath,
 	}
 }
 
@@ -102,7 +104,7 @@ func rabbitmqConfig() (string, int) {
 	return rabbitmqURL, publishChanSize
 }
 
-func storageConfig() string {
+func storageConfig() (string, string) {
 	logger := logger.NewNamedLogger("config")
 
 	storageHost := os.Getenv("STORAGE_HOST")
@@ -120,9 +122,14 @@ func storageConfig() string {
 		logger.Fatalf("failed to parse STORAGE_PORT with error: %v", err)
 	}
 
+	storageInternalKey := os.Getenv("STORAGE_INTERNAL_KEY")
+	if storageInternalKey == "" {
+		logger.Fatalf("STORAGE_INTERNAL_KEY is not set")
+	}
+
 	storageURL := fmt.Sprintf("http://%s:%d", storageHost, storagePort)
 
-	return storageURL
+	return storageURL, storageInternalKey
 }
 
 func workerConfig() (string, int) {

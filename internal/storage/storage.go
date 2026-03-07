@@ -25,13 +25,15 @@ type Storage interface {
 
 type storage struct {
 	fileStorageURL string
+	internalAPIKey string
 	logger         *zap.SugaredLogger
 }
 
-func NewStorage(fileServiceURL string) Storage {
+func NewStorage(fileServiceURL string, internalAPIKey string) Storage {
 	logger := logger.NewNamedLogger("storage")
 	return &storage{
 		fileStorageURL: fileServiceURL,
+		internalAPIKey: internalAPIKey,
 		logger:         logger,
 	}
 }
@@ -49,6 +51,9 @@ func (fs *storage) DownloadFile(fileLocation messages.FileLocation, destPath str
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return "", err
+	}
+	if fs.internalAPIKey != "" {
+		req.Header.Set("X-Internal-Key", fs.internalAPIKey)
 	}
 
 	client := &http.Client{}
@@ -146,6 +151,9 @@ func (fs *storage) UploadFile(filePath, bucket, objectKey string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if fs.internalAPIKey != "" {
+		req.Header.Set("X-Internal-Key", fs.internalAPIKey)
+	}
 
 	// Send the request
 	client := &http.Client{}
