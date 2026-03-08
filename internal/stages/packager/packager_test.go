@@ -33,7 +33,7 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
 	}
 	msg := &messages.TaskQueueMessage{SubmissionFile: submission, TestCases: []messages.TestCase{tc}}
-	msgID := "pkg-test-1"
+	msgID := filepath.Base(t.TempDir())
 
 	// expect DownloadFile for submission and test case files; destination path can be any
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
@@ -223,7 +223,7 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 		SubmissionFile: submission,
 		TestCases:      []messages.TestCase{tc},
 	}
-	msgID := "cache-hit-test"
+	msgID := filepath.Base(t.TempDir())
 
 	// Create temp cached files
 	cachedInputPath := filepath.Join(t.TempDir(), "cached_in.txt")
@@ -296,7 +296,7 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 		SubmissionFile: submission,
 		TestCases:      []messages.TestCase{tc},
 	}
-	msgID := "cache-miss-test"
+	msgID := filepath.Base(t.TempDir())
 
 	// Expect submission download (not cached)
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return("/tmp/dest-sub", nil)
