@@ -76,7 +76,7 @@ func (lt LanguageType) GetRunCommand(solutionFileName string) ([]string, error) 
 	case CPP:
 		return []string{"./" + solutionFileName}, nil
 	case CSHARP:
-		return []string{"dotnet", "./" + solutionFileName}, nil
+		return []string{"mono", "./" + solutionFileName}, nil
 	default:
 		return nil, errors.ErrInvalidLanguageType
 	}
@@ -156,9 +156,9 @@ var LanguageVersionMap = map[LanguageType]map[string]string{
 		"3.12": "3.12",
 	},
 	CSHARP: {
-		"8":  "8",
-		"9":  "9",
-		"10": "10",
+		"8":  "8.0",
+		"9":  "9.0",
+		"10": "10.0",
 	},
 }
 

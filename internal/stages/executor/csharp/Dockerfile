@@ -32,5 +32,9 @@ RUN set -eux; \
     useradd -u 1000 -g runner -M -s /usr/sbin/nologin runner || true; \
   fi
 
+# dotnet CLI convenience env vars to avoid first-run checks and telemetry
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    HOME=/tmp
 USER runner
 WORKDIR /tmp
