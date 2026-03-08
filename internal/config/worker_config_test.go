@@ -9,7 +9,14 @@ import (
 	"github.com/mini-maxit/worker/pkg/constants"
 )
 
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("STORAGE_INTERNAL_KEY", "test-internal-key")
+}
+
 func TestRabbitmqConfig_DefaultsAndCustom(t *testing.T) {
+	setRequiredEnv(t)
+
 	config := NewConfig()
 	expectedURL := fmt.Sprintf(
 		"amqp://%s:%s@%s:%s/",
@@ -43,6 +50,8 @@ func TestRabbitmqConfig_DefaultsAndCustom(t *testing.T) {
 }
 
 func TestStorageConfig_DefaultsAndCustom(t *testing.T) {
+	setRequiredEnv(t)
+
 	url := NewConfig().StorageBaseUrl
 	expected := fmt.Sprintf("http://%s:%s", constants.DefaultStorageHost, constants.DefaultStoragePort)
 	if url != expected {
@@ -59,6 +68,8 @@ func TestStorageConfig_DefaultsAndCustom(t *testing.T) {
 }
 
 func TestWorkerConfig_DefaultsAndCustom(t *testing.T) {
+	setRequiredEnv(t)
+
 	config := NewConfig()
 	if config.ConsumeQueueName != constants.DefaultWorkerQueueName {
 		t.Fatalf("expected default worker queue name %q, got %q", constants.DefaultWorkerQueueName, config.ConsumeQueueName)
@@ -79,6 +90,8 @@ func TestWorkerConfig_DefaultsAndCustom(t *testing.T) {
 }
 
 func TestVerifierConfig_DefaultsAndCustom(t *testing.T) {
+	setRequiredEnv(t)
+
 	flags := NewConfig().VerifierFlags
 	if len(flags) != 1 || flags[0] != constants.DefaultVerifierFlags {
 		t.Fatalf("expected default verifier flags [%s], got %v", constants.DefaultVerifierFlags, flags)
@@ -92,6 +105,8 @@ func TestVerifierConfig_DefaultsAndCustom(t *testing.T) {
 }
 
 func TestCacheConfig_DefaultsAndCustom(t *testing.T) {
+	setRequiredEnv(t)
+
 	config := NewConfig()
 	if config.CacheDirPath != constants.CacheDirPath {
 		t.Fatalf("expected default cache dir path %q, got %q", constants.CacheDirPath, config.CacheDirPath)
@@ -105,6 +120,8 @@ func TestCacheConfig_DefaultsAndCustom(t *testing.T) {
 }
 
 func TestNewConfig_PicksUpValues(t *testing.T) {
+	setRequiredEnv(t)
+
 	// set a variety of envs and ensure NewConfig reads them
 	t.Setenv("RABBITMQ_HOST", "xhost")
 	t.Setenv("RABBITMQ_PORT", "1111")
