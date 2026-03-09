@@ -475,12 +475,11 @@ func (m *MockStorage) EXPECT() *MockStorageMockRecorder {
 }
 
 // DownloadFile mocks base method.
-func (m *MockStorage) DownloadFile(fileLocation messages.FileLocation, destPath string) (string, error) {
+func (m *MockStorage) DownloadFile(fileLocation messages.FileLocation, destPath string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DownloadFile", fileLocation, destPath)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // DownloadFile indicates an expected call of DownloadFile.

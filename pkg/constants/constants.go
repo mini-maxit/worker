@@ -52,7 +52,7 @@ const (
 	DefaultRabbitmqPassword        = "guest"
 	DefaultRabbitmqPort            = "5672"
 	DefaultStorageHost             = "file-storage"
-	DefaultStoragePort             = "8888"
+	DefaultStoragePort             = "8081"
 	DefaultLogPath                 = "./internal/logger/logs/log.txt"
 	DefaultWorkerQueueName         = "worker_queue"
 	DefaultRabbitmqPublishChanSize = 100
