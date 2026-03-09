@@ -41,7 +41,7 @@ func main() {
 	workerChannel := rabbitmq.NewRabbitMQChannel(conn)
 
 	// Initialize the services
-	storageService := storage.NewStorage(config.StorageBaseUrl, config.StorageInternalKey)
+	storageService := storage.NewStorage(config.StorageBaseUrl)
 	fileCache := storage.NewFileCache(config.CacheDirPath)
 	if err := fileCache.InitCache(); err != nil {
 		logger.Fatalf("Failed to initialize file cache: %v", err)
