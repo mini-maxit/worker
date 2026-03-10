@@ -172,15 +172,12 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	}).Return((<-chan amqp.Delivery)(deliveries), nil).Times(1)
 
 	// When the scheduler's ProcessTask is called, signal completion
-	done := make(chan struct{})
+	done := make(chan struct{}, 1)
 	mockScheduler.EXPECT().ProcessTask(
 		"reply", "task-id-listen", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
 	).Do(
 		func(_ string, _ string, _ *messages.TaskQueueMessage) {
-			select {
-			case done <- struct{}{}:
-			default:
-			}
+			done <- struct{}{}
 		}).Return(nil).Times(1)
 
 	c := consumer.NewConsumer(mockChannel, workerQueue, mockScheduler, mockResponder)
