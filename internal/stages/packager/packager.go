@@ -349,14 +349,7 @@ func (p *packager) uploadNonEmptyFile(filePath string, outputFileLocation messag
 		return err
 	}
 
-	objPath := outputFileLocation.Path
-	if idx := strings.LastIndex(objPath, "/"); idx != -1 {
-		objPath = objPath[:idx]
-	} else {
-		return errors.New("invalid output file location path")
-	}
-
-	if err := p.storage.UploadFile(filePath, outputFileLocation.Bucket, objPath); err != nil {
+	if err := p.storage.UploadFile(filePath, outputFileLocation.Bucket, outputFileLocation.Path); err != nil {
 		return err
 	}
 
