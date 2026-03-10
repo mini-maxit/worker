@@ -166,7 +166,7 @@ func (p *packager) downloadSubmission(basePath string, submission messages.FileL
 		return customErr.ErrSubmissionFileLocationEmpty
 	}
 	path := filepath.Join(basePath, filepath.Base(submission.Path))
-	if _, err := p.storage.DownloadFile(submission, path); err != nil {
+	if err := p.storage.DownloadFile(submission, path); err != nil {
 		return err
 	}
 	return nil
@@ -322,7 +322,7 @@ func (p *packager) downloadAndCache(
 	destPath string,
 ) error {
 	// Download the file
-	if _, err := p.storage.DownloadFile(fileLocation, destPath); err != nil {
+	if err := p.storage.DownloadFile(fileLocation, destPath); err != nil {
 		return err
 	}
 
