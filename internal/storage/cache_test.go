@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testBucketName = "test-bucket"
+	testBucketOne  = "bucket1"
+)
+
 // createTestFile creates a temporary file with test content.
 func createTestFile(t *testing.T, content string) string {
 	tempFile, err := os.CreateTemp(t.TempDir(), "test-file-*.txt")
@@ -56,7 +61,7 @@ func TestFileCache_CacheFile(t *testing.T) {
 	defer os.Remove(testFile)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/path/file.txt",
 	}
 
@@ -84,7 +89,7 @@ func TestFileCache_GetCachedFile_NotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "nonexistent/file.txt",
 	}
 
@@ -107,7 +112,7 @@ func TestFileCache_GetCachedFile_Success(t *testing.T) {
 	defer os.Remove(testFile)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/success.txt",
 	}
 
@@ -138,7 +143,7 @@ func TestFileCache_MultipleCacheEntries(t *testing.T) {
 		content  string
 	}{
 		{
-			location: messages.FileLocation{Bucket: "bucket1", Path: "path1/file1.txt"},
+			location: messages.FileLocation{Bucket: testBucketOne, Path: "path1/file1.txt"},
 			content:  "content 1",
 		},
 		{
@@ -146,7 +151,7 @@ func TestFileCache_MultipleCacheEntries(t *testing.T) {
 			content:  "content 2",
 		},
 		{
-			location: messages.FileLocation{Bucket: "bucket1", Path: "path3/file3.txt"},
+			location: messages.FileLocation{Bucket: testBucketOne, Path: "path3/file3.txt"},
 			content:  "content 3",
 		},
 	}
@@ -179,7 +184,7 @@ func TestFileCache_OverwriteExistingCache(t *testing.T) {
 	require.NoError(t, err)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/overwrite.txt",
 	}
 
@@ -217,7 +222,7 @@ func TestFileCache_DifferentBucketsSamePath(t *testing.T) {
 	// Cache file in bucket1
 	testFile1 := createTestFile(t, "bucket1 content")
 	defer os.Remove(testFile1)
-	location1 := messages.FileLocation{Bucket: "bucket1", Path: samePath}
+	location1 := messages.FileLocation{Bucket: testBucketOne, Path: samePath}
 	err = cache.CacheFile(location1, testFile1)
 	require.NoError(t, err)
 
@@ -261,7 +266,7 @@ func TestFileCache_CacheWithDifferentExtensions(t *testing.T) {
 
 	for _, ext := range extensions {
 		fileLocation := messages.FileLocation{
-			Bucket: "test-bucket",
+			Bucket: testBucketName,
 			Path:   "test/file" + ext,
 		}
 
@@ -292,7 +297,7 @@ func TestFileCache_GetCachedFile_FileDeleted(t *testing.T) {
 	defer os.Remove(testFile)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/deleted.txt",
 	}
 
@@ -323,7 +328,7 @@ func TestFileCache_CacheFile_InvalidSourcePath(t *testing.T) {
 	require.NoError(t, err)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/invalid.txt",
 	}
 
@@ -345,7 +350,7 @@ func TestFileCache_CleanExpiredCache_NoExpiredEntries(t *testing.T) {
 	defer os.Remove(testFile)
 
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/fresh.txt",
 	}
 
@@ -372,7 +377,7 @@ func TestFileCache_SpecialCharactersInPath(t *testing.T) {
 
 	// File location with special characters
 	fileLocation := messages.FileLocation{
-		Bucket: "test-bucket",
+		Bucket: testBucketName,
 		Path:   "test/файл с пробелами and special-chars_123.txt",
 	}
 
@@ -407,7 +412,7 @@ func TestFileCache_EvictionWhenFull(t *testing.T) {
 	files := make([]messages.FileLocation, maxEntries+2)
 	for i := range maxEntries + 2 {
 		files[i] = messages.FileLocation{
-			Bucket: "test-bucket",
+			Bucket: testBucketName,
 			Path:   fmt.Sprintf("test/file%d.txt", i),
 		}
 

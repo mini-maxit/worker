@@ -15,6 +15,12 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+const (
+	testUserSolutionPath = "src"
+	testUserExecFilePath = "exec"
+	testLanguageType     = "cpp"
+)
+
 // setupSuccessfulPipelineMocks configures mocks for a successful task processing flow.
 func setupSuccessfulPipelineMocks(
 	t *testing.T,
@@ -26,8 +32,8 @@ func setupSuccessfulPipelineMocks(
 	tmpDir := t.TempDir()
 	dir := &packager.TaskDirConfig{
 		PackageDirPath:     tmpDir,
-		UserSolutionPath:   "src",
-		UserExecFilePath:   "exec",
+		UserSolutionPath:   testUserSolutionPath,
+		UserExecFilePath:   testUserExecFilePath,
 		CompileErrFilePath: "compile.err",
 	}
 	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
@@ -57,7 +63,7 @@ func TestProcessTask_SuccessFlow(t *testing.T) {
 	w := pipeline.NewWorker(1, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
 	task := &messages.TaskQueueMessage{
-		LanguageType:    "cpp",
+		LanguageType:    testLanguageType,
 		LanguageVersion: "11",
 		TestCases: []messages.TestCase{
 			{TimeLimitMs: 100, MemoryLimitKB: 65536},
@@ -82,8 +88,8 @@ func TestProcessTask_CompilationErrorFlow(t *testing.T) {
 	tmpDir := t.TempDir()
 	dir := &packager.TaskDirConfig{
 		PackageDirPath:     tmpDir,
-		UserSolutionPath:   "src",
-		UserExecFilePath:   "exec",
+		UserSolutionPath:   testUserSolutionPath,
+		UserExecFilePath:   testUserExecFilePath,
 		CompileErrFilePath: tmpDir + "/compile.err",
 	}
 	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
@@ -115,7 +121,7 @@ func TestProcessTask_CompilationErrorFlow(t *testing.T) {
 	)
 
 	w := pipeline.NewWorker(2, mockPackager, mockExecutor, mockVerifier, mockResponder)
-	task := &messages.TaskQueueMessage{LanguageType: "cpp", LanguageVersion: "11", TestCases: nil}
+	task := &messages.TaskQueueMessage{LanguageType: testLanguageType, LanguageVersion: "11", TestCases: nil}
 	w.ProcessTask("msg-compile", "respQ", task)
 }
 
@@ -136,7 +142,7 @@ func TestProcessTask_PreparePackageFails(t *testing.T) {
 	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(3, mockPackager, mockExecutor, mockVerifier, mockResponder)
-	task := &messages.TaskQueueMessage{LanguageType: "cpp"}
+	task := &messages.TaskQueueMessage{LanguageType: testLanguageType}
 	w.ProcessTask("msg-dl", "respQ", task)
 }
 
@@ -152,8 +158,8 @@ func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	dir := &packager.TaskDirConfig{
 		PackageDirPath:     tmpDir,
-		UserSolutionPath:   "src",
-		UserExecFilePath:   "exec",
+		UserSolutionPath:   testUserSolutionPath,
+		UserExecFilePath:   testUserExecFilePath,
 		CompileErrFilePath: tmpDir + "/compile.err",
 	}
 	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
@@ -170,7 +176,7 @@ func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
 	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(4, mockPackager, mockExecutor, mockVerifier, mockResponder)
-	task := &messages.TaskQueueMessage{LanguageType: "cpp"}
+	task := &messages.TaskQueueMessage{LanguageType: testLanguageType}
 	w.ProcessTask("msg-upload", "respQ", task)
 }
 
@@ -186,8 +192,8 @@ func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
 	tmpDir := t.TempDir()
 	dir := &packager.TaskDirConfig{
 		PackageDirPath:     tmpDir,
-		UserSolutionPath:   "src",
-		UserExecFilePath:   "exec",
+		UserSolutionPath:   testUserSolutionPath,
+		UserExecFilePath:   testUserExecFilePath,
 		CompileErrFilePath: tmpDir + "/compile.err",
 	}
 	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
@@ -203,7 +209,7 @@ func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
 	mockResponder.EXPECT().PublishTaskErrorToResponseQueue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	w := pipeline.NewWorker(5, mockPackager, mockExecutor, mockVerifier, mockResponder)
-	task := &messages.TaskQueueMessage{LanguageType: "cpp"}
+	task := &messages.TaskQueueMessage{LanguageType: testLanguageType}
 	w.ProcessTask("msg-panic", "respQ", task)
 }
 
@@ -220,7 +226,7 @@ func TestProcessTask_PublishPayloadFails(t *testing.T) {
 
 	w := pipeline.NewWorker(6, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{
-		LanguageType:    "cpp",
+		LanguageType:    testLanguageType,
 		LanguageVersion: "11",
 		TestCases: []messages.TestCase{
 			{TimeLimitMs: 100, MemoryLimitKB: 65536},
@@ -280,8 +286,8 @@ func TestGetProcessingMessageID(t *testing.T) {
 	done := make(chan struct{})
 	dir := &packager.TaskDirConfig{
 		PackageDirPath:     t.TempDir(),
-		UserSolutionPath:   "src",
-		UserExecFilePath:   "exec",
+		UserSolutionPath:   testUserSolutionPath,
+		UserExecFilePath:   testUserExecFilePath,
 		CompileErrFilePath: "compile.err",
 	}
 
@@ -308,7 +314,7 @@ func TestGetProcessingMessageID(t *testing.T) {
 	mockResponder.EXPECT().
 		PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	go func() {
-		w.ProcessTask("msg-123", "respQ", &messages.TaskQueueMessage{LanguageType: "cpp"})
+		w.ProcessTask("msg-123", "respQ", &messages.TaskQueueMessage{LanguageType: testLanguageType})
 	}()
 
 	// Wait until PrepareSolutionPackage is invoked (worker has started)
@@ -384,7 +390,7 @@ func TestProcessTask_ContainerCompilationSuccess(t *testing.T) {
 	w := pipeline.NewWorker(9, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
 	task := &messages.TaskQueueMessage{
-		LanguageType:    "cpp",
+		LanguageType:    testLanguageType,
 		LanguageVersion: "11",
 		TestCases: []messages.TestCase{
 			{TimeLimitMs: 100, MemoryLimitKB: 65536},
@@ -444,7 +450,7 @@ func TestProcessTask_ContainerCompilationErrorDetection(t *testing.T) {
 	w := pipeline.NewWorker(10, mockPackager, mockExecutor, mockVerifier, mockResponder)
 
 	task := &messages.TaskQueueMessage{
-		LanguageType:    "cpp",
+		LanguageType:    testLanguageType,
 		LanguageVersion: "11",
 		TestCases:       []messages.TestCase{{TimeLimitMs: 100, MemoryLimitKB: 65536}},
 	}

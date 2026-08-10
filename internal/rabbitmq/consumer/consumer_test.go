@@ -19,7 +19,11 @@ import (
 	"github.com/mini-maxit/worker/pkg/messages"
 )
 
-const workerQueue = "worker_queue_test"
+const (
+	workerQueue = "worker_queue_test"
+	testReplyTo = "reply"
+	testLang    = "CPP"
+)
 
 func TestProcessMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -32,9 +36,9 @@ func TestProcessMessage(t *testing.T) {
 
 	t.Run("invalid json", func(t *testing.T) {
 		// Expect responder.PublishErrorToResponseQueue called with empty type/messageID and the replyTo
-		mockResponder.EXPECT().PublishErrorToResponseQueue("", "", "reply", gomock.Any()).Times(1)
+		mockResponder.EXPECT().PublishErrorToResponseQueue("", "", testReplyTo, gomock.Any()).Times(1)
 
-		msg := amqp.Delivery{Body: []byte("not json"), ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: []byte("not json"), ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 
@@ -42,35 +46,38 @@ func TestProcessMessage(t *testing.T) {
 		qm := messages.QueueMessage{Type: "foo", MessageID: "mid", Payload: nil}
 		b, _ := json.Marshal(qm)
 
-		mockResponder.EXPECT().PublishErrorToResponseQueue("foo", "mid", "reply", pkgerrors.ErrUnknownMessageType).Times(1)
+		mockResponder.
+			EXPECT().
+			PublishErrorToResponseQueue("foo", "mid", testReplyTo, pkgerrors.ErrUnknownMessageType).
+			Times(1)
 
-		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 
 	t.Run("task success", func(t *testing.T) {
-		task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
+		task := messages.TaskQueueMessage{LanguageType: testLang, LanguageVersion: "17"}
 		taskB, _ := json.Marshal(&task)
 		qm := messages.QueueMessage{Type: constants.QueueMessageTypeTask, MessageID: "task-id-1", Payload: taskB}
 		b, _ := json.Marshal(qm)
 
 		mockScheduler.EXPECT().ProcessTask(
-			"reply", "task-id-1", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
+			testReplyTo, "task-id-1", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
 		).Return(nil).Times(1)
 
-		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 
 	t.Run("task requeue when no worker", func(t *testing.T) {
-		task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
+		task := messages.TaskQueueMessage{LanguageType: testLang, LanguageVersion: "17"}
 		taskB, _ := json.Marshal(&task)
 		qm := messages.QueueMessage{Type: constants.QueueMessageTypeTask, MessageID: "task-id-2", Payload: taskB}
 		b, _ := json.Marshal(qm)
 
 		// Scheduler returns ErrFailedToGetFreeWorker
 		mockScheduler.EXPECT().ProcessTask(
-			"reply", "task-id-2", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
+			testReplyTo, "task-id-2", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
 		).Return(pkgerrors.ErrFailedToGetFreeWorker).Times(1)
 
 		// Expect responder.Publish called to requeue with higher priority. Inspect publishing in Do.
@@ -82,7 +89,7 @@ func TestProcessMessage(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 
@@ -97,10 +104,10 @@ func TestProcessMessage(t *testing.T) {
 
 		mockScheduler.EXPECT().GetWorkersStatus().Return(status).Times(1)
 		mockResponder.EXPECT().PublishSuccessStatusRespond(
-			constants.QueueMessageTypeStatus, "status-id", "reply", status,
+			constants.QueueMessageTypeStatus, "status-id", testReplyTo, status,
 		).Times(1)
 
-		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 
@@ -112,7 +119,7 @@ func TestProcessMessage(t *testing.T) {
 		mockResponder.EXPECT().PublishSuccessHandshakeRespond(
 			constants.QueueMessageTypeHandshake,
 			"hs-id",
-			"reply",
+			testReplyTo,
 			gomock.AssignableToTypeOf(messages.ResponseHandshakePayload{}),
 		).Do(func(_ string, _ string, _ string, langs messages.ResponseHandshakePayload) {
 			if len(langs.Languages) == 0 {
@@ -120,21 +127,21 @@ func TestProcessMessage(t *testing.T) {
 			}
 		}).Times(1)
 
-		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 
 	t.Run("task success", func(t *testing.T) {
-		task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
+		task := messages.TaskQueueMessage{LanguageType: testLang, LanguageVersion: "17"}
 		taskB, _ := json.Marshal(&task)
 		qm := messages.QueueMessage{Type: constants.QueueMessageTypeTask, MessageID: "task-id-1", Payload: taskB}
 		b, _ := json.Marshal(qm)
 
 		mockScheduler.EXPECT().ProcessTask(
-			"reply", "task-id-1", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
+			testReplyTo, "task-id-1", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
 		).Return(nil).Times(1)
 
-		msg := amqp.Delivery{Body: b, ReplyTo: "reply"}
+		msg := amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 		c.ProcessMessage(msg)
 	})
 }
@@ -174,7 +181,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	// When the scheduler's ProcessTask is called, signal completion
 	done := make(chan struct{}, 1)
 	mockScheduler.EXPECT().ProcessTask(
-		"reply", "task-id-listen", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
+		testReplyTo, "task-id-listen", gomock.AssignableToTypeOf(&messages.TaskQueueMessage{}),
 	).Do(
 		func(_ string, _ string, _ *messages.TaskQueueMessage) {
 			done <- struct{}{}
@@ -199,12 +206,12 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 	}
 
 	// Build a task message and send it
-	task := messages.TaskQueueMessage{LanguageType: "CPP", LanguageVersion: "17"}
+	task := messages.TaskQueueMessage{LanguageType: testLang, LanguageVersion: "17"}
 	taskB, _ := json.Marshal(&task)
 	qm := messages.QueueMessage{Type: constants.QueueMessageTypeTask, MessageID: "task-id-listen", Payload: taskB}
 	b, _ := json.Marshal(qm)
 
-	deliveries <- amqp.Delivery{Body: b, ReplyTo: "reply"}
+	deliveries <- amqp.Delivery{Body: b, ReplyTo: testReplyTo}
 
 	// Wait for process to be invoked
 	select {
