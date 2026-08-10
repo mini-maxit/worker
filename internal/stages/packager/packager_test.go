@@ -144,8 +144,8 @@ func TestSendSolutionPackage_WithCompilationError_Uploads(t *testing.T) {
 	// test case describing where to upload
 	tc := messages.TestCase{StdErrResult: messages.FileLocation{Bucket: "res-bucket", Path: "some/path/compile.err"}}
 
-	// expect UploadFile with objPath equal to parent dir of Path
-	mockStorage.EXPECT().UploadFile(compErrPath, "res-bucket", "some/path").Return(nil)
+	// expect UploadFile with the full Path as the object key
+	mockStorage.EXPECT().UploadFile(compErrPath, "res-bucket", "some/path/compile.err").Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockFileCache)
 
@@ -197,10 +197,10 @@ func TestSendSolutionPackage_NoCompilation_UploadsNonEmptyFiles(t *testing.T) {
 		t.Fatalf("failed to write userDiffPath: %v", err)
 	}
 
-	// expect UploadFile for each non-empty file, with objPath equal to parent dir of Path
-	mockStorage.EXPECT().UploadFile(userOutPath, "b", "outputs/task1").Return(nil)
-	mockStorage.EXPECT().UploadFile(userErrPath, "b", "errors/task1").Return(nil)
-	mockStorage.EXPECT().UploadFile(userDiffPath, "b", "diffs/task1").Return(nil)
+	// expect UploadFile for each non-empty file, with the full Path as the object key
+	mockStorage.EXPECT().UploadFile(userOutPath, "b", "outputs/task1/out.txt").Return(nil)
+	mockStorage.EXPECT().UploadFile(userErrPath, "b", "errors/task1/err.txt").Return(nil)
+	mockStorage.EXPECT().UploadFile(userDiffPath, "b", "diffs/task1/diff.txt").Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockFileCache)
 
