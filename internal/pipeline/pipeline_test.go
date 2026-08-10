@@ -345,6 +345,69 @@ func TestGetProcessingMessageID(t *testing.T) {
 	}
 }
 
+func TestWorkerStateConcurrentAccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPackager := mocks.NewMockPackager(ctrl)
+	mockExecutor := mocks.NewMockExecutor(ctrl)
+	mockVerifier := mocks.NewMockVerifier(ctrl)
+	mockResponder := mocks.NewMockResponder(ctrl)
+
+	w := pipeline.NewWorker(9, mockPackager, mockExecutor, mockVerifier, mockResponder)
+
+	dir := &packager.TaskDirConfig{PackageDirPath: t.TempDir()}
+	started := make(chan struct{})
+	done := make(chan struct{})
+
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ interface{}, _ interface{}, _ interface{}) (*packager.TaskDirConfig, error) {
+			close(started)
+			<-done
+			return dir, nil
+		},
+	)
+	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false, gomock.Any()).Return(nil)
+	mockExecutor.EXPECT().ExecuteCommand(gomock.Any()).Return(nil)
+	mockVerifier.EXPECT().EvaluateAllTestCases(dir, gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(solution.Result{StatusCode: solution.Success, Message: "OK"})
+	mockResponder.EXPECT().PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+
+	go func() {
+		w.ProcessTask("concurrent-msg", "respQ", &messages.TaskQueueMessage{LanguageType: testLanguageType})
+	}()
+
+	<-started
+
+	// Hammer state readers concurrently while the worker goroutine mutates state.
+	readersDone := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-readersDone:
+				return
+			default:
+				w.GetProcessingMessageID()
+				w.GetState()
+				w.UpdateStatus(constants.WorkerStatusIdle)
+			}
+		}
+	}()
+
+	close(done)
+
+	deadline := time.After(2 * time.Second)
+	for w.GetProcessingMessageID() != "" {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for worker to finish")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	close(readersDone)
+}
+
 // TestProcessTask_ContainerCompilationSuccess tests compilation happening inside container.
 func TestProcessTask_ContainerCompilationSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/mini-maxit/worker/internal/logger"
 	"github.com/mini-maxit/worker/internal/rabbitmq/responder"
@@ -33,6 +34,7 @@ type WorkerState struct {
 
 type worker struct {
 	id            int
+	mu            sync.RWMutex
 	state         WorkerState
 	responseQueue string
 	packager      packager.Packager
@@ -67,25 +69,48 @@ func (ws *worker) GetId() int {
 }
 
 func (ws *worker) GetState() WorkerState {
+	ws.mu.RLock()
+	defer ws.mu.RUnlock()
 	return ws.state
 }
 
 func (ws *worker) UpdateStatus(status constants.WorkerStatus) {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
 	ws.state.Status = status
 }
 
 func (ws *worker) GetProcessingMessageID() string {
+	ws.mu.RLock()
+	defer ws.mu.RUnlock()
 	return ws.state.ProcessingMessageID
 }
 
+func (ws *worker) setProcessing(messageID, responseQueue string) {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	ws.state.ProcessingMessageID = messageID
+	ws.responseQueue = responseQueue
+}
+
+func (ws *worker) clearProcessing() {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	ws.state.ProcessingMessageID = ""
+	ws.responseQueue = ""
+}
+
 func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage) {
+	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
+	ws.setProcessing(messageID, responseQueue)
 	defer func() {
+		ws.clearProcessing()
 		if r := recover(); r != nil {
 			if err, ok := r.(error); ok {
 				ws.responder.PublishTaskErrorToResponseQueue(
 					constants.QueueMessageTypeTask,
-					ws.state.ProcessingMessageID,
-					ws.responseQueue,
+					messageID,
+					responseQueue,
 					err,
 				)
 			} else {
@@ -94,21 +119,13 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		}
 	}()
 
-	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
-	ws.state.ProcessingMessageID = messageID
-	ws.responseQueue = responseQueue
-	defer func() {
-		ws.state.ProcessingMessageID = ""
-		ws.responseQueue = ""
-	}()
-
 	langType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
 		ws.logger.Errorf("Invalid language type %s: %s", task.LanguageType, err)
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
-			ws.state.ProcessingMessageID,
-			ws.responseQueue,
+			messageID,
+			responseQueue,
 			err,
 		)
 		return
@@ -118,8 +135,8 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	if err != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
-			ws.state.ProcessingMessageID,
-			ws.responseQueue,
+			messageID,
+			responseQueue,
 			err,
 		)
 		return
@@ -155,8 +172,8 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	if err != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
-			ws.state.ProcessingMessageID,
-			ws.responseQueue,
+			messageID,
+			responseQueue,
 			err,
 		)
 		return
@@ -167,7 +184,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		fileInfo, statErr := os.Stat(dc.CompileErrFilePath)
 
 		if statErr == nil && fileInfo.Size() > 0 {
-			ws.publishCompilationError(dc, task.TestCases)
+			ws.publishCompilationError(dc, task.TestCases, messageID, responseQueue)
 			return
 		}
 	}
@@ -178,8 +195,8 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 	if err != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
-			ws.state.ProcessingMessageID,
-			ws.responseQueue,
+			messageID,
+			responseQueue,
 			err,
 		)
 		return
@@ -187,21 +204,25 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
-		ws.state.ProcessingMessageID,
-		ws.responseQueue,
+		messageID,
+		responseQueue,
 		solutionResult,
 	)
 	ws.logger.Infof("Finished processing task [MsgID: %s]", messageID)
 }
 
-func (ws *worker) publishCompilationError(dirConfig *packager.TaskDirConfig, testCases []messages.TestCase) {
-	ws.logger.Infof("Compilation error occurred for message ID: %s", ws.state.ProcessingMessageID)
-	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, ws.state.ProcessingMessageID)
+func (ws *worker) publishCompilationError(
+	dirConfig *packager.TaskDirConfig,
+	testCases []messages.TestCase,
+	messageID, responseQueue string,
+) {
+	ws.logger.Infof("Compilation error occurred for message ID: %s", messageID)
+	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, messageID)
 	if sendErr != nil {
 		ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
-			ws.state.ProcessingMessageID,
-			ws.responseQueue,
+			messageID,
+			responseQueue,
 			sendErr,
 		)
 		return
@@ -213,8 +234,8 @@ func (ws *worker) publishCompilationError(dirConfig *packager.TaskDirConfig, tes
 	}
 	ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
-		ws.state.ProcessingMessageID,
-		ws.responseQueue,
+		messageID,
+		responseQueue,
 		solutionResult,
 	)
 }
