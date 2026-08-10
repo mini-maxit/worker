@@ -16,6 +16,28 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+const (
+	testMainCppPath      = "solutions/1/main.cpp"
+	testSubmissionBucket = "sub"
+	testInputsBucket     = "inputs"
+	testInputPath        = "inputs/1/in.txt"
+	testOutputsBucket    = "outputs"
+	testOutputPath       = "outputs/1/out.txt"
+	testResultsBucket    = "results"
+	testOutResultPath    = "results/1/out.result"
+	testErrResultPath    = "results/1/err.result"
+	testDiffResultPath   = "results/1/diff.result"
+)
+
+// uniqueMsgID returns a filesystem-safe unique message ID for a test.
+// t.TempDir() yields <tmp>/<TestName><rand>/001 — the parent basename is
+// unique per invocation, so it is used as the msgID to prevent concurrent
+// runs of the same test from colliding on the shared /tmp/<msgID> dir.
+func uniqueMsgID(t *testing.T) string {
+	t.Helper()
+	return filepath.Base(filepath.Dir(t.TempDir()))
+}
+
 func TestPrepareSolutionPackage_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -23,17 +45,17 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 	mockStorage := mocks.NewMockStorage(ctrl)
 	mockFileCache := mocks.NewMockFileCache(ctrl)
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{SubmissionFile: submission, TestCases: []messages.TestCase{tc}}
-	msgID := filepath.Base(t.TempDir())
+	msgID := uniqueMsgID(t)
 
 	// expect DownloadFile for submission and test case files; destination path can be any
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return(nil)
@@ -131,8 +153,8 @@ func TestSendSolutionPackage_WithCompilationError_Uploads(t *testing.T) {
 	// test case describing where to upload
 	tc := messages.TestCase{StdErrResult: messages.FileLocation{Bucket: "res-bucket", Path: "some/path/compile.err"}}
 
-	// expect UploadFile with objPath equal to parent dir of Path
-	mockStorage.EXPECT().UploadFile(compErrPath, "res-bucket", "some/path").Return(nil)
+	// expect UploadFile with the full Path as the object key
+	mockStorage.EXPECT().UploadFile(compErrPath, "res-bucket", "some/path/compile.err").Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockFileCache)
 
@@ -184,10 +206,10 @@ func TestSendSolutionPackage_NoCompilation_UploadsNonEmptyFiles(t *testing.T) {
 		t.Fatalf("failed to write userDiffPath: %v", err)
 	}
 
-	// expect UploadFile for each non-empty file, with objPath equal to parent dir of Path
-	mockStorage.EXPECT().UploadFile(userOutPath, "b", "outputs/task1").Return(nil)
-	mockStorage.EXPECT().UploadFile(userErrPath, "b", "errors/task1").Return(nil)
-	mockStorage.EXPECT().UploadFile(userDiffPath, "b", "diffs/task1").Return(nil)
+	// expect UploadFile for each non-empty file, with the full Path as the object key
+	mockStorage.EXPECT().UploadFile(userOutPath, "b", "outputs/task1/out.txt").Return(nil)
+	mockStorage.EXPECT().UploadFile(userErrPath, "b", "errors/task1/err.txt").Return(nil)
+	mockStorage.EXPECT().UploadFile(userDiffPath, "b", "diffs/task1/diff.txt").Return(nil)
 
 	p := packager.NewPackager(mockStorage, mockFileCache)
 
@@ -210,20 +232,20 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 	mockCache := mocks.NewMockFileCache(ctrl)
 
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,
 		TestCases:      []messages.TestCase{tc},
 	}
-	msgID := filepath.Base(t.TempDir())
+	msgID := uniqueMsgID(t)
 
 	// Create temp cached files
 	cachedInputPath := filepath.Join(t.TempDir(), "cached_in.txt")
@@ -283,20 +305,20 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 	mockCache := mocks.NewMockFileCache(ctrl)
 
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,
 		TestCases:      []messages.TestCase{tc},
 	}
-	msgID := filepath.Base(t.TempDir())
+	msgID := uniqueMsgID(t)
 
 	// Expect submission download (not cached)
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return(nil)
@@ -337,14 +359,14 @@ func TestPrepareSolutionPackage_CacheGetError_FallbackToDownload(t *testing.T) {
 	mockCache := mocks.NewMockFileCache(ctrl)
 
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,
@@ -386,14 +408,14 @@ func TestPrepareSolutionPackage_CacheFileError_ContinuesWithoutCaching(t *testin
 	mockCache := mocks.NewMockFileCache(ctrl)
 
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,
@@ -435,14 +457,14 @@ func TestPrepareSolutionPackage_NoTaskVersion_SkipsCache(t *testing.T) {
 	mockCache := mocks.NewMockFileCache(ctrl)
 
 	// prepare message WITHOUT TaskFilesVersion
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,
@@ -483,14 +505,14 @@ func TestPrepareSolutionPackage_NilCache_DownloadsDirectly(t *testing.T) {
 	mockStorage := mocks.NewMockStorage(ctrl)
 
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,
@@ -523,14 +545,14 @@ func TestPrepareSolutionPackage_MixedCacheResults(t *testing.T) {
 	mockCache := mocks.NewMockFileCache(ctrl)
 
 	// prepare message
-	submission := messages.FileLocation{Bucket: "sub", Path: "solutions/1/main.cpp"}
+	submission := messages.FileLocation{Bucket: testSubmissionBucket, Path: testMainCppPath}
 	tc := messages.TestCase{
 		Order:          1,
-		InputFile:      messages.FileLocation{Bucket: "inputs", Path: "inputs/1/in.txt"},
-		ExpectedOutput: messages.FileLocation{Bucket: "outputs", Path: "outputs/1/out.txt"},
-		StdOutResult:   messages.FileLocation{Bucket: "results", Path: "results/1/out.result"},
-		StdErrResult:   messages.FileLocation{Bucket: "results", Path: "results/1/err.result"},
-		DiffResult:     messages.FileLocation{Bucket: "results", Path: "results/1/diff.result"},
+		InputFile:      messages.FileLocation{Bucket: testInputsBucket, Path: testInputPath},
+		ExpectedOutput: messages.FileLocation{Bucket: testOutputsBucket, Path: testOutputPath},
+		StdOutResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testOutResultPath},
+		StdErrResult:   messages.FileLocation{Bucket: testResultsBucket, Path: testErrResultPath},
+		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{
 		SubmissionFile: submission,

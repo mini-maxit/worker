@@ -15,6 +15,8 @@ import (
 	"github.com/mini-maxit/worker/tests"
 )
 
+const testOutputFileName = "out.txt"
+
 func TestEvaluateAllTestCases_AllPass(t *testing.T) {
 	dir := t.TempDir()
 	userOutDir := filepath.Join(dir, "userOut")
@@ -24,8 +26,8 @@ func TestEvaluateAllTestCases_AllPass(t *testing.T) {
 	execResDir := filepath.Join(dir, "execRes")
 
 	// prepare files: expected and user output identical
-	tests.WriteFile(t, expectedOutDir, "out.txt", "hello\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "hello\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "hello\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "hello\n")
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.100 0\n")
 
 	cfg := &packager.TaskDirConfig{
@@ -39,8 +41,8 @@ func TestEvaluateAllTestCases_AllPass(t *testing.T) {
 	ver := NewVerifier([]string{})
 
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName}}
 
 	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg1", languages.PYTHON)
 	if res.StatusCode != solution.Success {
@@ -65,8 +67,8 @@ func TestEvaluateAllTestCases_OutputDifference(t *testing.T) {
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, expectedOutDir, "out.txt", "hello\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "hi\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "hello\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "hi\n")
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.050 0\n")
 
 	cfg := &packager.TaskDirConfig{
@@ -79,8 +81,8 @@ func TestEvaluateAllTestCases_OutputDifference(t *testing.T) {
 
 	ver := NewVerifier([]string{})
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName}}
 	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg2", languages.PYTHON)
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected test failed, got: %v", res.StatusCode)
@@ -105,8 +107,8 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, expectedOutDir, "out.txt", "whatever\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "whatever\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "whatever\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "whatever\n")
 	// time limit exceeded (exit code 143)
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "143 0.0 0\n")
 
@@ -119,8 +121,8 @@ func TestEvaluateAllTestCases_TimeAndMemoryAndRuntime(t *testing.T) {
 	}
 	ver := NewVerifier([]string{})
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName},
 		TimeLimitMs:    5,
 	}
 	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg3", languages.PYTHON)
@@ -163,8 +165,8 @@ func setupMLETestCase(
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, expectedOutDir, "out.txt", "output\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "output\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "output\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "output\n")
 	tests.WriteFile(
 		t,
 		execResDir,
@@ -181,8 +183,8 @@ func setupMLETestCase(
 	}
 
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName},
 		MemoryLimitKB:  1000,
 	}
 
@@ -224,8 +226,8 @@ func TestMemoryLimitExceeded_LanguageSpecificPattern(t *testing.T) {
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, expectedOutDir, "out.txt", "output\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "output\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "output\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "output\n")
 	// exit code 1 (generic error) but stderr contains C++ memory limit error pattern
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "1 0.05 500\n")
 	tests.WriteFile(t, userErrDir, "1.txt", "std::bad_alloc\n")
@@ -240,8 +242,8 @@ func TestMemoryLimitExceeded_LanguageSpecificPattern(t *testing.T) {
 
 	ver := NewVerifier([]string{})
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName},
 		StdErrResult:   messages.FileLocation{Path: "1.txt"},
 		MemoryLimitKB:  1000,
 	}
@@ -280,8 +282,8 @@ func TestMemoryLimitExceeded_SignalVariants(t *testing.T) {
 			userErrDir := filepath.Join(dir, "userErr")
 			execResDir := filepath.Join(dir, "execRes")
 
-			tests.WriteFile(t, expectedOutDir, "out.txt", "output\n")
-			tests.WriteFile(t, userOutDir, "out.txt", "output\n")
+			tests.WriteFile(t, expectedOutDir, testOutputFileName, "output\n")
+			tests.WriteFile(t, userOutDir, testOutputFileName, "output\n")
 			tests.WriteFile(
 				t,
 				execResDir,
@@ -299,8 +301,8 @@ func TestMemoryLimitExceeded_SignalVariants(t *testing.T) {
 
 			ver := NewVerifier([]string{})
 			testCase := messages.TestCase{
-				StdOutResult:   messages.FileLocation{Path: "out.txt"},
-				ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+				StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+				ExpectedOutput: messages.FileLocation{Path: testOutputFileName},
 				MemoryLimitKB:  1000,
 			}
 
@@ -324,8 +326,8 @@ func TestEvaluateAllTestCases_CommandNotFound(t *testing.T) {
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, expectedOutDir, "out.txt", "result\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "result\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "result\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "result\n")
 	// exit code 127 (command not found, possibly due to memory limit preventing shared library mapping)
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "127 0.0 0\n")
 
@@ -338,8 +340,8 @@ func TestEvaluateAllTestCases_CommandNotFound(t *testing.T) {
 	}
 	ver := NewVerifier([]string{})
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"},
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName},
 		MemoryLimitKB:  1024,
 	}
 	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-cmd-not-found", languages.PYTHON)
@@ -373,7 +375,7 @@ func TestEvaluateAllTestCases_CompareOutputFailure(t *testing.T) {
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, userOutDir, "out.txt", "hello\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "hello\n")
 	// Create expected output file but don't give read permissions (or reference non-existent file)
 	// We'll use a path that references a file that doesn't exist
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.100 0\n")
@@ -389,7 +391,7 @@ func TestEvaluateAllTestCases_CompareOutputFailure(t *testing.T) {
 	ver := NewVerifier([]string{})
 
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
 		ExpectedOutput: messages.FileLocation{Path: "nonexistent.txt"}} // File doesn't exist
 
 	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-compare-fail", languages.PYTHON)
@@ -421,8 +423,8 @@ func TestEvaluateAllTestCases_MissingExecResult(t *testing.T) {
 	userErrDir := filepath.Join(dir, "userErr")
 	execResDir := filepath.Join(dir, "execRes")
 
-	tests.WriteFile(t, expectedOutDir, "out.txt", "a\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "a\n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "a\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "a\n")
 	// do NOT create exec result files
 
 	cfg := &packager.TaskDirConfig{
@@ -434,8 +436,8 @@ func TestEvaluateAllTestCases_MissingExecResult(t *testing.T) {
 	}
 	ver := NewVerifier([]string{})
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName}}
 	res := ver.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg6", languages.PYTHON)
 	if res.StatusCode != solution.InternalError {
 		t.Fatalf("expected internal error due to missing exec result, got: %v", res.StatusCode)
@@ -454,8 +456,8 @@ func TestEvaluateAllTestCases_WithFlags_IgnoreWhitespace(t *testing.T) {
 	execResDir := filepath.Join(dir, "execRes")
 
 	// expected and user differ only by whitespace
-	tests.WriteFile(t, expectedOutDir, "out.txt", "hello\n")
-	tests.WriteFile(t, userOutDir, "out.txt", "hello \n")
+	tests.WriteFile(t, expectedOutDir, testOutputFileName, "hello\n")
+	tests.WriteFile(t, userOutDir, testOutputFileName, "hello \n")
 	tests.WriteFile(t, execResDir, "1."+constants.ExecutionResultFileExt, "0 0.010 0\n")
 
 	cfg := &packager.TaskDirConfig{
@@ -469,8 +471,8 @@ func TestEvaluateAllTestCases_WithFlags_IgnoreWhitespace(t *testing.T) {
 	// without flags -> should detect difference
 	verNoFlags := NewVerifier([]string{})
 	tc := messages.TestCase{
-		StdOutResult:   messages.FileLocation{Path: "out.txt"},
-		ExpectedOutput: messages.FileLocation{Path: "out.txt"}}
+		StdOutResult:   messages.FileLocation{Path: testOutputFileName},
+		ExpectedOutput: messages.FileLocation{Path: testOutputFileName}}
 	res := verNoFlags.EvaluateAllTestCases(cfg, []messages.TestCase{tc}, "msg-flags-1", languages.PYTHON)
 	if res.StatusCode != solution.TestFailed {
 		t.Fatalf("expected test failed without flags, got: %v", res.StatusCode)

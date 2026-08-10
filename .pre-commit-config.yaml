@@ -13,4 +13,6 @@ repos:
       - id: go-fmt
       - id: go-imports
       - id: go-unit-tests
+        pass_filenames: false
       - id: golangci-lint
+        pass_filenames: false
