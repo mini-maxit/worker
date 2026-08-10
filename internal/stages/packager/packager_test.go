@@ -29,6 +29,15 @@ const (
 	testDiffResultPath   = "results/1/diff.result"
 )
 
+// uniqueMsgID returns a filesystem-safe unique message ID for a test.
+// t.TempDir() yields <tmp>/<TestName><rand>/001 — the parent basename is
+// unique per invocation, so it is used as the msgID to prevent concurrent
+// runs of the same test from colliding on the shared /tmp/<msgID> dir.
+func uniqueMsgID(t *testing.T) string {
+	t.Helper()
+	return filepath.Base(filepath.Dir(t.TempDir()))
+}
+
 func TestPrepareSolutionPackage_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -46,7 +55,7 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 		DiffResult:     messages.FileLocation{Bucket: testResultsBucket, Path: testDiffResultPath},
 	}
 	msg := &messages.TaskQueueMessage{SubmissionFile: submission, TestCases: []messages.TestCase{tc}}
-	msgID := fmt.Sprintf("pkg-%s", strings.ReplaceAll(t.Name(), "/", "-"))
+	msgID := uniqueMsgID(t)
 
 	// expect DownloadFile for submission and test case files; destination path can be any
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return(nil)
@@ -236,7 +245,7 @@ func TestPrepareSolutionPackage_WithCacheHit(t *testing.T) {
 		SubmissionFile: submission,
 		TestCases:      []messages.TestCase{tc},
 	}
-	msgID := fmt.Sprintf("pkg-%s", strings.ReplaceAll(t.Name(), "/", "-"))
+	msgID := uniqueMsgID(t)
 
 	// Create temp cached files
 	cachedInputPath := filepath.Join(t.TempDir(), "cached_in.txt")
@@ -309,7 +318,7 @@ func TestPrepareSolutionPackage_WithCacheMiss(t *testing.T) {
 		SubmissionFile: submission,
 		TestCases:      []messages.TestCase{tc},
 	}
-	msgID := fmt.Sprintf("pkg-%s", strings.ReplaceAll(t.Name(), "/", "-"))
+	msgID := uniqueMsgID(t)
 
 	// Expect submission download (not cached)
 	mockStorage.EXPECT().DownloadFile(submission, gomock.Any()).Return(nil)
