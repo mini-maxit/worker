@@ -20,15 +20,22 @@ services:
       - RABBITMQ_USER=guest
       - RABBITMQ_PASSWORD=guest
       - RABBITMQ_PORT=5672
-      - FILESTORAGE_HOST=file-storage
-      - FILESTORAGE_PORT=8081
+      - STORAGE_HOST=file-storage
+      - STORAGE_PORT=8081
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - WORKER_QUEUE_NAME=worker_queue
+      - MAX_WORKERS=10
   file-storage:
-    image: maxit/file-storage
-    pull_policy: never
+    image: ghcr.io/mini-maxit/file-storage:latest
     container_name: file-storage
+    # Internal server (writes + /sign) is network-only — never host-published.
+    # Public server (signed GET/HEAD) is exposed for local testing.
     ports:
-      - "8081:8081"
+      - "8888:8888"
+    environment:
+      - PUBLIC_SERVER_PORT=8888
+      - INTERNAL_SERVER_PORT=8081
+      - SIGNING_SECRET=dev-secret
 
 volumes:
   rabbitmq_data:
