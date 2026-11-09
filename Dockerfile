@@ -1,4 +1,4 @@
-FROM golang:1.23-bookworm AS builder
+FROM golang:1.27.3-trixie AS builder
 
 RUN apt-get update && \
     apt-get install -y sudo debootstrap schroot && \
@@ -13,7 +13,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./cmd/main.go
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && \
 apt-get install -y \

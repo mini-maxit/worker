@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	image "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -58,7 +59,7 @@ func (d *dockerClient) EnsureImage(ctx context.Context, imageName string) error 
 	if err == nil {
 		return nil
 	}
-	if !client.IsErrNotFound(err) {
+	if !cerrdefs.IsNotFound(err) {
 		d.logger.Errorf("Failed to inspect Docker image %s: %s", imageName, err)
 		return err
 	}
