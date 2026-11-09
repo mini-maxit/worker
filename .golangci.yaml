@@ -162,6 +162,9 @@ linters:
           - cyclop
 
   settings:
+    goconst:
+      # Repeated string literals in test fixtures are not a production-code smell.
+      ignore-tests: true
     revive:
       rules:
         - name: package-comments
