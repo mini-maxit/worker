@@ -1,9 +1,9 @@
 # Default to 3.12
 ARG PYTHON_VERSION=3.12
 
-FROM python:3.10-slim AS python310
-FROM python:3.11-slim AS python311
-FROM python:3.12-slim AS python312
+FROM python:3.15-slim AS python310
+FROM python:3.15-slim AS python311
+FROM python:3.15-slim AS python312
 
 FROM python${PYTHON_VERSION//./} AS runtime
 
