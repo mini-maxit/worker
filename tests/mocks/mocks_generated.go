@@ -717,6 +717,20 @@ func (mr *MockDockerClientMockRecorder) EnsureImage(ctx, imageName any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureImage", reflect.TypeOf((*MockDockerClient)(nil).EnsureImage), ctx, imageName)
 }
 
+// RefreshImage mocks base method.
+func (m *MockDockerClient) RefreshImage(ctx context.Context, imageName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshImage", ctx, imageName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshImage indicates an expected call of RefreshImage.
+func (mr *MockDockerClientMockRecorder) RefreshImage(ctx, imageName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshImage", reflect.TypeOf((*MockDockerClient)(nil).RefreshImage), ctx, imageName)
+}
+
 // StartContainer mocks base method.
 func (m *MockDockerClient) StartContainer(ctx context.Context, containerID string) error {
 	m.ctrl.T.Helper()

@@ -18,6 +18,7 @@ import (
 
 type DockerClient interface {
 	EnsureImage(ctx context.Context, imageName string) error
+	RefreshImage(ctx context.Context, imageName string) error
 	CreateContainer(
 		ctx context.Context,
 		containerCfg *container.Config,
@@ -64,6 +65,10 @@ func (d *dockerClient) EnsureImage(ctx context.Context, imageName string) error 
 		return err
 	}
 
+	return d.pull(ctx, imageName)
+}
+
+func (d *dockerClient) pull(ctx context.Context, imageName string) error {
 	reader, err := d.cli.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		d.logger.Errorf("Failed to pull Docker image %s: %s", imageName, err)
@@ -77,6 +82,30 @@ func (d *dockerClient) EnsureImage(ctx context.Context, imageName string) error 
 	}
 
 	return err
+}
+
+// RefreshImage re-pulls a tag so rebuilt images (e.g. weekly runtime rebuilds) reach a long-running worker,
+// then removes the replaced image. Removal is best effort: it fails harmlessly while a container still uses it.
+func (d *dockerClient) RefreshImage(ctx context.Context, imageName string) error {
+	var oldID string
+	if inspect, err := d.cli.ImageInspect(ctx, imageName); err == nil {
+		oldID = inspect.ID
+	}
+
+	if err := d.pull(ctx, imageName); err != nil {
+		return err
+	}
+
+	inspect, err := d.cli.ImageInspect(ctx, imageName)
+	if err != nil || oldID == "" || inspect.ID == oldID {
+		return err
+	}
+
+	d.logger.Infof("Refreshed Docker image %s (%s -> %s)", imageName, oldID, inspect.ID)
+	if _, err := d.cli.ImageRemove(ctx, oldID, image.RemoveOptions{}); err != nil {
+		d.logger.Warnf("Could not remove old image %s of %s: %s", oldID, imageName, err)
+	}
+	return nil
 }
 
 func (d *dockerClient) CreateContainer(

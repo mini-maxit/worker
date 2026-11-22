@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"time"
+
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/docker"
 	"github.com/mini-maxit/worker/internal/logger"
@@ -12,6 +15,8 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/internal/storage"
+	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/languages"
 )
 
 func main() {
@@ -30,6 +35,10 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Failed to create Docker client: %s", err.Error())
 	}
+
+	// entrypoint.sh pulls images once at start; keep them current with the weekly runtime rebuilds.
+	go docker.RefreshImagesPeriodically(context.Background(), dCli, languages.GetAllDockerImages(),
+		constants.RuntimeImageRefreshHours*time.Hour)
 
 	defer func() {
 		err := conn.Close()

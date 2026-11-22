@@ -119,6 +119,23 @@ func GetVersionFlag(language LanguageType, version string) (string, error) {
 	return "", errors.ErrInvalidLanguageType
 }
 
+// GetAllDockerImages returns every distinct runtime image the worker can run.
+func GetAllDockerImages() []string {
+	seen := map[string]bool{}
+	var images []string
+	for lt, versions := range LanguageVersionMap {
+		for version := range versions {
+			img, err := lt.GetDockerImage(version)
+			if err != nil || seen[img] {
+				continue
+			}
+			seen[img] = true
+			images = append(images, img)
+		}
+	}
+	return images
+}
+
 func GetSupportedLanguages() []string {
 	var languages []string
 	for lang := range LanguageTypeMap {
