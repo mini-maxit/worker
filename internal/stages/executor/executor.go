@@ -87,7 +87,7 @@ func (d *executor) ExecuteCommand(
 		env,
 	)
 
-	hostCfg := buildHostConfig(cfg.TestCases)
+	hostCfg := buildHostConfig(cfg.TestCases, cfg.RequiresCompiling)
 
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
 		return err
@@ -294,7 +294,7 @@ func buildContainerConfig(
 	}
 }
 
-func buildHostConfig(testCases []messages.TestCase) *container.HostConfig {
+func buildHostConfig(testCases []messages.TestCase, requiresCompiling bool) *container.HostConfig {
 	maxKB := constants.MinContainerMemoryKB
 	for _, tc := range testCases {
 		if tc.MemoryLimitKB > maxKB {
@@ -310,6 +310,10 @@ func buildHostConfig(testCases []messages.TestCase) *container.HostConfig {
 	}
 
 	containerKB := maxKB + headroomKB
+	// The compiler runs in the same container; per-test memory is still enforced by ulimit -v in run_tests.sh.
+	if requiresCompiling && containerKB < constants.MinCompileContainerMemoryKB {
+		containerKB = constants.MinCompileContainerMemoryKB
+	}
 	containerBytes := containerKB * 1024
 
 	return &container.HostConfig{
