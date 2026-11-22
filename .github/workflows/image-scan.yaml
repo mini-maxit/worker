@@ -1,8 +1,6 @@
 name: Image vulnerability scan
 
 on:
-  push:
-    paths: ['.github/workflows/image-scan.yaml']
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
