@@ -2,6 +2,8 @@ name: Runtime Images
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '23 2 * * 1' # weekly rebuild picks up base-image and apt security fixes
 
 env:
   REGISTRY: ghcr.io

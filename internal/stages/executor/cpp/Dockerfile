@@ -1,8 +1,9 @@
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# upgrade pulls security fixes the base image tag doesn't have yet
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libstdc++6 ca-certificates time g++\
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
