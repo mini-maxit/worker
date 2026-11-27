@@ -118,7 +118,7 @@ The body of the message is a JSON object with the following structure:
 
 ## Processing Flow
 
-1. **Message Reception**: The worker listens to the `worker_queue` for incoming messages.
+1. **Message Reception**: The worker listens to the `worker_queue` for incoming messages. Status and handshake messages are answered straight away. Task messages are moved to `worker_queue_tasks`, from which the worker takes at most `MAX_WORKERS` at a time (default 10, minimum 1), so waiting tasks stay in RabbitMQ. A task is acknowledged only after its response is published, so a task the worker did not finish is delivered again.
 2. **File Retrieval**: After parsing the message, the worker retrieves the submission file and test case files (inputs and expected outputs) from the file storage service based on the file locations specified in the message.
 3. **Execution**: The worker compiles (if needed) and executes the solution against each test case, enforcing time and memory limits.
 4. **Verification**: The worker compares the output with expected results and evaluates test case outcomes.

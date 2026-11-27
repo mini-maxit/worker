@@ -17,7 +17,9 @@ import (
 
 type Scheduler interface {
 	GetWorkersStatus() messages.ResponseWorkerStatusPayload
-	ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error
+	// ProcessTask starts the task on a free worker. done is called once, after the worker is idle again,
+	// with a non-nil error if no response was published. It is not called if ProcessTask returns an error.
+	ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage, done func(error)) error
 }
 
 type scheduler struct {
@@ -105,7 +107,11 @@ func (s *scheduler) getFreeWorker() (pipeline.Worker, error) {
 	return nil, errors.ErrFailedToGetFreeWorker
 }
 
-func (s *scheduler) ProcessTask(responseQueueName, messageID string, task *messages.TaskQueueMessage) error {
+func (s *scheduler) ProcessTask(
+	responseQueueName, messageID string,
+	task *messages.TaskQueueMessage,
+	done func(error),
+) error {
 	worker, err := s.getFreeWorker()
 	if err != nil {
 		s.logger.Errorf("No available workers: %s", err)
@@ -113,14 +119,17 @@ func (s *scheduler) ProcessTask(responseQueueName, messageID string, task *messa
 	}
 
 	go func(w pipeline.Worker) {
-		defer s.markWorkerAsIdle(w)
+		taskErr := errors.ErrWorkerPanicked
 		defer func() {
 			if r := recover(); r != nil {
 				s.logger.Errorf("Worker panicked: %v", r)
 			}
+			// Free the slot before done: done acks the task, which makes the broker send the next one.
+			s.markWorkerAsIdle(w)
+			done(taskErr)
 		}()
 
-		w.ProcessTask(messageID, responseQueueName, task)
+		taskErr = w.ProcessTask(messageID, responseQueueName, task)
 	}(worker)
 
 	return nil

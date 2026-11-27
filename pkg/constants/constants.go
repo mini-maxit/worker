@@ -96,7 +96,8 @@ const (
 
 // RabbitMQ specific constants.
 const (
-	RabbitMQReconnectTries  = 10
-	RabbitMQMaxPriority     = 3
-	RabbitMQRequeuePriority = 2
+	RabbitMQReconnectTries = 10
+	RabbitMQMaxPriority    = 3
+	// TaskQueueSuffix is appended to the worker queue name to form the queue that holds waiting tasks.
+	TaskQueueSuffix = "_tasks"
 )

@@ -21,7 +21,7 @@ type Responder interface {
 	PublishTaskErrorToResponseQueue(
 		messageType, messageID, responseQueue string,
 		err error,
-	)
+	) error
 	PublishSuccessHandshakeRespond(
 		messageType, messageID, responseQueue string,
 		languageSpecs messages.ResponseHandshakePayload,
@@ -33,7 +33,7 @@ type Responder interface {
 	PublishPayloadTaskRespond(
 		messageType, messageID, responseQueue string,
 		taskResult solution.Result,
-	)
+	) error
 	Publish(queueName string, publishing amqp.Publishing) error
 	Close() error
 }
@@ -109,7 +109,7 @@ func (r *responder) Close() error {
 	return nil
 }
 
-func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
+func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, responseQueue string, err error) error {
 	internalErrorTaskResult := solution.Result{
 		StatusCode:  solution.InternalError,
 		Message:     err.Error(),
@@ -119,10 +119,10 @@ func (r *responder) PublishTaskErrorToResponseQueue(messageType, messageID, resp
 	payload, err := json.Marshal(internalErrorTaskResult)
 	if err != nil {
 		r.logger.Errorf("Failed to marshal error payload: %s", err)
-		return
+		return err
 	}
 
-	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+	return r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
 }
 
 func (r *responder) PublishErrorToResponseQueue(messageType, messageID, responseQueue string, err error) {
@@ -134,7 +134,7 @@ func (r *responder) PublishErrorToResponseQueue(messageType, messageID, response
 		return
 	}
 
-	r.publishRespondMessage(messageType, messageID, false, responseQueue, payload)
+	_ = r.publishRespondMessage(messageType, messageID, false, responseQueue, payload)
 }
 
 func (r *responder) PublishPayloadTaskRespond(
@@ -142,14 +142,14 @@ func (r *responder) PublishPayloadTaskRespond(
 	messageID string,
 	responseQueue string,
 	taskResult solution.Result,
-) {
+) error {
 	payload, err := json.Marshal(taskResult)
 	if err != nil {
 		r.logger.Errorf("Failed to marshal task result payload: %s", err)
-		return
+		return err
 	}
 
-	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+	return r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
 }
 
 func (r *responder) PublishSuccessHandshakeRespond(
@@ -164,7 +164,7 @@ func (r *responder) PublishSuccessHandshakeRespond(
 		return
 	}
 
-	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+	_ = r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
 }
 
 func (r *responder) PublishSuccessStatusRespond(
@@ -179,7 +179,7 @@ func (r *responder) PublishSuccessStatusRespond(
 		return
 	}
 
-	r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
+	_ = r.publishRespondMessage(messageType, messageID, true, responseQueue, payload)
 }
 
 func (r *responder) publishRespondMessage(
@@ -187,7 +187,7 @@ func (r *responder) publishRespondMessage(
 	ok bool,
 	responseQueue string,
 	payload []byte,
-) {
+) error {
 	queueMessage := messages.ResponseQueueMessage{
 		Type:      messageType,
 		MessageID: messageID,
@@ -198,7 +198,7 @@ func (r *responder) publishRespondMessage(
 	responseJSON, jsonErr := json.Marshal(queueMessage)
 	if jsonErr != nil {
 		r.logger.Errorf("Failed to marshal response message: %s", jsonErr)
-		return
+		return jsonErr
 	}
 
 	err := r.Publish(responseQueue, amqp.Publishing{
@@ -208,8 +208,9 @@ func (r *responder) publishRespondMessage(
 
 	if err != nil {
 		r.logger.Errorf("Failed to publish response message: %s", err)
-		return
+		return err
 	}
 
 	r.logger.Infof("Published response message [MsgID: %s]", messageID)
+	return nil
 }

@@ -86,6 +86,12 @@ func (d *dockerClient) CreateContainer(
 	name string,
 ) (string, error) {
 	resp, err := d.cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, name)
+	if cerrdefs.IsConflict(err) {
+		// A redelivered task finds the container of the run that never finished.
+		d.logger.Warnf("Removing stale container %s", name)
+		d.ContainerRemove(ctx, name)
+		resp, err = d.cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, name)
+	}
 	if err != nil {
 		d.logger.Errorf("Failed to create Docker container %s: %s", name, err)
 		return "", err

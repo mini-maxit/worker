@@ -492,6 +492,49 @@ func TestCreateContainerWithVolume(t *testing.T) {
 	}
 }
 
+// TestCreateContainer_ReplacesStaleContainer covers a task rerun after the worker died mid-run.
+func TestCreateContainer_ReplacesStaleContainer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ensureTestLanguagesSetup(t)
+
+	dc, err := docker.NewDockerClient()
+	if err != nil {
+		t.Fatalf("failed to create docker client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if err = dc.EnsureImage(ctx, testImageName); err != nil {
+		t.Fatalf("failed to ensure image: %v", err)
+	}
+
+	containerCfg := &container.Config{Image: testImageName, Cmd: []string{"sleep", "60"}}
+	containerName := fmt.Sprintf("%s%d", testContainerName, time.Now().UnixNano())
+
+	staleID, err := dc.CreateContainer(ctx, containerCfg, &container.HostConfig{}, containerName)
+	if err != nil {
+		t.Fatalf("failed to create container: %v", err)
+	}
+	defer cleanupContainer(t, staleID)
+	if err = dc.StartContainer(ctx, staleID); err != nil {
+		t.Fatalf("failed to start container: %v", err)
+	}
+
+	newID, err := dc.CreateContainer(ctx, containerCfg, &container.HostConfig{}, containerName)
+	if err != nil {
+		t.Fatalf("failed to replace the stale container: %v", err)
+	}
+	defer cleanupContainer(t, newID)
+
+	if newID == staleID {
+		t.Fatal("expected a new container")
+	}
+}
+
 // Helper functions
 
 func createTestVolume(t *testing.T) string {

@@ -69,7 +69,7 @@ func TestProcessTask_SuccessFlow(t *testing.T) {
 			{TimeLimitMs: 100, MemoryLimitKB: 65536},
 		},
 	}
-	w.ProcessTask("msg-1", "respQ", task)
+	_ = w.ProcessTask("msg-1", "respQ", task)
 
 	if got := w.GetProcessingMessageID(); got != "" {
 		t.Fatalf("expected processingMessageID to be cleared, got %q", got)
@@ -122,7 +122,7 @@ func TestProcessTask_CompilationErrorFlow(t *testing.T) {
 
 	w := pipeline.NewWorker(2, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: testLanguageType, LanguageVersion: "11", TestCases: nil}
-	w.ProcessTask("msg-compile", "respQ", task)
+	_ = w.ProcessTask("msg-compile", "respQ", task)
 }
 
 func TestProcessTask_PreparePackageFails(t *testing.T) {
@@ -143,7 +143,7 @@ func TestProcessTask_PreparePackageFails(t *testing.T) {
 
 	w := pipeline.NewWorker(3, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: testLanguageType}
-	w.ProcessTask("msg-dl", "respQ", task)
+	_ = w.ProcessTask("msg-dl", "respQ", task)
 }
 
 func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
@@ -177,7 +177,7 @@ func TestProcessTask_SendPackageFailsAfterRun(t *testing.T) {
 
 	w := pipeline.NewWorker(4, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: testLanguageType}
-	w.ProcessTask("msg-upload", "respQ", task)
+	_ = w.ProcessTask("msg-upload", "respQ", task)
 }
 
 func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
@@ -202,7 +202,7 @@ func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
 	// Make verifier panic
 	mockVerifier.EXPECT().EvaluateAllTestCases(dir, gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(dir *packager.TaskDirConfig, tcs []messages.TestCase, msgID string, langType interface{}) {
-			panic(errors.New("boom"))
+			panic("boom") // not an error value: a response must still be published
 		},
 	)
 
@@ -210,7 +210,7 @@ func TestProcessTask_VerifierPanicRecovered(t *testing.T) {
 
 	w := pipeline.NewWorker(5, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{LanguageType: testLanguageType}
-	w.ProcessTask("msg-panic", "respQ", task)
+	_ = w.ProcessTask("msg-panic", "respQ", task)
 }
 
 func TestProcessTask_PublishPayloadFails(t *testing.T) {
@@ -222,7 +222,16 @@ func TestProcessTask_PublishPayloadFails(t *testing.T) {
 	mockVerifier := mocks.NewMockVerifier(ctrl)
 	mockResponder := mocks.NewMockResponder(ctrl)
 
-	setupSuccessfulPipelineMocks(t, mockPackager, mockExecutor, mockVerifier, mockResponder)
+	publishErr := errors.New("publish failed")
+	tmpDir := t.TempDir()
+	dir := &packager.TaskDirConfig{PackageDirPath: tmpDir, CompileErrFilePath: tmpDir + "/compile.err"}
+	mockPackager.EXPECT().PrepareSolutionPackage(gomock.Any(), gomock.Any(), gomock.Any()).Return(dir, nil)
+	mockExecutor.EXPECT().ExecuteCommand(gomock.Any()).Return(nil)
+	mockVerifier.EXPECT().EvaluateAllTestCases(dir, gomock.Any(), gomock.Any(), gomock.Any()).Return(solution.Result{})
+	mockPackager.EXPECT().SendSolutionPackage(dir, gomock.Any(), false, gomock.Any()).Return(nil)
+	mockResponder.EXPECT().
+		PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(publishErr)
 
 	w := pipeline.NewWorker(6, mockPackager, mockExecutor, mockVerifier, mockResponder)
 	task := &messages.TaskQueueMessage{
@@ -232,7 +241,9 @@ func TestProcessTask_PublishPayloadFails(t *testing.T) {
 			{TimeLimitMs: 100, MemoryLimitKB: 65536},
 		},
 	}
-	w.ProcessTask("msg-pub", "respQ", task)
+	if err := w.ProcessTask("msg-pub", "respQ", task); !errors.Is(err, publishErr) {
+		t.Fatalf("expected the publish error to be returned, got %v", err)
+	}
 
 	if got := w.GetProcessingMessageID(); got != "" {
 		t.Fatalf("expected processingMessageID to be cleared, got %q", got)
@@ -314,7 +325,7 @@ func TestGetProcessingMessageID(t *testing.T) {
 	mockResponder.EXPECT().
 		PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	go func() {
-		w.ProcessTask("msg-123", "respQ", &messages.TaskQueueMessage{LanguageType: testLanguageType})
+		_ = w.ProcessTask("msg-123", "respQ", &messages.TaskQueueMessage{LanguageType: testLanguageType})
 	}()
 
 	// Wait until PrepareSolutionPackage is invoked (worker has started)
@@ -374,7 +385,7 @@ func TestWorkerStateConcurrentAccess(t *testing.T) {
 	mockResponder.EXPECT().PublishPayloadTaskRespond(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	go func() {
-		w.ProcessTask("concurrent-msg", "respQ", &messages.TaskQueueMessage{LanguageType: testLanguageType})
+		_ = w.ProcessTask("concurrent-msg", "respQ", &messages.TaskQueueMessage{LanguageType: testLanguageType})
 	}()
 
 	<-started
@@ -460,7 +471,7 @@ func TestProcessTask_ContainerCompilationSuccess(t *testing.T) {
 		},
 	}
 
-	w.ProcessTask("msg-container-success", "respQ", task)
+	_ = w.ProcessTask("msg-container-success", "respQ", task)
 
 	if got := w.GetProcessingMessageID(); got != "" {
 		t.Fatalf("expected processingMessageID to be cleared, got %q", got)
@@ -518,7 +529,7 @@ func TestProcessTask_ContainerCompilationErrorDetection(t *testing.T) {
 		TestCases:       []messages.TestCase{{TimeLimitMs: 100, MemoryLimitKB: 65536}},
 	}
 
-	w.ProcessTask("msg-container-error", "respQ", task)
+	_ = w.ProcessTask("msg-container-error", "respQ", task)
 
 	if got := w.GetProcessingMessageID(); got != "" {
 		t.Fatalf("expected processingMessageID to be cleared, got %q", got)

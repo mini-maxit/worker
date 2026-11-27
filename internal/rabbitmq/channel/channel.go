@@ -11,6 +11,7 @@ type Channel interface {
 	Consume(queue, consumer string,
 		autoAck, exclusive, noLocal, noWait bool,
 		args amqp.Table) (<-chan amqp.Delivery, error)
+	Qos(prefetchCount, prefetchSize int, global bool) error
 }
 
 // AmqpChannel wraps a real *amqp.Channel and implements Channel.
@@ -34,4 +35,8 @@ func (a *AmqpChannel) Consume(queue, consumer string,
 	autoAck, exclusive, noLocal, noWait bool,
 	args amqp.Table) (<-chan amqp.Delivery, error) {
 	return a.ch.Consume(queue, consumer, autoAck, exclusive, noLocal, noWait, args)
+}
+
+func (a *AmqpChannel) Qos(prefetchCount, prefetchSize int, global bool) error {
+	return a.ch.Qos(prefetchCount, prefetchSize, global)
 }

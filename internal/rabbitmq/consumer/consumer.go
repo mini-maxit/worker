@@ -20,11 +20,14 @@ import (
 type Consumer interface {
 	Listen()
 	ProcessMessage(msg amqp.Delivery)
+	ProcessTaskDelivery(msg amqp.Delivery)
 }
 
 type consumer struct {
 	channel         channel.Channel
 	workerQueueName string
+	taskQueueName   string
+	maxWorkers      int
 	scheduler       scheduler.Scheduler
 	responder       responder.Responder
 	logger          *zap.SugaredLogger
@@ -33,6 +36,7 @@ type consumer struct {
 func NewConsumer(
 	mainChannel channel.Channel,
 	workerQueueName string,
+	maxWorkers int,
 	scheduler scheduler.Scheduler,
 	responder responder.Responder,
 ) Consumer {
@@ -41,12 +45,17 @@ func NewConsumer(
 	return &consumer{
 		channel:         mainChannel,
 		workerQueueName: workerQueueName,
+		taskQueueName:   workerQueueName + constants.TaskQueueSuffix,
+		maxWorkers:      maxWorkers,
 		scheduler:       scheduler,
 		responder:       responder,
 		logger:          logger,
 	}
 }
 
+// Listen consumes two queues. The worker queue takes every message from the backend and is never limited,
+// so status and handshake messages are answered while all workers are busy. Tasks are moved from it to the
+// task queue, which hands out at most maxWorkers unacknowledged tasks.
 func (c *consumer) Listen() {
 	c.logger.Infof("Declaring queue %s", c.workerQueueName)
 
@@ -57,39 +66,66 @@ func (c *consumer) Listen() {
 		c.logger.Panicf("Failed to declare queue %s: %s", c.workerQueueName, err)
 	}
 
+	c.logger.Infof("Declaring queue %s", c.taskQueueName)
+	_, err = c.channel.QueueDeclare(c.taskQueueName, true, false, false, false, nil)
+	if err != nil {
+		c.logger.Panicf("Failed to declare queue %s: %s", c.taskQueueName, err)
+	}
+
 	c.logger.Infof("Listening for messages on queue %s", c.workerQueueName)
 
-	msgs, err := c.channel.Consume(c.workerQueueName, "", true, false, false, false, nil)
+	msgs, err := c.channel.Consume(c.workerQueueName, "", false, false, false, false, nil)
 	if err != nil {
 		c.logger.Panicf("Failed to consume messages from queue %s: %s", c.workerQueueName, err)
 	}
 
-	for msg := range msgs {
-		go func(m amqp.Delivery) {
-			c.ProcessMessage(m)
-		}(msg)
+	// A per-consumer limit applies only to consumers started after this call, so it must stay between the two.
+	if err := c.channel.Qos(c.maxWorkers, 0, false); err != nil {
+		c.logger.Panicf("Failed to set prefetch count: %s", err)
+	}
+
+	tasks, err := c.channel.Consume(c.taskQueueName, "", false, false, false, false, nil)
+	if err != nil {
+		c.logger.Panicf("Failed to consume messages from queue %s: %s", c.taskQueueName, err)
+	}
+
+	for {
+		select {
+		case msg, ok := <-msgs:
+			if !ok {
+				return
+			}
+			c.ProcessMessage(msg)
+		case msg, ok := <-tasks:
+			if !ok {
+				return
+			}
+			c.ProcessTaskDelivery(msg)
+		}
 	}
 }
 
+// ProcessMessage handles a delivery from the worker queue.
 func (c *consumer) ProcessMessage(msg amqp.Delivery) {
-	defer func() {
-		if r := recover(); r != nil {
-			c.logger.Errorf("Panic while processing message: %v", r)
-		}
-	}()
+	defer c.dropOnPanic(msg)
 	var queueMessage messages.QueueMessage
 
 	err := json.Unmarshal(msg.Body, &queueMessage)
 	if err != nil {
 		c.logger.Errorf("Failed to unmarshal message: %s", err)
 		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
+		c.ack(msg)
 		return
 	}
 
 	switch queueMessage.Type {
 	case constants.QueueMessageTypeTask:
 		c.logger.Infof("Received task message [MsgID: %s]", queueMessage.MessageID)
-		c.handleTaskMessage(queueMessage, msg.ReplyTo)
+		if err := c.enqueueTask(msg); err != nil {
+			c.logger.Errorf("Failed to enqueue task %s: %s", queueMessage.MessageID, err)
+			c.requeue(msg)
+			return
+		}
 	case constants.QueueMessageTypeStatus:
 		c.logger.Infof("Received status message [MsgID: %s]", queueMessage.MessageID)
 		c.handleStatusMessage(queueMessage, msg.ReplyTo)
@@ -104,62 +140,83 @@ func (c *consumer) ProcessMessage(msg amqp.Delivery) {
 			msg.ReplyTo,
 			errors.ErrUnknownMessageType)
 	}
+	c.ack(msg)
 }
 
-func (c *consumer) requeueTaskWithPriority2(queueMessage messages.QueueMessage) error {
-	priority := constants.RabbitMQRequeuePriority
+// ProcessTaskDelivery handles a delivery from the task queue. It is acknowledged once its response is published.
+func (c *consumer) ProcessTaskDelivery(msg amqp.Delivery) {
+	defer c.dropOnPanic(msg)
 
-	queueMessageJSON, err := json.Marshal(queueMessage)
-	if err != nil {
-		c.logger.Errorf("Failed to marshal queue message: %s", err)
-		return err
-	}
-
-	err = c.responder.Publish(c.workerQueueName, amqp.Publishing{
-		ContentType: "application/json",
-		Body:        queueMessageJSON,
-		Priority:    uint8(priority),
-	})
-
-	if err != nil {
-		c.logger.Errorf("Failed to requeue task with higher priority: %s", err)
-		return err
-	}
-
-	return nil
-}
-
-func (c *consumer) handleTaskMessage(queueMessage messages.QueueMessage, replyTo string) {
+	var queueMessage messages.QueueMessage
 	var task *messages.TaskQueueMessage
-	if err := json.Unmarshal(queueMessage.Payload, &task); err != nil {
+	err := json.Unmarshal(msg.Body, &queueMessage)
+	if err == nil {
+		err = json.Unmarshal(queueMessage.Payload, &task)
+	}
+	if err != nil {
 		c.logger.Errorf("Failed to unmarshal task message: %s", err)
-		c.responder.PublishErrorToResponseQueue(
-			queueMessage.Type,
-			queueMessage.MessageID,
-			replyTo,
-			err)
+		c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, err)
+		c.ack(msg)
 		return
 	}
 
-	err := c.scheduler.ProcessTask(replyTo, queueMessage.MessageID, task)
+	err = c.scheduler.ProcessTask(msg.ReplyTo, queueMessage.MessageID, task, func(taskErr error) {
+		if taskErr != nil {
+			c.logger.Errorf("No response published for task %s: %s", queueMessage.MessageID, taskErr)
+			c.requeue(msg)
+			return
+		}
+		c.ack(msg)
+	})
 	if err == nil {
 		return
 	}
 
 	if e.Is(err, errors.ErrFailedToGetFreeWorker) {
 		c.logger.Warnf("Requeuing task %s due to no available workers", queueMessage.MessageID)
-		requeueErr := c.requeueTaskWithPriority2(queueMessage)
-		if requeueErr != nil {
-			c.logger.Errorf("Failed to requeue task with higher priority: %s", requeueErr)
-		}
+		c.requeue(msg)
 		return
 	}
 
 	c.responder.PublishErrorToResponseQueue(
 		queueMessage.Type,
 		queueMessage.MessageID,
-		replyTo,
+		msg.ReplyTo,
 		err)
+	c.ack(msg)
+}
+
+// enqueueTask copies a task to the task queue. The original is acknowledged afterwards on the same channel,
+// so the broker receives the copy first.
+func (c *consumer) enqueueTask(msg amqp.Delivery) error {
+	return c.responder.Publish(c.taskQueueName, amqp.Publishing{
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+		ReplyTo:      msg.ReplyTo,
+		Body:         msg.Body,
+	})
+}
+
+func (c *consumer) ack(msg amqp.Delivery) {
+	if err := msg.Ack(false); err != nil {
+		c.logger.Errorf("Failed to ack message: %s", err)
+	}
+}
+
+func (c *consumer) requeue(msg amqp.Delivery) {
+	if err := msg.Nack(false, true); err != nil {
+		c.logger.Errorf("Failed to requeue message: %s", err)
+	}
+}
+
+// dropOnPanic discards a message whose handling panicked, because redelivering it would panic again.
+func (c *consumer) dropOnPanic(msg amqp.Delivery) {
+	if r := recover(); r != nil {
+		c.logger.Errorf("Panic while processing message: %v", r)
+		if err := msg.Nack(false, false); err != nil {
+			c.logger.Errorf("Failed to drop message: %s", err)
+		}
+	}
 }
 
 func (c *consumer) handleStatusMessage(queueMessage messages.QueueMessage, replyTo string) {
