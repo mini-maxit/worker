@@ -27,19 +27,23 @@ func main() {
 	// Load the configuration
 	config := config.NewConfig()
 
-	// Connect to RabbitMQ
-	conn := rabbitmq.NewRabbitMqConnection(config)
-
 	// Create docker client
 	dCli, err := docker.NewDockerClient()
 	if err != nil {
 		logger.Fatalf("Failed to create Docker client: %s", err.Error())
 	}
 
-	// entrypoint.sh pulls images once at start; keep them current with the weekly runtime rebuilds.
-	go docker.RefreshImagesPeriodically(context.Background(), dCli, languages.GetAllDockerImages(),
+	images, err := languages.GetAllDockerImages()
+	if err != nil {
+		logger.Fatalf("Failed to list runtime images: %s", err.Error())
+	}
+	// Pull before consuming so the first submissions don't wait for a download, then pick up weekly rebuilds.
+	dCli.RefreshImages(context.Background(), images)
+	go docker.RefreshImagesPeriodically(context.Background(), dCli, images,
 		constants.RuntimeImageRefreshHours*time.Hour)
 
+	// Connect to RabbitMQ
+	conn := rabbitmq.NewRabbitMqConnection(config)
 	defer func() {
 		err := conn.Close()
 		if err != nil {

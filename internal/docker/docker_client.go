@@ -2,23 +2,28 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
+	e "errors"
+	"fmt"
 	"io"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	image "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 
 	"github.com/mini-maxit/worker/internal/logger"
+	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/utils"
 )
 
 type DockerClient interface {
 	EnsureImage(ctx context.Context, imageName string) error
-	RefreshImage(ctx context.Context, imageName string) error
+	RefreshImages(ctx context.Context, imageNames []string)
 	CreateContainer(
 		ctx context.Context,
 		containerCfg *container.Config,
@@ -75,37 +80,61 @@ func (d *dockerClient) pull(ctx context.Context, imageName string) error {
 		return err
 	}
 	defer reader.Close()
-	_, err = io.Copy(io.Discard, reader)
 
-	if err != nil {
-		d.logger.Errorf("Failed to read Docker image pull response for image %s: %s", imageName, err)
-	}
-
-	return err
-}
-
-// RefreshImage re-pulls a tag so rebuilt images (e.g. weekly runtime rebuilds) reach a long-running worker,
-// then removes the replaced image. Removal is best effort: it fails harmlessly while a container still uses it.
-func (d *dockerClient) RefreshImage(ctx context.Context, imageName string) error {
-	var oldID string
-	if inspect, err := d.cli.ImageInspect(ctx, imageName); err == nil {
-		oldID = inspect.ID
-	}
-
-	if err := d.pull(ctx, imageName); err != nil {
+	if err := readPullStream(reader); err != nil {
+		d.logger.Errorf("Failed to pull Docker image %s: %s", imageName, err)
 		return err
-	}
-
-	inspect, err := d.cli.ImageInspect(ctx, imageName)
-	if err != nil || oldID == "" || inspect.ID == oldID {
-		return err
-	}
-
-	d.logger.Infof("Refreshed Docker image %s (%s -> %s)", imageName, oldID, inspect.ID)
-	if _, err := d.cli.ImageRemove(ctx, oldID, image.RemoveOptions{}); err != nil {
-		d.logger.Warnf("Could not remove old image %s of %s: %s", oldID, imageName, err)
 	}
 	return nil
+}
+
+// readPullStream waits for a pull to finish. The daemon reports failures such as a full disk
+// inside the response stream, after it has already answered with success.
+func readPullStream(reader io.Reader) error {
+	decoder := json.NewDecoder(reader)
+	for {
+		var message struct {
+			ErrorDetail *struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
+		}
+		err := decoder.Decode(&message)
+		switch {
+		case e.Is(err, io.EOF):
+			return nil
+		case err != nil:
+			return err
+		case message.ErrorDetail != nil:
+			return fmt.Errorf("%w: %s", errors.ErrImagePull, message.ErrorDetail.Message)
+		}
+	}
+}
+
+// RefreshImages re-pulls each tag so rebuilt images reach a long-running worker, then removes the runtime
+// images this left untagged. Failures are logged and retried on the next call.
+// shortcut: images under an older script tag stay tagged, so one set per script change remains on the host.
+func (d *dockerClient) RefreshImages(ctx context.Context, imageNames []string) {
+	for _, imageName := range imageNames {
+		pullCtx, cancel := context.WithTimeout(ctx, constants.RuntimeImagePullTimeoutMinutes*time.Minute)
+		_ = d.pull(pullCtx, imageName) // pull logs its own failures
+		cancel()
+	}
+
+	pruneCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	// Prune skips images that a container still uses, so those are retried next time.
+	report, err := d.cli.ImagesPrune(pruneCtx, filters.NewArgs(
+		filters.Arg("dangling", "true"),
+		filters.Arg("label", constants.RuntimeImageLabel),
+	))
+	if err != nil {
+		d.logger.Warnf("Could not remove old runtime images: %s", err)
+		return
+	}
+	if len(report.ImagesDeleted) > 0 {
+		d.logger.Infof("Removed old runtime images, reclaimed %d bytes", report.SpaceReclaimed)
+	}
 }
 
 func (d *dockerClient) CreateContainer(

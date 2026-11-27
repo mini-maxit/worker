@@ -45,5 +45,5 @@ func TestContainerMemory(t *testing.T) {
 	// compiled: raised to the compile floor so the compiler isn't OOM-killed
 	assert.Equal(t, constants.MinCompileContainerMemoryKB*1024, containerMemory(t, languages.CPP, "17", true, 64*1024))
 	// compiled with a limit above the floor: test limit + 20% headroom wins
-	assert.Equal(t, int64((1024*1024+1024*1024/5)*1024), containerMemory(t, languages.CPP, "17", true, 1024*1024))
+	assert.Equal(t, int64(1258291*1024), containerMemory(t, languages.CPP, "17", true, 1024*1024))
 }

@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// RefreshImagesPeriodically re-pulls images every interval until ctx is done.
-// Failures are logged by RefreshImage and retried on the next tick.
+// RefreshImagesPeriodically refreshes images every interval until ctx is done.
 func RefreshImagesPeriodically(ctx context.Context, d DockerClient, images []string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -15,9 +14,7 @@ func RefreshImagesPeriodically(ctx context.Context, d DockerClient, images []str
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			for _, img := range images {
-				_ = d.RefreshImage(ctx, img)
-			}
+			d.RefreshImages(ctx, images)
 		}
 	}
 }
