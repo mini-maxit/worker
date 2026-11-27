@@ -119,13 +119,8 @@ func (d *executor) ExecuteCommand(
 		return err
 	}
 
-	if err := d.docker.StartContainer(ctx, containerID); err != nil {
+	if err := d.runContainer(ctx, containerID, cfg); err != nil {
 		return err
-	}
-
-	waitErr := d.waitForContainer(ctx, containerID)
-	if waitErr != nil {
-		return waitErr
 	}
 
 	d.logger.Infof("Copying results from container %s [MsgID: %s]", containerID, cfg.MessageID)
@@ -161,17 +156,22 @@ func (d *executor) ExecuteCommand(
 	return nil
 }
 
-func (d *executor) waitForContainer(
-	ctx context.Context, containerID string,
-) error {
-	timeout := time.Duration(d.maxRunTimeSec) * time.Second
-	exitCode, err := d.docker.WaitContainer(ctx, containerID, timeout)
+// runContainer runs the test script. A compiled solution takes two runs of the same container:
+// the first compiles under the compile memory floor, the second runs the tests under their own limit.
+func (d *executor) runContainer(ctx context.Context, containerID string, cfg CommandConfig) error {
+	exitCode, err := d.startAndWait(ctx, containerID)
 	if err != nil {
-		if errors.Is(err, customErr.ErrContainerTimeout) {
-			d.docker.ContainerKill(ctx, containerID, "SIGKILL")
-			return customErr.ErrContainerTimeout
-		}
 		return err
+	}
+
+	if cfg.RequiresCompiling && exitCode == constants.ExitCodeCompiled {
+		if err := d.docker.SetContainerMemory(ctx, containerID, testMemoryBytes(cfg.TestCases)); err != nil {
+			return err
+		}
+		exitCode, err = d.startAndWait(ctx, containerID)
+		if err != nil {
+			return err
+		}
 	}
 
 	if exitCode != 0 {
@@ -179,6 +179,24 @@ func (d *executor) waitForContainer(
 	}
 
 	return nil
+}
+
+func (d *executor) startAndWait(ctx context.Context, containerID string) (int64, error) {
+	if err := d.docker.StartContainer(ctx, containerID); err != nil {
+		return -1, err
+	}
+
+	timeout := time.Duration(d.maxRunTimeSec) * time.Second
+	exitCode, err := d.docker.WaitContainer(ctx, containerID, timeout)
+	if err != nil {
+		if errors.Is(err, customErr.ErrContainerTimeout) {
+			d.docker.ContainerKill(ctx, containerID, "SIGKILL")
+			return -1, customErr.ErrContainerTimeout
+		}
+		return -1, err
+	}
+
+	return exitCode, nil
 }
 
 func SanitizeContainerName(raw string) string {
@@ -294,7 +312,8 @@ func buildContainerConfig(
 	}
 }
 
-func buildHostConfig(testCases []messages.TestCase, requiresCompiling bool) *container.HostConfig {
+// testMemoryBytes is the container memory limit while tests run: the largest test limit plus headroom.
+func testMemoryBytes(testCases []messages.TestCase) int64 {
 	maxKB := constants.MinContainerMemoryKB
 	for _, tc := range testCases {
 		if tc.MemoryLimitKB > maxKB {
@@ -305,14 +324,15 @@ func buildHostConfig(testCases []messages.TestCase, requiresCompiling bool) *con
 	// Headroom: 20% + at least 64MB for runtime/script overhead
 	headroomKB := max(maxKB/5, constants.MinContainerHeadroomKB)
 
-	containerKB := maxKB + headroomKB
-	// The compiler runs in the same container as the tests.
-	// shortcut: the floor also applies during tests, and ulimit -v in run_tests.sh limits each process, not their sum,
-	// so a forking solution can use more than its limit. Split compile and test limits to close this.
-	if requiresCompiling && containerKB < constants.MinCompileContainerMemoryKB {
-		containerKB = constants.MinCompileContainerMemoryKB
+	return (maxKB + headroomKB) * 1024
+}
+
+func buildHostConfig(testCases []messages.TestCase, requiresCompiling bool) *container.HostConfig {
+	containerBytes := testMemoryBytes(testCases)
+	// The compiler runs in this container too; runContainer lowers the limit again before the tests.
+	if requiresCompiling {
+		containerBytes = max(containerBytes, constants.MinCompileContainerMemoryKB*1024)
 	}
-	containerBytes := containerKB * 1024
 
 	return &container.HostConfig{
 		AutoRemove:  false,

@@ -29,8 +29,11 @@ if [[ -z "${USER_ERROR_FILES:-}" ]]; then
   exit 1
 fi
 
-# Handle compilation if needed
-if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
+# A compiled solution takes two runs of the container. The first only compiles and exits with 10; the worker then
+# lowers the memory limit and starts the container again, which finds the marker and goes on to the tests.
+compiled_marker=/tmp/.compiled
+
+if [[ "${REQUIRES_COMPILATION:-}" == "true" && ! -f "$compiled_marker" ]]; then
   if [[ -z "${COMPILE_CMD:-}" ]]; then
     echo "ERROR: COMPILE_CMD must be set when REQUIRES_COMPILATION is true" >&2
     exit 1
@@ -71,6 +74,9 @@ if [[ "${REQUIRES_COMPILATION:-}" == "true" ]]; then
 
   # Make executable if needed
   chmod +x "${EXEC_FILE}" 2>/dev/null || true
+
+  : > "$compiled_marker" || exit 1
+  exit 10 # constants.ExitCodeCompiled
 fi
 
 read -r -a times <<< "$TIME_LIMITS_MS"

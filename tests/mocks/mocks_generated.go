@@ -729,6 +729,20 @@ func (mr *MockDockerClientMockRecorder) RefreshImages(ctx, imageNames any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshImages", reflect.TypeOf((*MockDockerClient)(nil).RefreshImages), ctx, imageNames)
 }
 
+// SetContainerMemory mocks base method.
+func (m *MockDockerClient) SetContainerMemory(ctx context.Context, containerID string, memoryBytes int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetContainerMemory", ctx, containerID, memoryBytes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetContainerMemory indicates an expected call of SetContainerMemory.
+func (mr *MockDockerClientMockRecorder) SetContainerMemory(ctx, containerID, memoryBytes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContainerMemory", reflect.TypeOf((*MockDockerClient)(nil).SetContainerMemory), ctx, containerID, memoryBytes)
+}
+
 // StartContainer mocks base method.
 func (m *MockDockerClient) StartContainer(ctx context.Context, containerID string) error {
 	m.ctrl.T.Helper()

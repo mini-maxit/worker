@@ -441,7 +441,7 @@ docker build -t "ghcr.io/mini-maxit/runtime-cpp:script-$(shasum -a 256 internal/
 
 ### Memory sizing
 
-Each running submission can use `max(512 MB, 1.2 * memory limit)` for compiled languages, and for Python the memory limit (at least 64 MB) plus 20% (at least 64 MB). Set `MAX_WORKERS` (default 10) so that this many fit in the host's free memory.
+While its tests run, each submission can use the memory limit (at least 64 MB) plus 20% (at least 64 MB). Compiled languages get at least 512 MB while compiling. Set `MAX_WORKERS` (default 10) so that this many, each at the larger of the two figures, fit in the host's free memory.
 
 ## Development
 
