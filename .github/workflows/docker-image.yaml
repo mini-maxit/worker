@@ -5,6 +5,8 @@ on:
     branches: ['master']
   workflow_dispatch:
   workflow_call:
+  schedule:
+    - cron: '41 2 * * 1' # weekly rebuild picks up base-image and apt security fixes
 
 env:
   REGISTRY: ghcr.io
@@ -50,12 +52,13 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The weekly rebuild only moves latest; version and sha tags keep what the push published.
           tags: |
-            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.event_name != 'schedule' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha,format=long
+            type=sha,format=long,enable=${{ github.event_name != 'schedule' }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -66,6 +69,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          no-cache: ${{ github.event_name == 'schedule' }} # a cached apt layer would keep old packages
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
