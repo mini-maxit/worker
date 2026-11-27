@@ -41,6 +41,7 @@ const (
 // Exit codes.
 const (
 	ExitCodeSuccess           = 0
+	ExitCodeCompiled          = 10 // run_tests.sh compiled the solution and waits to be started again for the tests
 	ExitCodeTimeLimitExceeded = 143
 	ExitCodeCommandNotFound   = 127
 )

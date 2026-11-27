@@ -31,6 +31,7 @@ type DockerClient interface {
 		name string,
 	) (string, error)
 	StartContainer(ctx context.Context, containerID string) error
+	SetContainerMemory(ctx context.Context, containerID string, memoryBytes int64) error
 	WaitContainer(ctx context.Context, containerID string, timeout time.Duration) (int64, error)
 	ContainerKill(ctx context.Context, containerID, signal string)
 	CopyToContainerFiltered(ctx context.Context, containerID, srcPath, dstPath string, excludeTop []string) error
@@ -155,6 +156,17 @@ func (d *dockerClient) StartContainer(ctx context.Context, containerID string) e
 	err := d.cli.ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil {
 		d.logger.Errorf("Failed to start Docker container %s: %s", containerID, err)
+	}
+	return err
+}
+
+// SetContainerMemory changes the memory limit (no swap on top). A stopped container gets it at its next start.
+func (d *dockerClient) SetContainerMemory(ctx context.Context, containerID string, memoryBytes int64) error {
+	_, err := d.cli.ContainerUpdate(ctx, containerID, container.UpdateConfig{
+		Resources: container.Resources{Memory: memoryBytes, MemorySwap: memoryBytes},
+	})
+	if err != nil {
+		d.logger.Errorf("Failed to set memory limit of Docker container %s: %s", containerID, err)
 	}
 	return err
 }
