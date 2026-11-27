@@ -144,6 +144,10 @@ func workerConfig() (string, int) {
 		if err != nil {
 			logger.Fatalf("failed to parse MAX_WORKERS with error: %v", err)
 		}
+		// It is also the RabbitMQ prefetch count, where 0 means unlimited.
+		if maxWorkers < 1 {
+			logger.Fatalf("MAX_WORKERS must be at least 1, got %d", maxWorkers)
+		}
 	}
 
 	return workerQueueName, maxWorkers

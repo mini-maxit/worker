@@ -73,6 +73,15 @@ func TestPrepareSolutionPackage_Success(t *testing.T) {
 
 	p := packager.NewPackager(mockStorage, mockFileCache)
 
+	// A compile.err left by an unfinished run of the same task must be emptied.
+	staleDir := filepath.Join(constants.TmpDirPath, msgID)
+	if err := os.MkdirAll(staleDir, 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staleDir, constants.CompileErrFileName), []byte("old"), 0o644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
 	cfg, err := p.PrepareSolutionPackage(msg, languages.CPP, msgID)
 	if err != nil {
 		t.Fatalf("PrepareSolutionPackage failed: %v", err)

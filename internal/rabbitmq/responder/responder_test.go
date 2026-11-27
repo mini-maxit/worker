@@ -151,7 +151,7 @@ func TestPublishRespondHelpers(t *testing.T) {
 			}
 		}).Return(nil).Times(1)
 
-	r.PublishPayloadTaskRespond("task", "tid", "task-queue", res)
+	_ = r.PublishPayloadTaskRespond("task", "tid", "task-queue", res)
 }
 
 // Test concurrent heavy load of Publish calls.

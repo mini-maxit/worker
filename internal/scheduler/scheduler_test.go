@@ -2,6 +2,7 @@ package scheduler_test
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -92,40 +93,66 @@ func TestProcessTask_SuccessAndMarkIdle(t *testing.T) {
 
 	w.EXPECT().GetId().Return(0).Times(1)
 
-	// Expect ProcessTask to be invoked; signal when called
-	done := make(chan struct{}, 1)
-	w.EXPECT().ProcessTask(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).Do(func(_ string, _ string, _ *messages.TaskQueueMessage) {
-		// simulate some work
-		time.Sleep(5 * time.Millisecond)
-		select {
-		case done <- struct{}{}:
-		default:
-		}
-	}).Times(1)
+	publishErr := errors.New("publish failed")
+	process := w.EXPECT().ProcessTask("msg-id-1", "resp", gomock.Any()).Return(publishErr).Times(1)
 
 	// After processing, scheduler.markWorkerAsIdle should call UpdateStatus(Idle)
-	w.EXPECT().UpdateStatus(constants.WorkerStatusIdle).Times(1)
+	var idle atomic.Bool
+	w.EXPECT().UpdateStatus(constants.WorkerStatusIdle).Do(func(constants.WorkerStatus) {
+		idle.Store(true)
+	}).After(process).Times(1)
 
 	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil)
 
-	if err := s.ProcessTask("resp", "msg-id-1", &messages.TaskQueueMessage{}); err != nil {
+	result := make(chan error, 1)
+	err := s.ProcessTask("resp", "msg-id-1", &messages.TaskQueueMessage{}, func(taskErr error) {
+		// done acks the task, so the slot must already be free for the next delivery.
+		if !idle.Load() {
+			t.Error("done called before the worker was marked idle")
+		}
+		result <- taskErr
+	})
+	if err != nil {
 		t.Fatalf("unexpected error from ProcessTask: %v", err)
 	}
 
-	// wait for ProcessTask to be called
 	select {
-	case <-done:
-		// ok
+	case got := <-result:
+		if !errors.Is(got, publishErr) {
+			t.Fatalf("expected done to get the worker's error, got %v", got)
+		}
 	case <-time.After(2 * time.Second):
-		t.Fatalf("timed out waiting for mocked worker ProcessTask to be called")
+		t.Fatalf("timed out waiting for done")
+	}
+}
+
+func TestProcessTask_PanicReportsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	w := mocktests.NewMockWorker(ctrl)
+	w.EXPECT().GetState().Return(pipeline.WorkerState{Status: constants.WorkerStatusIdle})
+	w.EXPECT().UpdateStatus(constants.WorkerStatusBusy)
+	w.EXPECT().ProcessTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(_ string, _ string, _ *messages.TaskQueueMessage) { panic("boom") })
+	w.EXPECT().GetId().Return(0)
+	w.EXPECT().UpdateStatus(constants.WorkerStatusIdle)
+
+	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil)
+
+	result := make(chan error, 1)
+	if err := s.ProcessTask("resp", "msg-id-3", &messages.TaskQueueMessage{}, func(e error) { result <- e }); err != nil {
+		t.Fatalf("unexpected error from ProcessTask: %v", err)
 	}
 
-	// give scheduler time to call markWorkerAsIdle
-	time.Sleep(10 * time.Millisecond)
+	select {
+	case got := <-result:
+		if !errors.Is(got, pkgerrors.ErrWorkerPanicked) {
+			t.Fatalf("expected ErrWorkerPanicked, got %v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for done")
+	}
 }
 
 func TestProcessTask_NoFreeWorker(t *testing.T) {
@@ -138,7 +165,9 @@ func TestProcessTask_NoFreeWorker(t *testing.T) {
 
 	s := NewSchedulerWithWorkers(1, map[int]pipeline.Worker{0: w}, nil, nil, nil, nil)
 
-	err := s.ProcessTask("resp", "msg-id-2", &messages.TaskQueueMessage{})
+	err := s.ProcessTask("resp", "msg-id-2", &messages.TaskQueueMessage{}, func(error) {
+		t.Error("done must not be called for a rejected task")
+	})
 	if err == nil {
 		t.Fatalf("expected error when no free worker available")
 	}

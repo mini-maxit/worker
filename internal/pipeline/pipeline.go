@@ -20,7 +20,8 @@ import (
 )
 
 type Worker interface {
-	ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage)
+	// ProcessTask returns an error only when no response could be published for the task.
+	ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage) error
 	GetState() WorkerState
 	UpdateStatus(status constants.WorkerStatus)
 	GetProcessingMessageID() string
@@ -100,46 +101,44 @@ func (ws *worker) clearProcessing() {
 	ws.responseQueue = ""
 }
 
-func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.TaskQueueMessage) {
+func (ws *worker) ProcessTask(
+	messageID, responseQueue string,
+	task *messages.TaskQueueMessage,
+) (publishErr error) {
 	ws.logger.Infof("Processing task [MsgID: %s]", messageID)
 	ws.setProcessing(messageID, responseQueue)
 	defer func() {
 		ws.clearProcessing()
 		if r := recover(); r != nil {
-			if err, ok := r.(error); ok {
-				ws.responder.PublishTaskErrorToResponseQueue(
-					constants.QueueMessageTypeTask,
-					messageID,
-					responseQueue,
-					err,
-				)
-			} else {
-				ws.logger.Errorf("Recovered value is not an error: %v", r)
-			}
+			ws.logger.Errorf("Panic while processing task [MsgID: %s]: %v", messageID, r)
+			publishErr = ws.responder.PublishTaskErrorToResponseQueue(
+				constants.QueueMessageTypeTask,
+				messageID,
+				responseQueue,
+				fmt.Errorf("%v", r),
+			)
 		}
 	}()
 
 	langType, err := languages.ParseLanguageType(task.LanguageType)
 	if err != nil {
 		ws.logger.Errorf("Invalid language type %s: %s", task.LanguageType, err)
-		ws.responder.PublishTaskErrorToResponseQueue(
+		return ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			messageID,
 			responseQueue,
 			err,
 		)
-		return
 	}
 
 	dc, err := ws.packager.PrepareSolutionPackage(task, langType, messageID)
 	if err != nil {
-		ws.responder.PublishTaskErrorToResponseQueue(
+		return ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			messageID,
 			responseQueue,
 			err,
 		)
-		return
 	}
 
 	defer func() {
@@ -170,13 +169,12 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	err = ws.executor.ExecuteCommand(cfg)
 	if err != nil {
-		ws.responder.PublishTaskErrorToResponseQueue(
+		return ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			messageID,
 			responseQueue,
 			err,
 		)
-		return
 	}
 
 	if requiresCompilation {
@@ -184,8 +182,7 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 		fileInfo, statErr := os.Stat(dc.CompileErrFilePath)
 
 		if statErr == nil && fileInfo.Size() > 0 {
-			ws.publishCompilationError(dc, task.TestCases, messageID, responseQueue)
-			return
+			return ws.publishCompilationError(dc, task.TestCases, messageID, responseQueue)
 		}
 	}
 
@@ -193,46 +190,45 @@ func (ws *worker) ProcessTask(messageID, responseQueue string, task *messages.Ta
 
 	err = ws.packager.SendSolutionPackage(dc, task.TestCases /*hasCompilationErr*/, false, messageID)
 	if err != nil {
-		ws.responder.PublishTaskErrorToResponseQueue(
+		return ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			messageID,
 			responseQueue,
 			err,
 		)
-		return
 	}
 
-	ws.responder.PublishPayloadTaskRespond(
+	publishErr = ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
 		messageID,
 		responseQueue,
 		solutionResult,
 	)
 	ws.logger.Infof("Finished processing task [MsgID: %s]", messageID)
+	return publishErr
 }
 
 func (ws *worker) publishCompilationError(
 	dirConfig *packager.TaskDirConfig,
 	testCases []messages.TestCase,
 	messageID, responseQueue string,
-) {
+) error {
 	ws.logger.Infof("Compilation error occurred for message ID: %s", messageID)
 	sendErr := ws.packager.SendSolutionPackage(dirConfig, testCases, true, messageID)
 	if sendErr != nil {
-		ws.responder.PublishTaskErrorToResponseQueue(
+		return ws.responder.PublishTaskErrorToResponseQueue(
 			constants.QueueMessageTypeTask,
 			messageID,
 			responseQueue,
 			sendErr,
 		)
-		return
 	}
 
 	solutionResult := solution.Result{
 		StatusCode: solution.CompilationError,
 		Message:    constants.SolutionMessageCompilationError,
 	}
-	ws.responder.PublishPayloadTaskRespond(
+	return ws.responder.PublishPayloadTaskRespond(
 		constants.QueueMessageTypeTask,
 		messageID,
 		responseQueue,

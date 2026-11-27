@@ -46,7 +46,7 @@ func TestConsumer_ProcessHandshakeMessage(t *testing.T) {
 	mockScheduler := mocks.NewMockScheduler(ctrl)
 	workerQueueName := "test_consumer_handshake_" + time.Now().Format("20060102150405")
 
-	cons := consumer.NewConsumer(channel, workerQueueName, mockScheduler, resp)
+	cons := consumer.NewConsumer(channel, workerQueueName, 1, mockScheduler, resp)
 
 	// Create a response queue
 	responseQueueName := "test_response_handshake_" + time.Now().Format("20060102150405")

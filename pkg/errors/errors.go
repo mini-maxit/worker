@@ -7,6 +7,7 @@ var (
 	ErrInvalidLanguageType         = errors.New("invalid language type")
 	ErrInvalidVersion              = errors.New("invalid version supplied")
 	ErrFailedToGetFreeWorker       = errors.New("failed to get free worker")
+	ErrWorkerPanicked              = errors.New("worker panicked")
 	ErrUnknownMessageType          = errors.New("unknown message type")
 	ErrContainerTimeout            = errors.New("container runtime timed out")
 	ErrContainerFailed             = errors.New("container failed to execute")

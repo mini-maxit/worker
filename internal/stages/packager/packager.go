@@ -228,7 +228,8 @@ func (p *packager) prepareTestCaseFiles(basePath string, idx int, tc messages.Te
 
 func (p *packager) createCompileErrFile(basePath string) error {
 	compErrFilePath := filepath.Join(basePath, constants.CompileErrFileName)
-	compErrFile, err := os.OpenFile(compErrFilePath, os.O_CREATE|os.O_RDWR, 0644)
+	// Truncate: a rerun of an unfinished task must not report that run's compilation error.
+	compErrFile, err := os.OpenFile(compErrFilePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
