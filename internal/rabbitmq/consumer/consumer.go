@@ -67,7 +67,7 @@ func (c *consumer) Listen() {
 	}
 
 	c.logger.Infof("Declaring queue %s", c.taskQueueName)
-	_, err = c.channel.QueueDeclare(c.taskQueueName, true, false, false, false, nil)
+	_, err = c.channel.QueueDeclare(c.taskQueueName, true, false, false, false, args)
 	if err != nil {
 		c.logger.Panicf("Failed to declare queue %s: %s", c.taskQueueName, err)
 	}
@@ -95,7 +95,8 @@ func (c *consumer) Listen() {
 			if !ok {
 				return
 			}
-			c.ProcessMessage(msg)
+			// Concurrent, so a slow reply cannot hold up the rest of the worker queue.
+			go c.ProcessMessage(msg)
 		case msg, ok := <-tasks:
 			if !ok {
 				return
@@ -161,6 +162,12 @@ func (c *consumer) ProcessTaskDelivery(msg amqp.Delivery) {
 	}
 
 	err = c.scheduler.ProcessTask(msg.ReplyTo, queueMessage.MessageID, task, func(taskErr error) {
+		if e.Is(taskErr, errors.ErrWorkerPanicked) {
+			// Redelivering would panic again.
+			c.responder.PublishErrorToResponseQueue(queueMessage.Type, queueMessage.MessageID, msg.ReplyTo, taskErr)
+			c.ack(msg)
+			return
+		}
 		if taskErr != nil {
 			c.logger.Errorf("No response published for task %s: %s", queueMessage.MessageID, taskErr)
 			c.requeue(msg)
@@ -193,6 +200,7 @@ func (c *consumer) enqueueTask(msg amqp.Delivery) error {
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		ReplyTo:      msg.ReplyTo,
+		Priority:     msg.Priority,
 		Body:         msg.Body,
 	})
 }
