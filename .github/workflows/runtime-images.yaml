@@ -21,6 +21,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      images: ${{ steps.build.outputs.images }}
 
     steps:
       - name: Checkout repository
@@ -43,11 +45,14 @@ jobs:
           done
 
       - name: Build and push runtime images
+        id: build
         env:
           IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         run: |
           # Must match runtimescript.ImageTag(): workers pull the tag for the script they were built with.
           SCRIPT_TAG="script-$(sha256sum internal/runtimescript/run_tests.sh | cut -c1-12)"
+
+          pushed=()
 
           # build <image name> <folder> [extra buildx args]
           build() {
@@ -59,6 +64,7 @@ jobs:
               tags=(--tag "$image:$SCRIPT_TAG" --tag "$image:latest")
             fi
             docker buildx build --push --platform linux/amd64,linux/arm64 "${tags[@]}" "$@" "$folder"
+            pushed+=("${tags[1]}")
           }
 
           for folder in $(find internal/stages/executor -mindepth 1 -maxdepth 1 -type d); do
@@ -73,3 +79,11 @@ jobs:
               build "runtime-$folder_name" "$folder"
             fi
           done
+
+          echo "images=$(printf '%s\n' "${pushed[@]}" | jq -Rsc 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+
+  scan:
+    needs: build-and-push-runtime
+    uses: ./.github/workflows/image-scan.yaml
+    with:
+      images: ${{ needs.build-and-push-runtime.outputs.images }}

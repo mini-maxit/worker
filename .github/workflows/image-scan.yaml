@@ -1,31 +1,34 @@
 name: Image vulnerability scan
 
-# Runs after each publish, including the weekly rebuilds, so it never scans an image that is about to change.
+# Called by the publish workflows with the images they just pushed, including their weekly rebuilds.
 on:
-  workflow_run:
-    workflows: ['Runtime Images', 'Docker Build and Publish']
-    types: [completed]
-    branches: ['master']
+  workflow_call:
+    inputs:
+      images:
+        description: JSON array of image references
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      images:
+        description: JSON array of image references
+        required: true
+        type: string
 
 permissions: {} # the scanned images are public
 
 jobs:
   scan:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        image:
-          - runtime-cpp
-          - runtime-python-3.12
-          - runtime-python-3.11
-          - runtime-python-3.10
-          - worker
+        image: ${{ fromJSON(inputs.images) }}
     steps:
-      - name: Trivy scan ghcr.io/mini-maxit/${{ matrix.image }}:latest
+      - name: Trivy scan
+        env:
+          IMAGE: ${{ matrix.image }}
         run: |
           docker run --rm aquasec/trivy:0.62.1@sha256:fc10faf341a1d8fa8256c5ff1a6662ef74dd38b65034c8ce42346cf958a02d5d \
             image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --no-progress \
-            --exit-code 1 "ghcr.io/mini-maxit/${{ matrix.image }}:latest"
+            --exit-code 1 "$IMAGE"
