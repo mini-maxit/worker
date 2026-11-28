@@ -130,8 +130,6 @@ func TestEnsureImage_AllSupportedLanguages(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	ensureTestLanguagesSetup(t)
-
 	dc, err := docker.NewDockerClient()
 	if err != nil {
 		t.Fatalf("failed to create docker client: %v", err)
@@ -140,27 +138,19 @@ func TestEnsureImage_AllSupportedLanguages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	for _, langStruct := range testLanguages {
-		for _, version := range langStruct.Versions {
-			lang := languages.LanguageTypeMap[langStruct.LanguageName]
-			langName := langStruct.LanguageName
-			imageName, err := lang.GetDockerImage(version)
-			if err != nil {
-				t.Fatalf("failed to get docker image for language %s: %v", langName, err)
-			}
-
-			t.Logf("Testing language: %s (image: %s)", langName, imageName)
-
-			// Ensure the image can be pulled
-			err = dc.EnsureImage(ctx, imageName)
-			if err != nil {
-				t.Errorf("failed to ensure image for language %s: %v", langName, err)
-				continue
-			}
-
-			// Verify the image exists
-			verifyImageExists(t, imageName)
+	images, err := languages.GetAllDockerImages()
+	if err != nil {
+		t.Fatalf("failed to list runtime images: %v", err)
+	}
+	for _, imageName := range images {
+		// Ensure the image can be pulled
+		if err := dc.EnsureImage(ctx, imageName); err != nil {
+			t.Errorf("failed to ensure image %s: %v", imageName, err)
+			continue
 		}
+
+		// Verify the image exists
+		verifyImageExists(t, imageName)
 	}
 }
 

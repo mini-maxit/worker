@@ -1,8 +1,10 @@
 package languages
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/mini-maxit/worker/internal/runtimescript"
 	"github.com/mini-maxit/worker/pkg/constants"
 	"github.com/mini-maxit/worker/pkg/errors"
 	"github.com/mini-maxit/worker/pkg/messages"
@@ -29,7 +31,7 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 	switch lt {
 	case CPP:
 		// C++ compiler does not require versioning, so a single runtime Docker image is used for all versions.
-		image := constants.RuntimeImagePrefix + "-cpp:latest"
+		image := constants.RuntimeImagePrefix + "-cpp:" + runtimescript.ImageTag()
 		return image, nil
 	case PYTHON:
 		// Python uses version-specific runtime images
@@ -37,7 +39,7 @@ func (lt LanguageType) GetDockerImage(version string) (string, error) {
 		if !ok {
 			return "", errors.ErrInvalidVersion
 		}
-		image := constants.RuntimeImagePrefix + "-python-" + version + ":latest"
+		image := constants.RuntimeImagePrefix + "-python-" + version + ":" + runtimescript.ImageTag()
 		return image, nil
 	default:
 		return "", errors.ErrInvalidLanguageType
@@ -117,6 +119,26 @@ func GetVersionFlag(language LanguageType, version string) (string, error) {
 		return "", errors.ErrInvalidVersion
 	}
 	return "", errors.ErrInvalidLanguageType
+}
+
+// GetAllDockerImages returns every distinct runtime image the worker can run.
+func GetAllDockerImages() ([]string, error) {
+	seen := map[string]bool{}
+	var images []string
+	for lt, versions := range LanguageVersionMap {
+		for version := range versions {
+			img, err := lt.GetDockerImage(version)
+			if err != nil {
+				return nil, fmt.Errorf("runtime image for %s %s: %w", lt, version, err)
+			}
+			if seen[img] {
+				continue
+			}
+			seen[img] = true
+			images = append(images, img)
+		}
+	}
+	return images, nil
 }
 
 func GetSupportedLanguages() []string {

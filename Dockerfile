@@ -15,18 +15,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /worker-service ./cmd/main.go
 
 FROM debian:trixie-slim
 
-RUN apt-get update && \
-apt-get install -y \
-    docker.io \
+# upgrade pulls security fixes the base image tag doesn't have yet
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=builder /worker-service /app/worker-service
-COPY entrypoint.sh /app/entrypoint.sh
-
-RUN chmod +x /app/entrypoint.sh
 
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 
-ENTRYPOINT [ "/app/entrypoint.sh" ]
+ENTRYPOINT [ "/app/worker-service" ]

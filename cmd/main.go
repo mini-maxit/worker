@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"time"
+
 	"github.com/mini-maxit/worker/internal/config"
 	"github.com/mini-maxit/worker/internal/docker"
 	"github.com/mini-maxit/worker/internal/logger"
@@ -12,6 +15,8 @@ import (
 	"github.com/mini-maxit/worker/internal/stages/packager"
 	"github.com/mini-maxit/worker/internal/stages/verifier"
 	"github.com/mini-maxit/worker/internal/storage"
+	"github.com/mini-maxit/worker/pkg/constants"
+	"github.com/mini-maxit/worker/pkg/languages"
 )
 
 func main() {
@@ -22,15 +27,23 @@ func main() {
 	// Load the configuration
 	config := config.NewConfig()
 
-	// Connect to RabbitMQ
-	conn := rabbitmq.NewRabbitMqConnection(config)
-
 	// Create docker client
 	dCli, err := docker.NewDockerClient()
 	if err != nil {
 		logger.Fatalf("Failed to create Docker client: %s", err.Error())
 	}
 
+	images, err := languages.GetAllDockerImages()
+	if err != nil {
+		logger.Fatalf("Failed to list runtime images: %s", err.Error())
+	}
+	// Pull before consuming so the first submissions don't wait for a download, then pick up weekly rebuilds.
+	dCli.RefreshImages(context.Background(), images)
+	go docker.RefreshImagesPeriodically(context.Background(), dCli, images,
+		constants.RuntimeImageRefreshHours*time.Hour)
+
+	// Connect to RabbitMQ
+	conn := rabbitmq.NewRabbitMqConnection(config)
 	defer func() {
 		err := conn.Close()
 		if err != nil {

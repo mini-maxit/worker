@@ -59,6 +59,9 @@ const (
 	DefaultMaxWorkers              = 10
 	RuntimeImagePrefix             = "ghcr.io/mini-maxit/runtime"
 	ContainerMaxRunTime            = 30
+	RuntimeImageRefreshHours       = 6
+	RuntimeImagePullTimeoutMinutes = 10
+	RuntimeImageLabel              = "org.mini-maxit.runtime=true" // set in the runtime Dockerfiles
 	DefaultJobsDataVolume          = "maxit_worker_jobs-data"
 	DefaultVerifierFlags           = "-w"
 )
@@ -86,12 +89,14 @@ const (
 
 // Docker execution constants.
 const (
-	MinContainerMemoryKB       int64 = 64 * 1024        // 64 MB
-	MaxContainerOutputFileSize int64 = 10 * 1024 * 1024 // 10 MB per output file
-	DockerTestScript                 = "run_tests.sh"
-	RunnerUID                        = 1000
-	RunnerGID                        = 1000
-	RunnerName                       = "runner"
+	MinContainerMemoryKB        int64 = 64 * 1024        // 64 MB
+	MinContainerHeadroomKB      int64 = 64 * 1024        // 64 MB
+	MinCompileContainerMemoryKB int64 = 512 * 1024       // compiling <bits/stdc++.h> needs well over 256 MB
+	MaxContainerOutputFileSize  int64 = 10 * 1024 * 1024 // 10 MB per output file
+	DockerTestScript                  = "run_tests.sh"
+	RunnerUID                         = 1000
+	RunnerGID                         = 1000
+	RunnerName                        = "runner"
 )
 
 // RabbitMQ specific constants.

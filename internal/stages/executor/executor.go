@@ -87,7 +87,7 @@ func (d *executor) ExecuteCommand(
 		env,
 	)
 
-	hostCfg := buildHostConfig(cfg.TestCases)
+	hostCfg := buildHostConfig(cfg.TestCases, cfg.RequiresCompiling)
 
 	if err := d.docker.EnsureImage(ctx, dockerImage); err != nil {
 		return err
@@ -294,7 +294,7 @@ func buildContainerConfig(
 	}
 }
 
-func buildHostConfig(testCases []messages.TestCase) *container.HostConfig {
+func buildHostConfig(testCases []messages.TestCase, requiresCompiling bool) *container.HostConfig {
 	maxKB := constants.MinContainerMemoryKB
 	for _, tc := range testCases {
 		if tc.MemoryLimitKB > maxKB {
@@ -303,13 +303,15 @@ func buildHostConfig(testCases []messages.TestCase) *container.HostConfig {
 	}
 
 	// Headroom: 20% + at least 64MB for runtime/script overhead
-	headroomKB := maxKB / 5
-	minHeadroomKB := int64(64 * 1024)
-	if headroomKB < minHeadroomKB {
-		headroomKB = minHeadroomKB
-	}
+	headroomKB := max(maxKB/5, constants.MinContainerHeadroomKB)
 
 	containerKB := maxKB + headroomKB
+	// The compiler runs in the same container as the tests.
+	// shortcut: the floor also applies during tests, and ulimit -v in run_tests.sh limits each process, not their sum,
+	// so a forking solution can use more than its limit. Split compile and test limits to close this.
+	if requiresCompiling && containerKB < constants.MinCompileContainerMemoryKB {
+		containerKB = constants.MinCompileContainerMemoryKB
+	}
 	containerBytes := containerKB * 1024
 
 	return &container.HostConfig{

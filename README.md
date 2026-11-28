@@ -425,6 +425,24 @@ The `status_code` field in the `test_results` array indicates the status of indi
 - **4 (MemoryLimitExceeded)**: The solution exceeded the allowed memory limit for the test case (exit code 134).
 - **5 (NonZeroExitCode)**: The solution exited with a non-zero exit code that is different than memory limit exceeded or time limit exceeded. This includes runtime errors (e.g., segmentation fault with exit code 11) and other error conditions (e.g., exit code 127 which may indicate memory limit preventing shared library loading).
 
+## Runtime Images
+
+Submissions run in the `ghcr.io/mini-maxit/runtime-*` images. The worker pulls them at startup, again every 6 hours, and removes the copies it replaced.
+
+- Images are tagged `script-<hash of internal/runtimescript/run_tests.sh>`, so a worker only runs images built with its own script. Only the current script is rebuilt, so a worker that is behind gets no more fixes.
+- `runtime-images.yaml` publishes them from `master` when the script or a Dockerfile changes, and weekly for security fixes. Other branches only publish `sha-<commit>` tags.
+- After changing the script, wait for that workflow to finish before deploying the new worker.
+- To try an unpublished script locally, build the image under the tag the worker will ask for:
+
+```bash
+cp internal/runtimescript/run_tests.sh internal/stages/executor/cpp/
+docker build -t "ghcr.io/mini-maxit/runtime-cpp:script-$(shasum -a 256 internal/runtimescript/run_tests.sh | cut -c1-12)" internal/stages/executor/cpp
+```
+
+### Memory sizing
+
+Each running submission can use `max(512 MB, 1.2 * memory limit)` for compiled languages, and for Python the memory limit (at least 64 MB) plus 20% (at least 64 MB). Set `MAX_WORKERS` (default 10) so that this many fit in the host's free memory.
+
 ## Development
 
 We use pre-commit hooks together with popular linters to enhance our code. Some of them are not installed by default:
