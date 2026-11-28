@@ -103,10 +103,11 @@ func TestProcessMessage(t *testing.T) {
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
 			ReplyTo:      testReplyTo,
+			Priority:     2,
 			Body:         body,
 		}).Return(nil).Times(1)
 
-		c.ProcessMessage(amqp.Delivery{Acknowledger: ack, Body: body, ReplyTo: testReplyTo})
+		c.ProcessMessage(amqp.Delivery{Acknowledger: ack, Body: body, ReplyTo: testReplyTo, Priority: 2})
 		ack.expect(t, "ack")
 	})
 
@@ -191,6 +192,22 @@ func TestProcessTaskDelivery(t *testing.T) {
 		})
 	}
 
+	t.Run("answered and acked when the worker panicked", func(t *testing.T) {
+		c, s, r := newConsumer(t)
+		ack := &fakeAck{}
+		var done func(error)
+		s.EXPECT().ProcessTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_, _ string, _ *messages.TaskQueueMessage, d func(error)) error {
+				done = d
+				return nil
+			})
+		r.EXPECT().PublishErrorToResponseQueue(constants.QueueMessageTypeTask, "task-id", testReplyTo, gomock.Any())
+
+		c.ProcessTaskDelivery(amqp.Delivery{Acknowledger: ack, Body: taskBody(t, "task-id"), ReplyTo: testReplyTo})
+		done(pkgerrors.ErrWorkerPanicked)
+		ack.expect(t, "ack")
+	})
+
 	t.Run("requeued when no worker is free", func(t *testing.T) {
 		c, s, _ := newConsumer(t)
 		ack := &fakeAck{}
@@ -248,7 +265,7 @@ func TestListen_ProcessTaskMessage(t *testing.T) {
 			}
 		}).Return(amqp.Queue{Name: workerQueue}, nil).Times(1)
 
-	mockChannel.EXPECT().QueueDeclare(taskQueue, true, false, false, false, nil).
+	mockChannel.EXPECT().QueueDeclare(taskQueue, true, false, false, false, gomock.AssignableToTypeOf(amqp.Table{})).
 		Return(amqp.Queue{Name: taskQueue}, nil).Times(1)
 
 	// The prefetch limit must be set between the two consumers so that it applies to the task queue only.
@@ -351,7 +368,7 @@ func TestListen_ConsumeErrorPanics(t *testing.T) {
 	mockChannel.EXPECT().QueueDeclare(
 		workerQueue, true, false, false, false, gomock.Any(),
 	).Return(amqp.Queue{Name: workerQueue}, nil).Times(1)
-	mockChannel.EXPECT().QueueDeclare(taskQueue, true, false, false, false, nil).
+	mockChannel.EXPECT().QueueDeclare(taskQueue, true, false, false, false, gomock.AssignableToTypeOf(amqp.Table{})).
 		Return(amqp.Queue{Name: taskQueue}, nil).Times(1)
 	mockChannel.EXPECT().Consume(
 		workerQueue, "", false, false, false, false, nil,
