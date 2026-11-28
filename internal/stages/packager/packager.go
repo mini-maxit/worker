@@ -79,6 +79,12 @@ func (p *packager) PrepareSolutionPackage(
 		return nil, fmt.Errorf("invalid submission filename: %w", err)
 	}
 
+	// The message ID becomes a directory name that is later removed, so it must not escape TmpDirPath.
+	if err := utils.ValidateFilename(msgID); err != nil {
+		p.logger.Errorf("Invalid message ID %q: %s", msgID, err)
+		return nil, fmt.Errorf("invalid message ID: %w", err)
+	}
+
 	basePath := filepath.Join(constants.TmpDirPath, msgID)
 
 	// create directories.

@@ -146,6 +146,21 @@ func TestPrepareSolutionPackage_NoStorage(t *testing.T) {
 	}
 }
 
+func TestPrepareSolutionPackage_RejectsUnsafeMessageID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// No storage or cache calls are expected: the ID is rejected before anything is created.
+	p := packager.NewPackager(mocks.NewMockStorage(ctrl), mocks.NewMockFileCache(ctrl))
+	msg := &messages.TaskQueueMessage{SubmissionFile: messages.FileLocation{Path: testMainCppPath}}
+
+	for _, id := range []string{"", "..", "../escape", "a/b", `a\b`} {
+		if _, err := p.PrepareSolutionPackage(msg, languages.CPP, id); err == nil {
+			t.Errorf("expected message ID %q to be rejected", id)
+		}
+	}
+}
+
 func TestSendSolutionPackage_WithCompilationError_Uploads(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
